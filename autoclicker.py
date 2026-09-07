@@ -361,14 +361,25 @@ def run_loop():
 # --- UI 構建與樣式客製化 ---
 dpg.create_context()
 
-# 載入字型
-mac_fonts = [
+# === 跨平台字型偵測（支援 Windows 與 macOS） ===
+windir = os.environ.get("WINDIR", "C:\\Windows")
+candidate_fonts = [
+    # Windows 繁體中文與簡體中文字型
+    os.path.join(windir, "Fonts", "msjh.ttc"),      # 微軟正黑體 (首選)
+    os.path.join(windir, "Fonts", "msjhbd.ttc"),    # 微軟正黑體 粗體
+    os.path.join(windir, "Fonts", "msyh.ttc"),      # 微軟雅黑
+    os.path.join(windir, "Fonts", "mingliu.ttc"),   # 新細明體
+    os.path.join(windir, "Fonts", "simsun.ttc"),    # 宋體
+    "C:\\Windows\\Fonts\\msjh.ttc",
+    "C:\\Windows\\Fonts\\msyh.ttc",
+    # macOS 中文字型
     "/System/Library/Fonts/PingFang.ttc",
     "/System/Library/Fonts/STHeiti Medium.ttc",
     "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
     "/System/Library/Fonts/Supplemental/Songti.ttc",
 ]
-selected_font = next((f for f in mac_fonts if os.path.exists(f)), None)
+
+selected_font = next((f for f in candidate_fonts if os.path.exists(f)), None)
 if selected_font:
     with dpg.font_registry():
         with dpg.font(selected_font, 14) as default_font:
