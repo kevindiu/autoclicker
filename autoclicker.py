@@ -6,7 +6,7 @@ from ctypes import wintypes
 import threading
 import pyautogui
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 
 pyautogui.FAILSAFE = False
 pyautogui.PAUSE = 0.0
@@ -120,7 +120,6 @@ class App(tk.Tk):
         self.configure(bg="#15171c")
         self.attributes("-topmost", True)
 
-        # 變數定義
         self.var_cfg_name = tk.StringVar(value="sh_macro.json")
         self.var_use_bg = tk.BooleanVar(value=True)
         self.var_use_rel = tk.BooleanVar(value=True)
@@ -216,7 +215,6 @@ class App(tk.Tk):
         tk.Button(cr2, text="新增", bg="#334155", fg="#fff", command=self.save_new_combo).pack(side="left", padx=2)
         tk.Button(cr2, text="更新", bg="#334155", fg="#fff", command=self.update_selected_combo).pack(side="left", padx=2)
 
-        # 組合 Listbox
         f_list_c = tk.Frame(f_combo, bg="#15171c")
         f_list_c.pack(fill="both", expand=True, pady=4)
         self.combo_listbox = tk.Listbox(f_list_c, bg="#15171c", fg="#f1f5f9", selectbackground="#0284c7", selectforeground="#fff", bd=0, highlightthickness=0, font=("Segoe UI", 10), exportselection=False)
@@ -491,14 +489,39 @@ class App(tk.Tk):
             del steps[idx]
             self.update_step_list(min(idx, len(steps) - 1) if steps else None)
 
+    # 核心新增：清空前彈出確認視窗
     def clear_all(self):
-        steps.clear()
-        self.update_step_list()
-        self.set_status("已清空執行清單")
+        if not steps:
+            self.set_status("執行清單本來就是空的")
+            return
 
+        confirmed = messagebox.askyesno(
+            "清空清單確認",
+            "請問是否確認要清空整個執行順序清單？\n清空後未儲存的步驟將無法還原！",
+            parent=self
+        )
+        if confirmed:
+            steps.clear()
+            self.update_step_list()
+            self.set_status("已清空執行清單")
+        else:
+            self.set_status("已取消清空清單")
+
+    # 儲存前彈出覆蓋確認視窗
     def save_config(self):
         fn = self.var_cfg_name.get().strip() or "macro_config.json"
         if not fn.endswith(".json"): fn += ".json"
+        
+        if os.path.exists(fn):
+            confirmed = messagebox.askyesno(
+                "檔案覆蓋確認",
+                f"設定檔「{fn}」已經存在！\n請問是否確認覆蓋原有設定？",
+                parent=self
+            )
+            if not confirmed:
+                self.set_status("已取消儲存")
+                return
+
         try:
             with open(fn, "w", encoding="utf-8") as f:
                 json.dump({"combos": combos, "steps": steps}, f, ensure_ascii=False, indent=2)
