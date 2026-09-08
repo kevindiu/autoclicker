@@ -172,13 +172,11 @@ def get_keys_from_input(text):
     raw = text.replace("，", ",").split(",")
     return [k.strip().lower() for k in raw if k.strip()]
 
-# 精簡清單字串，解決過長問題
 def update_combo_list(select_idx=None):
     items = []
     for c in combos:
         t_tag = " [目標]" if c.get("target") else ""
         k_str = ",".join(c.get("keys", [])).upper()
-        # 精簡格式：名稱 (按鍵 / 秒數) [目標]
         items.append(f"{c['name']} ({k_str} / {c['wait']}s){t_tag}")
     
     dpg.configure_item("combo_listbox", items=items)
@@ -316,15 +314,15 @@ def update_step_list(select_idx=None):
     items = []
     for i, s in enumerate(steps):
         if s["type"] == "click":
-            items.append(f"#{i+1:02d}  [點擊坐標] -> ({s['x']}, {s['y']})")
+            items.append(f"#{i+1:02d}  [點擊] -> ({s['x']}, {s['y']})")
         elif s["type"] == "key":
-            items.append(f"#{i+1:02d}  [按下按鍵] -> [ {s['key'].upper()} ]")
+            items.append(f"#{i+1:02d}  [按鍵] -> [ {s['key'].upper()} ]")
         elif s["type"] == "wait":
-            items.append(f"#{i+1:02d}  [停頓等待] -> {s['sec']} 秒")
+            items.append(f"#{i+1:02d}  [停頓] -> {s['sec']} 秒")
         elif s["type"] == "combo":
             t_str = f"[目標:({s['target']['x']},{s['target']['y']})] " if s.get("target") else ""
             k_str = ",".join(s.get("keys", []))
-            items.append(f"#{i+1:02d}  [組合:{s['name']}] {t_str}[按鍵:{k_str.upper()}] [CD:{s['wait']}秒]")
+            items.append(f"#{i+1:02d}  [{s['name']}] {t_str}[{k_str.upper()}] [CD:{s['wait']}s]")
     dpg.configure_item("step_listbox", items=items)
     if select_idx is not None and 0 <= select_idx < len(items):
         dpg.set_value("step_listbox", items[select_idx])
@@ -545,9 +543,9 @@ if selected_font:
 
 with dpg.theme() as global_theme:
     with dpg.theme_component(dpg.mvAll):
-        dpg.add_theme_style(dpg.mvStyleVar_WindowPadding, 12, 12)
-        dpg.add_theme_style(dpg.mvStyleVar_FramePadding, 8, 5)
-        dpg.add_theme_style(dpg.mvStyleVar_ItemSpacing, 8, 8)
+        dpg.add_theme_style(dpg.mvStyleVar_WindowPadding, 10, 10)
+        dpg.add_theme_style(dpg.mvStyleVar_FramePadding, 7, 5)
+        dpg.add_theme_style(dpg.mvStyleVar_ItemSpacing, 7, 6)
         dpg.add_theme_style(dpg.mvStyleVar_FrameRounding, 5)
         dpg.add_theme_style(dpg.mvStyleVar_ChildRounding, 6)
 
@@ -591,108 +589,113 @@ with dpg.theme(tag="theme_btn_stop"):
         dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, (239, 68, 68, 255))
         dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, (185, 28, 28, 255))
 
-# ================= 主介面排版 =================
+# ================= 主介面排版 (左右左右雙欄佈局) =================
 with dpg.window(tag="primary_window"):
-
-    # 1. 折疊式「設定檔與後台視窗綁定」
-    with dpg.collapsing_header(label="設定檔與 Win32 後台視窗綁定 (點擊展開/收合)", default_open=False):
-        with dpg.child_window(height=115, border=True):
-            with dpg.group(horizontal=True):
-                dpg.add_text("設定檔名:", color=(148, 163, 184))
-                dpg.add_input_text(tag="input_config_name", default_value="sh_macro.json", width=180)
-                dpg.add_button(label="儲存", callback=save_config, width=65)
-                dpg.add_button(label="載入", callback=load_config, width=65)
-
-            with dpg.group(horizontal=True):
-                dpg.add_checkbox(label="Win32後台模式", tag="chk_use_bg", default_value=True)
-                dpg.add_text("微調X:")
-                dpg.add_input_text(tag="input_offset_x", default_value="0", width=40)
-                dpg.add_text("Y:")
-                dpg.add_input_text(tag="input_offset_y", default_value="0", width=40)
-
-            with dpg.group(horizontal=True):
-                dpg.add_text("目標視窗:")
-                dpg.add_combo(tag="combo_window_select", items=[], width=240, callback=on_window_select)
-                dpg.add_button(label="重新整理", callback=refresh_window_dropdown, width=65)
-
-    dpg.add_spacer(height=2)
-
-    # 2. 技能組合預設 (Combinations) - 改用下拉選單，高度由 245px 大幅壓縮至 170px
-    with dpg.child_window(height=170, border=True):
-        dpg.add_text("技能組合預設 (Combinations)", color=(56, 189, 248))
-        dpg.add_separator()
-
-        with dpg.group(horizontal=True):
-            dpg.add_text("名稱:")
-            dpg.add_input_text(tag="input_combo_name", default_value="F4補血CD", width=120)
-            dpg.add_text("按鍵:")
-            dpg.add_input_text(tag="input_combo_keys", default_value="f4", width=80)
-            dpg.add_text("CD(秒):")
-            dpg.add_input_text(tag="input_combo_wait", default_value="10.0", width=45)
-
-        with dpg.group(horizontal=True):
-            dpg.add_text("目標:")
-            dpg.add_text("無 (原地)", tag="lbl_combo_target", color=(125, 211, 252))
-            dpg.add_button(label="記錄目標 (3秒)", tag="btn_combo_target", callback=record_combo_target, width=105)
-            dpg.add_button(label="清除", callback=clear_combo_target, width=45)
-            dpg.add_button(label="新增組合", callback=save_new_combo, width=70)
-            dpg.add_button(label="更新", callback=update_selected_combo, width=50)
-
-        # 核心改動：將佔位的 Listbox 改為單行下拉選單 (Combo)
-        with dpg.group(horizontal=True):
-            dpg.add_text("已存組合:")
-            dpg.add_combo(tag="combo_listbox", items=[], width=315, callback=on_combo_select)
-
-        with dpg.group(horizontal=True):
-            b_add = dpg.add_button(label="將所選組合加入執行清單", callback=add_combo_to_steps, width=305)
-            dpg.bind_item_theme(b_add, "theme_btn_action")
-            b_del = dpg.add_button(label="刪除組合", callback=delete_selected_combo, width=85)
-            dpg.bind_item_theme(b_del, "theme_btn_danger")
-
-    dpg.add_spacer(height=2)
-
-    # 3. 單獨新增微步
-    with dpg.child_window(height=98, border=True):
-        dpg.add_text("單獨新增微步 (點擊 / 按鍵 / 停頓)", color=(56, 189, 248))
-        dpg.add_separator()
-        with dpg.group(horizontal=True):
-            dpg.add_button(label="記錄點擊坐標 (3秒)", tag="btn_add_click", callback=add_click_step, width=390)
-        with dpg.group(horizontal=True):
-            dpg.add_text("按鍵:")
-            dpg.add_input_text(tag="input_key", default_value="f1", width=65)
-            dpg.add_button(label="加按鍵", callback=add_key_step, width=75)
-            dpg.add_text("停頓:")
-            dpg.add_input_text(tag="input_wait", default_value="1.0", width=45)
-            dpg.add_button(label="加停頓", callback=add_wait_step, width=75)
-
-    dpg.add_spacer(height=2)
-
-    # 4. 主執行順序清單 (高度擴展至 240px，可視行數更多)
-    with dpg.child_window(height=240, border=True):
-        dpg.add_text("執行順序清單 (由上至下循環)", color=(56, 189, 248))
-        dpg.add_separator()
-
-        dpg.add_listbox(tag="step_listbox", items=[], num_items=6, width=400)
-
-        with dpg.group(horizontal=True):
-            dpg.add_button(label="上移", callback=move_up, width=88)
-            dpg.add_button(label="下移", callback=move_down, width=88)
-            b_del_step = dpg.add_button(label="刪除所選", callback=delete_selected, width=100)
-            dpg.bind_item_theme(b_del_step, "theme_btn_danger")
-            b_clear = dpg.add_button(label="清空清單", callback=clear_all, width=100)
-            dpg.bind_item_theme(b_clear, "theme_btn_danger")
-
-    dpg.add_spacer(height=4)
-
-    # 5. 底部狀態列與執行按鈕
     with dpg.group(horizontal=True):
-        dpg.add_text("狀態:", color=(148, 163, 184))
-        dpg.add_text("已就緒", tag="lbl_status", color=(255, 255, 255))
+        
+        # ======================= [左欄：設定 / 組合 / 微步] =======================
+        with dpg.child_window(width=435, height=520, border=False):
+            
+            # 1. 設定檔與 Win32 後台綁定 (全面平鋪展開)
+            with dpg.child_window(height=125, border=True):
+                dpg.add_text("設定與 Win32 後台綁定", color=(56, 189, 248))
+                dpg.add_separator()
+                with dpg.group(horizontal=True):
+                    dpg.add_text("設定檔:")
+                    dpg.add_input_text(tag="input_config_name", default_value="sh_macro.json", width=180)
+                    dpg.add_button(label="儲存", callback=save_config, width=65)
+                    dpg.add_button(label="載入", callback=load_config, width=65)
 
-    btn_start = dpg.add_button(label="開始循環執行", tag="btn_toggle", callback=toggle_run, width=400, height=44)
-    dpg.bind_item_theme(btn_start, "theme_btn_start")
+                with dpg.group(horizontal=True):
+                    dpg.add_checkbox(label="Win32後台模式", tag="chk_use_bg", default_value=True)
+                    dpg.add_text("微調X:")
+                    dpg.add_input_text(tag="input_offset_x", default_value="0", width=40)
+                    dpg.add_text("Y:")
+                    dpg.add_input_text(tag="input_offset_y", default_value="0", width=40)
 
-dpg.create_viewport(title="水滸歷險 巨集助手", width=435, height=750, always_on_top=True, resizable=True)
+                with dpg.group(horizontal=True):
+                    dpg.add_text("目標視窗:")
+                    dpg.add_combo(tag="combo_window_select", items=[], width=235, callback=on_window_select)
+                    dpg.add_button(label="重新整理", callback=refresh_window_dropdown, width=65)
+
+            dpg.add_spacer(height=2)
+
+            # 2. 技能組合預設 (Combinations)
+            with dpg.child_window(height=220, border=True):
+                dpg.add_text("技能組合預設 (Combinations)", color=(56, 189, 248))
+                dpg.add_separator()
+
+                with dpg.group(horizontal=True):
+                    dpg.add_text("名稱:")
+                    dpg.add_input_text(tag="input_combo_name", default_value="F4補血CD", width=120)
+                    dpg.add_text("按鍵:")
+                    dpg.add_input_text(tag="input_combo_keys", default_value="f4", width=80)
+                    dpg.add_text("CD(秒):")
+                    dpg.add_input_text(tag="input_combo_wait", default_value="10.0", width=45)
+
+                with dpg.group(horizontal=True):
+                    dpg.add_text("目標:")
+                    dpg.add_text("無 (原地)", tag="lbl_combo_target", color=(125, 211, 252))
+                    dpg.add_button(label="記錄目標 (3秒)", tag="btn_combo_target", callback=record_combo_target, width=105)
+                    dpg.add_button(label="清除", callback=clear_combo_target, width=45)
+                    dpg.add_button(label="新增組合", callback=save_new_combo, width=70)
+                    dpg.add_button(label="更新", callback=update_selected_combo, width=50)
+
+                with dpg.group(horizontal=True):
+                    dpg.add_text("已存組合:")
+                    dpg.add_combo(tag="combo_listbox", items=[], width=325, callback=on_combo_select)
+
+                with dpg.group(horizontal=True):
+                    b_add = dpg.add_button(label="將所選組合加入執行清單", callback=add_combo_to_steps, width=310)
+                    dpg.bind_item_theme(b_add, "theme_btn_action")
+                    b_del = dpg.add_button(label="刪除組合", callback=delete_selected_combo, width=88)
+                    dpg.bind_item_theme(b_del, "theme_btn_danger")
+
+            dpg.add_spacer(height=2)
+
+            # 3. 單獨新增微步
+            with dpg.child_window(height=110, border=True):
+                dpg.add_text("單獨新增微步 (點擊 / 按鍵 / 停頓)", color=(56, 189, 248))
+                dpg.add_separator()
+                with dpg.group(horizontal=True):
+                    dpg.add_button(label="記錄點擊坐標 (3秒)", tag="btn_add_click", callback=add_click_step, width=395)
+                with dpg.group(horizontal=True):
+                    dpg.add_text("按鍵:")
+                    dpg.add_input_text(tag="input_key", default_value="f1", width=65)
+                    dpg.add_button(label="加按鍵", callback=add_key_step, width=75)
+                    dpg.add_text("停頓:")
+                    dpg.add_input_text(tag="input_wait", default_value="1.0", width=45)
+                    dpg.add_button(label="加停頓", callback=add_wait_step, width=75)
+
+        # ======================= [右欄：執行順序清單 / 狀態 / 開關] =======================
+        with dpg.child_window(width=445, height=520, border=False):
+            
+            with dpg.child_window(height=415, border=True):
+                dpg.add_text("執行順序清單 (由上至下循環)", color=(56, 189, 248))
+                dpg.add_separator()
+
+                # 大視野清單：預設展開可見 16 個步驟
+                dpg.add_listbox(tag="step_listbox", items=[], num_items=16, width=415)
+
+                with dpg.group(horizontal=True):
+                    dpg.add_button(label="上移", callback=move_up, width=92)
+                    dpg.add_button(label="下移", callback=move_down, width=92)
+                    b_del_step = dpg.add_button(label="刪除所選", callback=delete_selected, width=105)
+                    dpg.bind_item_theme(b_del_step, "theme_btn_danger")
+                    b_clear = dpg.add_button(label="清空清單", callback=clear_all, width=105)
+                    dpg.bind_item_theme(b_clear, "theme_btn_danger")
+
+            dpg.add_spacer(height=2)
+
+            # 底部狀態列與執行按鈕
+            with dpg.group(horizontal=True):
+                dpg.add_text("狀態:", color=(148, 163, 184))
+                dpg.add_text("已就緒", tag="lbl_status", color=(255, 255, 255))
+
+            btn_start = dpg.add_button(label="開始循環執行", tag="btn_toggle", callback=toggle_run, width=425, height=44)
+            dpg.bind_item_theme(btn_start, "theme_btn_start")
+
+dpg.create_viewport(title="水滸歷險 巨集助手", width=910, height=560, always_on_top=True, resizable=False)
 dpg.setup_dearpygui()
 dpg.show_viewport()
 dpg.set_primary_window("primary_window", True)
