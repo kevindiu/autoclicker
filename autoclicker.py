@@ -99,25 +99,20 @@ def on_window_select(sender, app_data):
         except Exception:
             target_hwnd = None
 
-def post_bg_click(hwnd, step_x, step_y, is_rel=False):
+# --- 核心：純相對坐標後台點擊發送 ---
+def post_bg_click(hwnd, client_x, client_y):
     if not IS_WINDOWS or not hwnd:
-        pyautogui.click(step_x, step_y)
-        return int(step_x), int(step_y)
-
+        pyautogui.click(client_x, client_y)
+        return int(client_x), int(client_y)
+    
     try:
         offset_x = int(dpg.get_value("input_offset_x") or 0)
         offset_y = int(dpg.get_value("input_offset_y") or 0)
     except Exception:
         offset_x, offset_y = 0, 0
 
-    if is_rel:
-        cx = int(step_x) + offset_x
-        cy = int(step_y) + offset_y
-    else:
-        pt = POINT(int(step_x), int(step_y))
-        user32.ScreenToClient(hwnd, ctypes.byref(pt))
-        cx = pt.x + offset_x
-        cy = pt.y + offset_y
+    cx = int(client_x) + offset_x
+    cy = int(client_y) + offset_y
 
     lparam = ((int(cy) & 0xFFFF) << 16) | (int(cx) & 0xFFFF)
 
@@ -160,17 +155,17 @@ def countdown_combo_target():
     pos = pyautogui.position()
     global temp_combo_target
     
+    # 記錄瞬間即刻轉為視窗內部相對坐標
     if IS_WINDOWS and target_hwnd:
         pt = POINT(int(pos.x), int(pos.y))
         user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
         temp_combo_target = {"x": pt.x, "y": pt.y, "rel": True}
         dpg.set_value("lbl_combo_target", f"相對:({pt.x}, {pt.y})")
-        dpg.set_value("lbl_status", f"已鎖定組合相對坐標：({pt.x}, {pt.y})")
+        dpg.set_value("lbl_status", f"已鎖定組合相對目標：({pt.x}, {pt.y})")
     else:
         temp_combo_target = {"x": pos.x, "y": pos.y, "rel": False}
         dpg.set_value("lbl_combo_target", f"({pos.x}, {pos.y})")
-        dpg.set_value("lbl_status", f"已鎖定目標坐標：({pos.x}, {pos.y})")
-        
+        dpg.set_value("lbl_status", f"已鎖定組合坐標：({pos.x}, {pos.y})")
     dpg.configure_item("btn_combo_target", enabled=True)
 
 def record_combo_target():
@@ -210,8 +205,8 @@ def on_combo_select(sender, app_data):
         global temp_combo_target
         temp_combo_target = c.get("target")
         if temp_combo_target:
-            tag = "相對:" if temp_combo_target.get("rel") else ""
-            dpg.set_value("lbl_combo_target", f"{tag}({temp_combo_target['x']}, {temp_combo_target['y']})")
+            prefix = "相對:" if temp_combo_target.get("rel") else ""
+            dpg.set_value("lbl_combo_target", f"{prefix}({temp_combo_target['x']}, {temp_combo_target['y']})")
         else:
             dpg.set_value("lbl_combo_target", "無 (原地)")
 
@@ -325,13 +320,14 @@ def update_step_list(select_idx=None):
     items = []
     for i, s in enumerate(steps):
         if s["type"] == "click":
-            items.append(f"#{i+1:02d}  [點擊] -> ({s['x']}, {s['y']})")
+            prefix = "相對:" if s.get("rel") else ""
+            items.append(f"#{i+1:02d}  [點擊] -> {prefix}({s['x']}, {s['y']})")
         elif s["type"] == "key":
             items.append(f"#{i+1:02d}  [按鍵] -> [ {s['key'].upper()} ]")
         elif s["type"] == "wait":
             items.append(f"#{i+1:02d}  [停頓] -> {s['sec']} 秒")
         elif s["type"] == "combo":
-            t_str = f"[目標:({s['target']['x']},{s['target']['y']})] " if s.get("target") else ""
+            t_str = f"[相對:({s['target']['x']},{s['target']['y']})] " if s.get("target") else ""
             k_str = ",".join(s.get("keys", []))
             items.append(f"#{i+1:02d}  [{s['name']}] {t_str}[{k_str.upper()}] [CD:{s['wait']}s]")
     dpg.configure_item("step_listbox", items=items)
@@ -345,17 +341,17 @@ def countdown_click(insert_at):
         time.sleep(1)
     pos = pyautogui.position()
     
+    # 記錄瞬間即刻轉為視窗相對坐標
     if IS_WINDOWS and target_hwnd:
         pt = POINT(int(pos.x), int(pos.y))
         user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
-        step_data = {"type": "click", "x": pt.x, "y": pt.y, "rel": True}
-        dpg.set_value("lbl_status", f"已記錄視窗相對坐標 #{insert_at+1}：({pt.x}, {pt.y})")
+        steps.insert(insert_at, {"type": "click", "x": pt.x, "y": pt.y, "rel": True})
+        update_step_list(select_idx=insert_at)
+        dpg.set_value("lbl_status", f"已插入相對點擊到 #{insert_at+1}：({pt.x}, {pt.y})")
     else:
-        step_data = {"type": "click", "x": pos.x, "y": pos.y, "rel": False}
+        steps.insert(insert_at, {"type": "click", "x": pos.x, "y": pos.y, "rel": False})
+        update_step_list(select_idx=insert_at)
         dpg.set_value("lbl_status", f"已插入點擊到 #{insert_at+1}：({pos.x}, {pos.y})")
-        
-    steps.insert(insert_at, step_data)
-    update_step_list(select_idx=insert_at)
     dpg.configure_item("btn_add_click", enabled=True)
 
 def add_click_step():
@@ -483,21 +479,22 @@ def run_loop():
                     dpg.set_value("step_listbox", list_items[idx])
 
                 s_name = f"[{step['name']}]" if step["type"] == "combo" else step["type"]
-                is_rel = step.get("rel", False)
 
                 if step["type"] == "click":
                     if use_bg:
-                        cx, cy = post_bg_click(target_hwnd, step["x"], step["y"], is_rel=is_rel)
-                        dpg.set_value("lbl_status", f"第 {round_idx} 輪 ({idx+1}/{len(steps)}): 後台點擊 ({cx},{cy})")
+                        # 直接用相對坐標發送後台訊息
+                        cx, cy = post_bg_click(target_hwnd, step["x"], step["y"])
+                        dpg.set_value("lbl_status", f"第 {round_idx} 輪 ({idx+1}/{len(steps)}): 後台相對點擊:({cx},{cy})")
                     else:
-                        if is_rel and IS_WINDOWS and target_hwnd:
+                        # 若為相對坐標，前台實體點擊會實時轉換到目前視窗最新螢幕位置
+                        if IS_WINDOWS and target_hwnd and step.get("rel"):
                             pt = POINT(int(step["x"]), int(step["y"]))
                             user32.ClientToScreen(target_hwnd, ctypes.byref(pt))
                             pyautogui.click(pt.x, pt.y)
-                            dpg.set_value("lbl_status", f"第 {round_idx} 輪 ({idx+1}/{len(steps)}): 前台點擊 ({pt.x},{pt.y})")
+                            dpg.set_value("lbl_status", f"第 {round_idx} 輪: 前台追蹤點擊 ({pt.x},{pt.y})")
                         else:
                             pyautogui.click(step["x"], step["y"])
-                            dpg.set_value("lbl_status", f"第 {round_idx} 輪 ({idx+1}/{len(steps)}): 前台點擊 ({step['x']},{step['y']})")
+                            dpg.set_value("lbl_status", f"第 {round_idx} 輪: 前台點擊 ({step['x']},{step['y']})")
                     time.sleep(0.12)
 
                 elif step["type"] == "key":
@@ -517,22 +514,20 @@ def run_loop():
                         time.sleep(0.1)
 
                 elif step["type"] == "combo":
-                    # 1. 目標點擊 (具備動態坐標換算)
+                    # 1. 目標點擊 (純相對坐標)
                     if step.get("target"):
-                        t_rel = step["target"].get("rel", False)
-                        tx, ty = step["target"]["x"], step["target"]["y"]
+                        t = step["target"]
                         if use_bg:
-                            cx, cy = post_bg_click(target_hwnd, tx, ty, is_rel=t_rel)
-                            dpg.set_value("lbl_status", f"第 {round_idx} 輪: 組合[{step['name']}] 點擊目標:({cx},{cy})")
+                            cx, cy = post_bg_click(target_hwnd, t["x"], t["y"])
+                            dpg.set_value("lbl_status", f"第 {round_idx} 輪: 組合[{step['name']}] 相對點擊:({cx},{cy})")
                         else:
-                            if t_rel and IS_WINDOWS and target_hwnd:
-                                pt = POINT(int(tx), int(ty))
+                            if IS_WINDOWS and target_hwnd and t.get("rel"):
+                                pt = POINT(int(t["x"]), int(t["y"]))
                                 user32.ClientToScreen(target_hwnd, ctypes.byref(pt))
                                 pyautogui.click(pt.x, pt.y)
                             else:
-                                pyautogui.click(tx, ty)
+                                pyautogui.click(t["x"], t["y"])
                         time.sleep(0.12)
-
                     # 2. 按鍵放技
                     for k in step.get("keys", []):
                         if not running: break
@@ -543,7 +538,6 @@ def run_loop():
                             time.sleep(0.06)
                             pyautogui.keyUp(k)
                         time.sleep(0.15)
-
                     # 3. CD 等待
                     chunks = int(float(step.get("wait", 0)) * 10)
                     for _ in range(chunks):
@@ -737,6 +731,7 @@ dpg.setup_dearpygui()
 dpg.show_viewport()
 dpg.set_primary_window("primary_window", True)
 
+# 初始化視窗清單偵測
 refresh_window_dropdown()
 
 dpg.start_dearpygui()
