@@ -2,6 +2,7 @@ import os
 import json
 import time
 import ctypes
+from ctypes import wintypes
 import threading
 import pyautogui
 import dearpygui.dearpygui as dpg
@@ -13,12 +14,29 @@ steps = []    # 存放主執行順序清單
 running = False
 temp_combo_target = None  # 記錄組合專用目標坐標
 
-# --- Win32 後台輸入支援 ---
+# --- Win32 後台輸入與 DPI 環境初始化 ---
 IS_WINDOWS = hasattr(ctypes, "windll")
 target_hwnd = None
 
 class POINT(ctypes.Structure):
     _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+if IS_WINDOWS:
+    # 解決高解析度/Retina DPI 縮放導致的坐標偏差
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
+    user32 = ctypes.windll.user32
+    # 明確定義 64 位元函數簽名，防止 lParam 記憶體截斷
+    user32.ScreenToClient.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
+    user32.ScreenToClient.restype = wintypes.BOOL
+    user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    user32.PostMessageW.restype = wintypes.BOOL
 
 VK_MAP = {
     "f1": 0x70, "f2": 0x71, "f3": 0x72, "f4": 0x73, "f5": 0x74, "f6": 0x75,
@@ -35,7 +53,6 @@ for c in range(ord('a'), ord('z') + 1):
 def get_window_list():
     if not IS_WINDOWS:
         return []
-    user32 = ctypes.windll.user32
     windows = []
     
     def enum_proc(hwnd, lParam):
@@ -86,16 +103,35 @@ def post_bg_click(hwnd, screen_x, screen_y):
     if not IS_WINDOWS or not hwnd:
         pyautogui.click(screen_x, screen_y)
         return
-    user32 = ctypes.windll.user32
+    
     pt = POINT(int(screen_x), int(screen_y))
     user32.ScreenToClient(hwnd, ctypes.byref(pt))
-    lparam = (pt.y << 16) | (pt.x & 0xFFFF)
+
+    # 讀取介面上的 X / Y 偏移量微調值
+    try:
+        offset_x = int(dpg.get_value("input_offset_x") or 0)
+        offset_y = int(dpg.get_value("input_offset_y") or 0)
+    except Exception:
+        offset_x, offset_y = 0, 0
+
+    cx = pt.x + offset_x
+    cy = pt.y + offset_y
+
+    # 嚴格組裝 32-bit lParam
+    lparam = ((int(cy) & 0xFFFF) << 16) | (int(cx) & 0xFFFF)
+
+    WM_MOUSEMOVE = 0x0200
     WM_LBUTTONDOWN = 0x0201
     WM_LBUTTONUP = 0x0202
     MK_LBUTTON = 0x0001
+
+    # 先送一次 MOUSEMOVE 刷新遊戲內部游標坐標
+    user32.PostMessageW(hwnd, WM_MOUSEMOVE, 0, lparam)
+    time.sleep(0.03)
     user32.PostMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lparam)
     time.sleep(0.08)
     user32.PostMessageW(hwnd, WM_LBUTTONUP, 0, lparam)
+    return cx, cy
 
 def post_bg_key(hwnd, key_str):
     if not IS_WINDOWS or not hwnd:
@@ -103,7 +139,6 @@ def post_bg_key(hwnd, key_str):
         time.sleep(0.06)
         pyautogui.keyUp(key_str)
         return
-    user32 = ctypes.windll.user32
     vk = VK_MAP.get(key_str.lower())
     if vk is None:
         if len(key_str) == 1:
@@ -423,14 +458,14 @@ def run_loop():
             for idx, step in enumerate(steps):
                 if not running: break
                 s_name = f"[{step['name']}]" if step["type"] == "combo" else step["type"]
-                mode_str = "(後台注入)" if use_bg else "(前台實體)"
-                dpg.set_value("lbl_status", f"第 {round_idx} 輪 ({idx+1}/{len(steps)}): {s_name} {mode_str}")
 
                 if step["type"] == "click":
                     if use_bg:
-                        post_bg_click(target_hwnd, step["x"], step["y"])
+                        cx, cy = post_bg_click(target_hwnd, step["x"], step["y"])
+                        dpg.set_value("lbl_status", f"第 {round_idx} 輪 ({idx+1}/{len(steps)}): 後台點擊 視窗相對:({cx},{cy})")
                     else:
                         pyautogui.click(step["x"], step["y"])
+                        dpg.set_value("lbl_status", f"第 {round_idx} 輪 ({idx+1}/{len(steps)}): 前台點擊 ({step['x']},{step['y']})")
                     time.sleep(0.12)
 
                 elif step["type"] == "key":
@@ -440,6 +475,7 @@ def run_loop():
                         pyautogui.keyDown(step["key"])
                         time.sleep(0.06)
                         pyautogui.keyUp(step["key"])
+                    dpg.set_value("lbl_status", f"第 {round_idx} 輪 ({idx+1}/{len(steps)}): 按鍵 [{step['key'].upper()}]")
                     time.sleep(0.1)
 
                 elif step["type"] == "wait":
@@ -452,7 +488,8 @@ def run_loop():
                     # 1. 目標點擊
                     if step.get("target"):
                         if use_bg:
-                            post_bg_click(target_hwnd, step["target"]["x"], step["target"]["y"])
+                            cx, cy = post_bg_click(target_hwnd, step["target"]["x"], step["target"]["y"])
+                            dpg.set_value("lbl_status", f"第 {round_idx} 輪: 組合[{step['name']}] 點擊目標:({cx},{cy})")
                         else:
                             pyautogui.click(step["target"]["x"], step["target"]["y"])
                         time.sleep(0.12)
@@ -563,9 +600,15 @@ with dpg.window(tag="primary_window"):
 
     dpg.add_spacer(height=2)
 
-    # 2. 視窗綁定與後台模式控制
-    with dpg.child_window(height=76, border=True):
-        dpg.add_checkbox(label="啟用 Win32 後台掛機模式 (不佔用滑鼠/可被遮擋)", tag="chk_use_bg", default_value=True)
+    # 2. 視窗綁定與微調控制
+    with dpg.child_window(height=100, border=True):
+        with dpg.group(horizontal=True):
+            dpg.add_checkbox(label="Win32後台模式", tag="chk_use_bg", default_value=True)
+            dpg.add_text("微調X:")
+            dpg.add_input_text(tag="input_offset_x", default_value="0", width=40)
+            dpg.add_text("Y:")
+            dpg.add_input_text(tag="input_offset_y", default_value="0", width=40)
+
         with dpg.group(horizontal=True):
             dpg.add_text("目標視窗:")
             dpg.add_combo(tag="combo_window_select", items=[], width=240, callback=on_window_select)
@@ -620,7 +663,7 @@ with dpg.window(tag="primary_window"):
     dpg.add_spacer(height=2)
 
     # 5. 主執行順序清單
-    with dpg.child_window(height=215, border=True):
+    with dpg.child_window(height=200, border=True):
         dpg.add_text("執行順序清單 (由上至下循環)", color=(56, 189, 248))
         dpg.add_separator()
 
@@ -644,7 +687,7 @@ with dpg.window(tag="primary_window"):
     btn_start = dpg.add_button(label="開始循環執行", tag="btn_toggle", callback=toggle_run, width=400, height=44)
     dpg.bind_item_theme(btn_start, "theme_btn_start")
 
-dpg.create_viewport(title="水滸歷險 巨集助手 (後台增強版)", width=435, height=800, always_on_top=True, resizable=False)
+dpg.create_viewport(title="水滸歷險 巨集助手 (精準坐標修復版)", width=435, height=810, always_on_top=True, resizable=False)
 dpg.setup_dearpygui()
 dpg.show_viewport()
 dpg.set_primary_window("primary_window", True)
