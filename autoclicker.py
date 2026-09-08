@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import ctypes
 import threading
 import pyautogui
 import dearpygui.dearpygui as dpg
@@ -11,6 +12,109 @@ combos = []   # 存放定義好的技能組合庫
 steps = []    # 存放主執行順序清單
 running = False
 temp_combo_target = None  # 記錄組合專用目標坐標
+
+# --- Win32 後台輸入支援 ---
+IS_WINDOWS = hasattr(ctypes, "windll")
+target_hwnd = None
+
+class POINT(ctypes.Structure):
+    _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+VK_MAP = {
+    "f1": 0x70, "f2": 0x71, "f3": 0x72, "f4": 0x73, "f5": 0x74, "f6": 0x75,
+    "f7": 0x76, "f8": 0x77, "f9": 0x78, "f10": 0x79, "f11": 0x7A, "f12": 0x7B,
+    "space": 0x20, "enter": 0x0D, "return": 0x0D, "esc": 0x1B, "escape": 0x1B,
+    "tab": 0x09, "shift": 0x10, "ctrl": 0x11, "alt": 0x12,
+    "up": 0x26, "down": 0x28, "left": 0x25, "right": 0x27,
+}
+for i in range(10):
+    VK_MAP[str(i)] = 0x30 + i
+for c in range(ord('a'), ord('z') + 1):
+    VK_MAP[chr(c)] = 0x41 + (c - ord('a'))
+
+def get_window_list():
+    if not IS_WINDOWS:
+        return []
+    user32 = ctypes.windll.user32
+    windows = []
+    
+    def enum_proc(hwnd, lParam):
+        if user32.IsWindowVisible(hwnd):
+            length = user32.GetWindowTextLengthW(hwnd)
+            if length > 0:
+                buff = ctypes.create_unicode_buffer(length + 1)
+                user32.GetWindowTextW(hwnd, buff, length + 1)
+                title = buff.value.strip()
+                if title:
+                    windows.append((hwnd, title))
+        return True
+
+    WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)
+    user32.EnumWindows(WNDENUMPROC(enum_proc), 0)
+    return windows
+
+def refresh_window_dropdown():
+    global target_hwnd
+    win_list = get_window_list()
+    items = []
+    target_idx = 0
+    for i, (hwnd, title) in enumerate(win_list):
+        items.append(f"[{hwnd}] {title}")
+        if "水滸" in title or "online" in title.lower():
+            target_idx = i
+
+    if not items:
+        items = ["未偵測到任何視窗 (非 Windows/Wine 環境)"]
+
+    dpg.configure_item("combo_window_select", items=items)
+    if items and items[0] != "未偵測到任何視窗 (非 Windows/Wine 環境)":
+        dpg.set_value("combo_window_select", items[target_idx])
+        on_window_select(None, items[target_idx])
+
+def on_window_select(sender, app_data):
+    global target_hwnd
+    val = dpg.get_value("combo_window_select")
+    if val and val.startswith("["):
+        try:
+            hwnd_str = val.split("]")[0].replace("[", "")
+            target_hwnd = int(hwnd_str)
+            dpg.set_value("lbl_status", f"已綁定目標視窗 HWND: {target_hwnd}")
+        except Exception:
+            target_hwnd = None
+
+def post_bg_click(hwnd, screen_x, screen_y):
+    if not IS_WINDOWS or not hwnd:
+        pyautogui.click(screen_x, screen_y)
+        return
+    user32 = ctypes.windll.user32
+    pt = POINT(int(screen_x), int(screen_y))
+    user32.ScreenToClient(hwnd, ctypes.byref(pt))
+    lparam = (pt.y << 16) | (pt.x & 0xFFFF)
+    WM_LBUTTONDOWN = 0x0201
+    WM_LBUTTONUP = 0x0202
+    MK_LBUTTON = 0x0001
+    user32.PostMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, lparam)
+    time.sleep(0.08)
+    user32.PostMessageW(hwnd, WM_LBUTTONUP, 0, lparam)
+
+def post_bg_key(hwnd, key_str):
+    if not IS_WINDOWS or not hwnd:
+        pyautogui.keyDown(key_str)
+        time.sleep(0.06)
+        pyautogui.keyUp(key_str)
+        return
+    user32 = ctypes.windll.user32
+    vk = VK_MAP.get(key_str.lower())
+    if vk is None:
+        if len(key_str) == 1:
+            vk = ord(key_str.upper())
+        else:
+            return
+    WM_KEYDOWN = 0x0100
+    WM_KEYUP = 0x0101
+    user32.PostMessageW(hwnd, WM_KEYDOWN, vk, 0)
+    time.sleep(0.06)
+    user32.PostMessageW(hwnd, WM_KEYUP, vk, 0xC0000001)
 
 # --- 組合庫 (Combination) 操作邏輯 ---
 def countdown_combo_target():
@@ -310,23 +414,32 @@ def toggle_run():
         dpg.set_value("lbl_status", "狀態：已手動停止")
 
 def run_loop():
-    global running
+    global running, target_hwnd
     round_idx = 1
     try:
         while running:
+            use_bg = dpg.get_value("chk_use_bg") and IS_WINDOWS and (target_hwnd is not None)
+
             for idx, step in enumerate(steps):
                 if not running: break
                 s_name = f"[{step['name']}]" if step["type"] == "combo" else step["type"]
-                dpg.set_value("lbl_status", f"第 {round_idx} 輪 ({idx+1}/{len(steps)}): {s_name}")
+                mode_str = "(後台注入)" if use_bg else "(前台實體)"
+                dpg.set_value("lbl_status", f"第 {round_idx} 輪 ({idx+1}/{len(steps)}): {s_name} {mode_str}")
 
                 if step["type"] == "click":
-                    pyautogui.click(step["x"], step["y"])
+                    if use_bg:
+                        post_bg_click(target_hwnd, step["x"], step["y"])
+                    else:
+                        pyautogui.click(step["x"], step["y"])
                     time.sleep(0.12)
 
                 elif step["type"] == "key":
-                    pyautogui.keyDown(step["key"])
-                    time.sleep(0.06)
-                    pyautogui.keyUp(step["key"])
+                    if use_bg:
+                        post_bg_key(target_hwnd, step["key"])
+                    else:
+                        pyautogui.keyDown(step["key"])
+                        time.sleep(0.06)
+                        pyautogui.keyUp(step["key"])
                     time.sleep(0.1)
 
                 elif step["type"] == "wait":
@@ -336,15 +449,24 @@ def run_loop():
                         time.sleep(0.1)
 
                 elif step["type"] == "combo":
+                    # 1. 目標點擊
                     if step.get("target"):
-                        pyautogui.click(step["target"]["x"], step["target"]["y"])
+                        if use_bg:
+                            post_bg_click(target_hwnd, step["target"]["x"], step["target"]["y"])
+                        else:
+                            pyautogui.click(step["target"]["x"], step["target"]["y"])
                         time.sleep(0.12)
+                    # 2. 按鍵放技
                     for k in step.get("keys", []):
                         if not running: break
-                        pyautogui.keyDown(k)
-                        time.sleep(0.06)
-                        pyautogui.keyUp(k)
+                        if use_bg:
+                            post_bg_key(target_hwnd, k)
+                        else:
+                            pyautogui.keyDown(k)
+                            time.sleep(0.06)
+                            pyautogui.keyUp(k)
                         time.sleep(0.15)
+                    # 3. CD 等待
                     chunks = int(float(step.get("wait", 0)) * 10)
                     for _ in range(chunks):
                         if not running: break
@@ -358,24 +480,28 @@ def run_loop():
         dpg.bind_item_theme("btn_toggle", "theme_btn_start")
         dpg.set_value("lbl_status", "已觸發安全停止（滑鼠甩至左上角）")
 
-# --- UI 構建與樣式客製化 ---
+# --- UI 構建與樣式 ---
 dpg.create_context()
 
-# 載入字型
-mac_fonts = [
+windir = os.environ.get("WINDIR", "C:\\Windows")
+candidate_fonts = [
+    os.path.join(windir, "Fonts", "msjh.ttc"),
+    os.path.join(windir, "Fonts", "msjhbd.ttc"),
+    os.path.join(windir, "Fonts", "msyh.ttc"),
+    os.path.join(windir, "Fonts", "mingliu.ttc"),
+    "C:\\Windows\\Fonts\\msjh.ttc",
+    "C:\\Windows\\Fonts\\msyh.ttc",
     "/System/Library/Fonts/PingFang.ttc",
     "/System/Library/Fonts/STHeiti Medium.ttc",
     "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-    "/System/Library/Fonts/Supplemental/Songti.ttc",
 ]
-selected_font = next((f for f in mac_fonts if os.path.exists(f)), None)
+selected_font = next((f for f in candidate_fonts if os.path.exists(f)), None)
 if selected_font:
     with dpg.font_registry():
         with dpg.font(selected_font, 14) as default_font:
             dpg.add_font_range_hint(dpg.mvFontRangeHint_Chinese_Full)
         dpg.bind_font(default_font)
 
-# 全域深色主題
 with dpg.theme() as global_theme:
     with dpg.theme_component(dpg.mvAll):
         dpg.add_theme_style(dpg.mvStyleVar_WindowPadding, 12, 12)
@@ -400,7 +526,6 @@ with dpg.theme() as global_theme:
 
 dpg.bind_theme(global_theme)
 
-# 特殊按鈕色彩樣式
 with dpg.theme(tag="theme_btn_action"):
     with dpg.theme_component(dpg.mvButton):
         dpg.add_theme_color(dpg.mvThemeCol_Button, (2, 132, 199, 220))
@@ -438,7 +563,17 @@ with dpg.window(tag="primary_window"):
 
     dpg.add_spacer(height=2)
 
-    # 2. 技能組合預設
+    # 2. 視窗綁定與後台模式控制
+    with dpg.child_window(height=76, border=True):
+        dpg.add_checkbox(label="啟用 Win32 後台掛機模式 (不佔用滑鼠/可被遮擋)", tag="chk_use_bg", default_value=True)
+        with dpg.group(horizontal=True):
+            dpg.add_text("目標視窗:")
+            dpg.add_combo(tag="combo_window_select", items=[], width=240, callback=on_window_select)
+            dpg.add_button(label="重新整理", callback=refresh_window_dropdown, width=65)
+
+    dpg.add_spacer(height=2)
+
+    # 3. 技能組合預設
     with dpg.child_window(height=245, border=True):
         dpg.add_text("技能組合預設 (Combinations)", color=(56, 189, 248))
         dpg.add_separator()
@@ -469,7 +604,7 @@ with dpg.window(tag="primary_window"):
 
     dpg.add_spacer(height=2)
 
-    # 3. 折疊式單步微調
+    # 4. 折疊式單步微調
     with dpg.collapsing_header(label="單獨新增微步 (點擊 / 單鍵 / 停頓)", default_open=False):
         with dpg.child_window(height=80, border=True):
             with dpg.group(horizontal=True):
@@ -484,8 +619,8 @@ with dpg.window(tag="primary_window"):
 
     dpg.add_spacer(height=2)
 
-    # 4. 主執行順序清單
-    with dpg.child_window(height=225, border=True):
+    # 5. 主執行順序清單
+    with dpg.child_window(height=215, border=True):
         dpg.add_text("執行順序清單 (由上至下循環)", color=(56, 189, 248))
         dpg.add_separator()
 
@@ -501,7 +636,7 @@ with dpg.window(tag="primary_window"):
 
     dpg.add_spacer(height=4)
 
-    # 5. 底部狀態列與執行按鈕
+    # 6. 底部狀態列與執行按鈕
     with dpg.group(horizontal=True):
         dpg.add_text("狀態:", color=(148, 163, 184))
         dpg.add_text("已就緒", tag="lbl_status", color=(255, 255, 255))
@@ -509,9 +644,13 @@ with dpg.window(tag="primary_window"):
     btn_start = dpg.add_button(label="開始循環執行", tag="btn_toggle", callback=toggle_run, width=400, height=44)
     dpg.bind_item_theme(btn_start, "theme_btn_start")
 
-dpg.create_viewport(title="水滸歷險 巨集助手", width=435, height=730, always_on_top=True, resizable=False)
+dpg.create_viewport(title="水滸歷險 巨集助手 (後台增強版)", width=435, height=800, always_on_top=True, resizable=False)
 dpg.setup_dearpygui()
 dpg.show_viewport()
 dpg.set_primary_window("primary_window", True)
+
+# 初始化視窗清單偵測
+refresh_window_dropdown()
+
 dpg.start_dearpygui()
 dpg.destroy_context()
