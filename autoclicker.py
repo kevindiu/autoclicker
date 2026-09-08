@@ -1,17 +1,19 @@
 import os
 import json
 import time
+import copy
 import ctypes
 from ctypes import wintypes
 import threading
 import pyautogui
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 
 pyautogui.FAILSAFE = False
 pyautogui.PAUSE = 0.0
 
 WINDOW_TITLE = "水滸歷險 巨集助手"
+CONFIG_EXT = ".shm"  # 自訂專屬副檔名 (Shui Hu Macro)
 
 combos, steps = [], []
 temp_combo_target = None
@@ -120,7 +122,7 @@ class App(tk.Tk):
         self.configure(bg="#15171c")
         self.attributes("-topmost", True)
 
-        self.var_cfg_name = tk.StringVar(value="sh_macro.json")
+        self.var_profile_name = tk.StringVar()
         self.var_use_bg = tk.BooleanVar(value=True)
         self.var_use_rel = tk.BooleanVar(value=True)
         self.var_offset_x = tk.StringVar(value="0")
@@ -139,6 +141,7 @@ class App(tk.Tk):
         self.build_left_panel()
         self.build_right_panel()
         self.refresh_window_dropdown()
+        self.refresh_profiles()
 
     def set_status(self, msg):
         self.after(0, lambda: self.lbl_status.config(text=f"狀態: {msg}"))
@@ -170,9 +173,11 @@ class App(tk.Tk):
         r1 = tk.Frame(f_cfg, bg="#1c1f26")
         r1.pack(fill="x", pady=2)
         tk.Label(r1, text="設定檔:", bg="#1c1f26", fg="#cbd5e1").pack(side="left")
-        tk.Entry(r1, textvariable=self.var_cfg_name, width=20, bg="#2d333b", fg="#ffffff", insertbackground="#fff").pack(side="left", padx=4)
-        tk.Button(r1, text="儲存", width=6, bg="#334155", fg="#fff", command=self.save_config).pack(side="left", padx=2)
-        tk.Button(r1, text="載入", width=6, bg="#334155", fg="#fff", command=self.load_config).pack(side="left", padx=2)
+        self.cbo_profile = ttk.Combobox(r1, textvariable=self.var_profile_name, width=15, state="readonly")
+        self.cbo_profile.pack(side="left", padx=4)
+        tk.Button(r1, text="載入", width=5, bg="#334155", fg="#fff", command=self.load_config).pack(side="left", padx=2)
+        tk.Button(r1, text="儲存", width=5, bg="#334155", fg="#fff", command=self.save_config).pack(side="left", padx=2)
+        tk.Button(r1, text="新建", width=5, bg="#0284c7", fg="#fff", activebackground="#0369a1", command=self.create_new_profile).pack(side="left", padx=2)
 
         r2 = tk.Frame(f_cfg, bg="#1c1f26")
         r2.pack(fill="x", pady=4)
@@ -262,12 +267,14 @@ class App(tk.Tk):
         sc2.pack(side="right", fill="y")
         self.step_listbox.config(yscrollcommand=sc2.set)
 
+        # 控制按鈕列：加入「複製所選」
         sr2 = tk.Frame(f_seq, bg="#1c1f26")
         sr2.pack(fill="x", pady=(2, 0))
-        tk.Button(sr2, text="上移", width=8, bg="#334155", fg="#fff", command=lambda: self.move_step(-1)).pack(side="left", padx=2)
-        tk.Button(sr2, text="下移", width=8, bg="#334155", fg="#fff", command=lambda: self.move_step(1)).pack(side="left", padx=2)
-        tk.Button(sr2, text="刪除所選", width=10, bg="#b91c1c", fg="#fff", command=self.delete_selected).pack(side="left", padx=2)
-        tk.Button(sr2, text="清空清單", width=10, bg="#b91c1c", fg="#fff", command=self.clear_all).pack(side="left", padx=2)
+        tk.Button(sr2, text="上移", width=6, bg="#334155", fg="#fff", command=lambda: self.move_step(-1)).pack(side="left", padx=2)
+        tk.Button(sr2, text="下移", width=6, bg="#334155", fg="#fff", command=lambda: self.move_step(1)).pack(side="left", padx=2)
+        tk.Button(sr2, text="複製所選", width=8, bg="#0284c7", fg="#fff", activebackground="#0369a1", command=self.duplicate_selected).pack(side="left", padx=2)
+        tk.Button(sr2, text="刪除所選", width=8, bg="#b91c1c", fg="#fff", command=self.delete_selected).pack(side="left", padx=2)
+        tk.Button(sr2, text="清空清單", width=8, bg="#b91c1c", fg="#fff", command=self.clear_all).pack(side="left", padx=2)
 
         # 3. 狀態與主執行開關
         bot = tk.Frame(f_right, bg="#1c1f26")
@@ -276,6 +283,89 @@ class App(tk.Tk):
         self.lbl_status.pack(fill="x", pady=(0, 4))
         self.btn_toggle = tk.Button(bot, text="開始循環執行", height=2, bg="#16a34a", fg="#ffffff", font=("Segoe UI", 11, "bold"), activebackground="#15803d", command=self.toggle_run)
         self.btn_toggle.pack(fill="x")
+
+    # ======================= 設定檔管理 =======================
+    def get_profile_files(self):
+        try:
+            files = [f[:-len(CONFIG_EXT)] for f in os.listdir(".") if f.endswith(CONFIG_EXT)]
+            return sorted(files)
+        except Exception:
+            return []
+
+    def refresh_profiles(self, select_name=None):
+        profiles = self.get_profile_files()
+        if not profiles:
+            profiles = ["default"]
+            if not os.path.exists(f"default{CONFIG_EXT}"):
+                try:
+                    with open(f"default{CONFIG_EXT}", "w", encoding="utf-8") as f:
+                        json.dump({"combos": [], "steps": []}, f)
+                except Exception: pass
+
+        self.cbo_profile["values"] = profiles
+        if select_name and select_name in profiles:
+            self.cbo_profile.set(select_name)
+        elif self.var_profile_name.get() in profiles:
+            self.cbo_profile.set(self.var_profile_name.get())
+        else:
+            self.cbo_profile.current(0)
+
+    def create_new_profile(self):
+        name = simpledialog.askstring("新建設定檔", "請輸入新設定檔名稱 (毋須輸入副檔名):", parent=self)
+        if not name: return
+        name = name.strip()
+        if not name: return
+
+        fn = f"{name}{CONFIG_EXT}"
+        if os.path.exists(fn):
+            confirmed = messagebox.askyesno("檔案覆蓋確認", f"設定檔「{name}」已存在！\n請問是否確認覆蓋原有設定？", parent=self)
+            if not confirmed: return
+
+        try:
+            with open(fn, "w", encoding="utf-8") as f:
+                json.dump({"combos": combos, "steps": steps}, f, ensure_ascii=False, indent=2)
+            self.refresh_profiles(select_name=name)
+            self.set_status(f"已新建並儲存至 {fn}")
+        except Exception as e:
+            self.set_status(f"新建失敗: {e}")
+
+    def save_config(self):
+        name = self.var_profile_name.get().strip()
+        if not name:
+            self.set_status("請先選擇或新建設定檔")
+            return
+        fn = f"{name}{CONFIG_EXT}"
+
+        if os.path.exists(fn):
+            confirmed = messagebox.askyesno("檔案覆蓋確認", f"請問是否確認覆蓋「{name}」的原有設定？", parent=self)
+            if not confirmed:
+                self.set_status("已取消儲存")
+                return
+
+        try:
+            with open(fn, "w", encoding="utf-8") as f:
+                json.dump({"combos": combos, "steps": steps}, f, ensure_ascii=False, indent=2)
+            self.set_status(f"已成功儲存至 {fn}")
+            self.refresh_profiles(select_name=name)
+        except Exception as e:
+            self.set_status(f"儲存失敗: {e}")
+
+    def load_config(self):
+        name = self.var_profile_name.get().strip()
+        if not name: return
+        fn = f"{name}{CONFIG_EXT}"
+        if not os.path.exists(fn):
+            self.set_status(f"找不到檔案：{fn}")
+            return
+        try:
+            with open(fn, "r", encoding="utf-8") as f: data = json.load(f)
+            combos.clear(); combos.extend(data.get("combos", []) if isinstance(data, dict) else [])
+            steps.clear(); steps.extend(data.get("steps", []) if isinstance(data, dict) else (data if isinstance(data, list) else []))
+            self.update_combo_list()
+            self.update_step_list()
+            self.set_status(f"成功載入設定檔：{name}")
+        except Exception as e:
+            self.set_status(f"載入失敗: {e}")
 
     # ======================= 邏輯控制 =======================
     def get_window_list(self):
@@ -482,6 +572,20 @@ class App(tk.Tk):
             steps[idx], steps[idx + delta] = steps[idx + delta], steps[idx]
             self.update_step_list(idx + delta)
 
+    # 核心新增：複製所選步驟 (Duplicate)
+    def duplicate_selected(self):
+        sel = self.step_listbox.curselection()
+        if not sel:
+            self.set_status("請先在清單點選要複製的步驟！")
+            return
+        idx = sel[0]
+        # 深層複製選中的步驟物件，避免共享參照
+        new_step = copy.deepcopy(steps[idx])
+        ins = idx + 1
+        steps.insert(ins, new_step)
+        self.update_step_list(ins)
+        self.set_status(f"已複製步驟 #{idx+1} 到 #{ins+1}")
+
     def delete_selected(self):
         sel = self.step_listbox.curselection()
         if sel:
@@ -489,7 +593,6 @@ class App(tk.Tk):
             del steps[idx]
             self.update_step_list(min(idx, len(steps) - 1) if steps else None)
 
-    # 核心新增：清空前彈出確認視窗
     def clear_all(self):
         if not steps:
             self.set_status("執行清單本來就是空的")
@@ -506,41 +609,6 @@ class App(tk.Tk):
             self.set_status("已清空執行清單")
         else:
             self.set_status("已取消清空清單")
-
-    # 儲存前彈出覆蓋確認視窗
-    def save_config(self):
-        fn = self.var_cfg_name.get().strip() or "macro_config.json"
-        if not fn.endswith(".json"): fn += ".json"
-        
-        if os.path.exists(fn):
-            confirmed = messagebox.askyesno(
-                "檔案覆蓋確認",
-                f"設定檔「{fn}」已經存在！\n請問是否確認覆蓋原有設定？",
-                parent=self
-            )
-            if not confirmed:
-                self.set_status("已取消儲存")
-                return
-
-        try:
-            with open(fn, "w", encoding="utf-8") as f:
-                json.dump({"combos": combos, "steps": steps}, f, ensure_ascii=False, indent=2)
-            self.set_status(f"已成功儲存至 {fn}")
-        except Exception as e:
-            self.set_status(f"儲存失敗: {e}")
-
-    def load_config(self):
-        fn = self.var_cfg_name.get().strip() or "macro_config.json"
-        if not fn.endswith(".json"): fn += ".json"
-        if not os.path.exists(fn): return self.set_status(f"找不到檔案：{fn}")
-        try:
-            with open(fn, "r", encoding="utf-8") as f: data = json.load(f)
-            combos.clear(); combos.extend(data.get("combos", []) if isinstance(data, dict) else [])
-            steps.clear(); steps.extend(data.get("steps", []) if isinstance(data, dict) else (data if isinstance(data, list) else []))
-            self.update_combo_list(); self.update_step_list()
-            self.set_status(f"成功載入設定檔：{fn}")
-        except Exception as e:
-            self.set_status(f"載入失敗: {e}")
 
     def toggle_run(self):
         global running
