@@ -189,34 +189,73 @@ class App(tk.Tk):
             pass
         self.after(150, self.track_mouse_live)
 
-    # ======================= 全功能動作編輯通用彈窗 =======================
+    # ======================= 全功能動作編輯彈窗 (加入取點功能) =======================
     def prompt_edit_action(self, action, available_combos=None):
-        """智慧彈窗：根據動作類型自動識別並編輯坐標、按鍵、停頓秒數或目標組合"""
         atype = action.get("type")
         if not atype: return False
 
         dialog = tk.Toplevel(self)
-        dialog.geometry("280x150")
         dialog.configure(bg="#1c1f26")
         dialog.resizable(False, False)
         dialog.attributes("-topmost", True)
         dialog.transient(self)
         dialog.grab_set()
 
+        # 自動置中演算法 (適度加大高度容納取點按鈕)
+        w, h = 300, 185
+        self.update_idletasks()
+        pos_x = self.winfo_x() + max(0, (self.winfo_width() - w) // 2)
+        pos_y = self.winfo_y() + max(0, (self.winfo_height() - h) // 2)
+        dialog.geometry(f"{w}x{h}+{pos_x}+{pos_y}")
+
         modified = [False]
-        f = tk.Frame(dialog, bg="#1c1f26", pady=12)
+        f = tk.Frame(dialog, bg="#1c1f26", pady=10)
         f.pack()
 
         if atype == "click":
             dialog.title("修改點擊坐標")
             var_x = tk.StringVar(value=str(action.get("x", 0)))
             var_y = tk.StringVar(value=str(action.get("y", 0)))
-            tk.Label(f, text="X 坐標:", bg="#1c1f26", fg="#cbd5e1").grid(row=0, column=0, padx=6, pady=4, sticky="e")
+            
+            tk.Label(f, text="X 坐標:", bg="#1c1f26", fg="#cbd5e1").grid(row=0, column=0, padx=6, pady=3, sticky="e")
             e_x = tk.Entry(f, textvariable=var_x, width=10, bg="#2d333b", fg="#fff")
-            e_x.grid(row=0, column=1, padx=6, pady=4)
-            tk.Label(f, text="Y 坐標:", bg="#1c1f26", fg="#cbd5e1").grid(row=1, column=0, padx=6, pady=4, sticky="e")
+            e_x.grid(row=0, column=1, padx=6, pady=3)
+            
+            tk.Label(f, text="Y 坐標:", bg="#1c1f26", fg="#cbd5e1").grid(row=1, column=0, padx=6, pady=3, sticky="e")
             e_y = tk.Entry(f, textvariable=var_y, width=10, bg="#2d333b", fg="#fff")
-            e_y.grid(row=1, column=1, padx=6, pady=4)
+            e_y.grid(row=1, column=1, padx=6, pady=3)
+
+            # 核心新增：編輯視窗內的 3 秒取點按鈕
+            btn_rec = tk.Button(f, text="重新取點 (3秒)", width=16, bg="#334155", fg="#fff")
+            btn_rec.grid(row=2, column=0, columnspan=2, pady=(6, 2))
+
+            def do_rec():
+                def worker():
+                    btn_rec.config(state="disabled")
+                    for i in range(3, 0, -1):
+                        dialog.after(0, lambda sec=i: btn_rec.config(text=f"請移至目標... {sec}秒"))
+                        self.set_status(f"修改坐標取點中... 倒數 {i} 秒")
+                        time.sleep(1)
+                    pos = pyautogui.position()
+                    use_rel = self.var_use_rel.get()
+                    if use_rel and IS_WINDOWS and target_hwnd:
+                        pt = POINT(int(pos.x), int(pos.y))
+                        user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
+                        rx, ry = pt.x, pt.y
+                    else:
+                        rx, ry = pos.x, pos.y
+
+                    def _fill():
+                        var_x.set(str(rx))
+                        var_y.set(str(ry))
+                        btn_rec.config(state="normal", text="重新取點 (3秒)")
+                        self.set_status(f"已獲取坐標: ({rx}, {ry})")
+
+                    dialog.after(0, _fill)
+
+                threading.Thread(target=worker, daemon=True).start()
+
+            btn_rec.config(command=do_rec)
             e_x.focus_set()
 
             def on_ok():
@@ -421,7 +460,7 @@ class App(tk.Tk):
         self.cbo_call_combo.pack(side="left", padx=2, fill="x", expand=True)
         tk.Button(f_cr_call, text="+呼叫", width=5, bg="#0284c7", fg="#fff", command=self.combo_add_call_action).pack(side="left", padx=1)
 
-        # 動作 Listbox (支援雙擊編輯任意項目)
+        # 動作 Listbox (雙擊編輯任意項目)
         f_cr_box = tk.Frame(f_cr, bg="#15171c")
         f_cr_box.pack(fill="both", expand=True, pady=3)
         self.combo_act_listbox = tk.Listbox(f_cr_box, bg="#15171c", fg="#f1f5f9", selectbackground="#0284c7", selectforeground="#fff", bd=0, highlightthickness=0, font=("Segoe UI", 9), exportselection=False)
@@ -469,7 +508,7 @@ class App(tk.Tk):
         tk.Entry(sr, textvariable=self.var_step_wait, width=4, bg="#2d333b", fg="#fff").pack(side="left", padx=3)
         tk.Button(sr, text="加停頓", width=7, bg="#334155", fg="#fff", command=self.add_main_wait_step).pack(side="left", padx=2)
 
-        # 2. 執行順序清單 (支援雙擊編輯任意步驟)
+        # 2. 執行順序清單
         f_seq = tk.LabelFrame(f_right, text=" 執行順序清單 (由上至下循環) ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
         f_seq.pack(fill="both", expand=True)
 
@@ -815,7 +854,6 @@ class App(tk.Tk):
         self.sync_combo_actions_to_main_steps(combos[idx]["name"], actions)
         self.set_status(f"已手動在組合加入點擊: ({x}, {y})")
 
-    # 組合動作修改（按鈕或雙擊呼叫）
     def edit_selected_combo_action(self):
         c_idx = self.get_selected_combo_idx()
         a_idx = self.get_selected_action_idx()
@@ -974,7 +1012,6 @@ class App(tk.Tk):
         self.update_step_list(ins)
         self.set_status(f"已手動插入點擊到主清單 #{ins+1}: ({x}, {y})")
 
-    # 主步驟修改（按鈕或雙擊呼叫）
     def edit_selected_main_step(self):
         sel = self.step_listbox.curselection()
         if not sel: return self.set_status("請先在主清單選擇步驟！")
