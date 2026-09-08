@@ -19,6 +19,7 @@ combos = []
 steps = []
 
 running = False
+is_testing = False
 stop_event = threading.Event()
 target_hwnd = None
 
@@ -54,8 +55,9 @@ VK_MAP = {
 def safe_sleep(seconds):
     end = time.time() + float(seconds)
     while time.time() < end:
-        if not running or stop_event.is_set():
-            return False
+        if not is_testing:
+            if not running or stop_event.is_set():
+                return False
         time.sleep(0.02)
     return True
 
@@ -171,14 +173,6 @@ class App(tk.Tk):
                 self.btn_toggle.config(text="開始循環執行", bg="#16a34a", activebackground="#15803d")
         self.after(0, _u)
 
-    def highlight_step(self, idx):
-        def _hl():
-            self.step_listbox.selection_clear(0, tk.END)
-            if 0 <= idx < self.step_listbox.size():
-                self.step_listbox.selection_set(idx)
-                self.step_listbox.see(idx)
-        self.after(0, _hl)
-
     def track_mouse_live(self):
         try:
             pos = pyautogui.position()
@@ -192,14 +186,13 @@ class App(tk.Tk):
             pass
         self.after(150, self.track_mouse_live)
 
-    # ======================= 功能 3: 定位並閃爍遊戲視窗 =======================
     def locate_target_window(self):
         global target_hwnd
         if not IS_WINDOWS or not target_hwnd:
             return self.set_status("未綁定有效視窗，無法定位！")
 
         try:
-            user32.ShowWindow(target_hwnd, 9)  # SW_RESTORE (若縮小則復原)
+            user32.ShowWindow(target_hwnd, 9)
             user32.SetForegroundWindow(target_hwnd)
             for _ in range(4):
                 user32.FlashWindow(target_hwnd, True)
@@ -448,7 +441,6 @@ class App(tk.Tk):
         f_cr = tk.Frame(f_combo_split, bg="#1c1f26", padx=4, pady=2, highlightbackground="#2d333b", highlightthickness=1)
         f_cr.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
 
-        # 頂部狀態 + 試跑組合按鈕
         f_cr_top = tk.Frame(f_cr, bg="#1c1f26")
         f_cr_top.pack(fill="x")
         self.lbl_combo_editing = tk.Label(f_cr_top, text="【組合動作: 未選取】", bg="#1c1f26", fg="#7dd3fc", font=("Segoe UI", 9, "bold"))
@@ -482,7 +474,7 @@ class App(tk.Tk):
         self.cbo_call_combo.pack(side="left", padx=2, fill="x", expand=True)
         tk.Button(f_cr_call, text="+呼叫", width=5, bg="#0284c7", fg="#fff", command=self.combo_add_call_action).pack(side="left", padx=1)
 
-        # 動作 Listbox (綁定 Space 開關啟用，Double Click 彈窗修改)
+        # 動作 Listbox
         f_cr_box = tk.Frame(f_cr, bg="#15171c")
         f_cr_box.pack(fill="both", expand=True, pady=3)
         self.combo_act_listbox = tk.Listbox(f_cr_box, bg="#15171c", fg="#f1f5f9", selectbackground="#0284c7", selectforeground="#fff", bd=0, highlightthickness=0, font=("Segoe UI", 9), exportselection=False)
@@ -493,7 +485,6 @@ class App(tk.Tk):
         sc_cr.pack(side="right", fill="y")
         self.combo_act_listbox.config(yscrollcommand=sc_cr.set)
 
-        # 動作控制列
         cr_act_ctrl = tk.Frame(f_cr, bg="#1c1f26")
         cr_act_ctrl.pack(fill="x", pady=(2, 0))
         tk.Button(cr_act_ctrl, text="上移", width=4, bg="#334155", fg="#fff", command=lambda: self.move_combo_action(-1)).pack(side="left", padx=1)
@@ -533,7 +524,7 @@ class App(tk.Tk):
         tk.Entry(sr, textvariable=self.var_step_wait, width=4, bg="#2d333b", fg="#fff").pack(side="left", padx=3)
         tk.Button(sr, text="加停頓", width=7, bg="#334155", fg="#fff", command=self.add_main_wait_step).pack(side="left", padx=2)
 
-        # 2. 執行順序清單 (綁定 Space 開關啟用，Double Click 彈窗修改)
+        # 2. 執行順序清單
         f_seq = tk.LabelFrame(f_right, text=" 執行順序清單 (由上至下循環) ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
         f_seq.pack(fill="both", expand=True)
 
@@ -817,7 +808,7 @@ class App(tk.Tk):
         self.update_step_list(select_idx=ins)
         self.set_status(f"已將組合 [{c['name']}] 加入主執行清單 #{ins+1}")
 
-    # ======================= 組合動作邏輯 (支援開關與試跑) =======================
+    # ======================= 組合動作邏輯 =======================
     def get_selected_action_idx(self):
         sel = self.combo_act_listbox.curselection()
         return sel[0] if sel else None
@@ -850,7 +841,6 @@ class App(tk.Tk):
                 sync_cnt += 1
         if sync_cnt > 0: self.update_step_list()
 
-    # 功能 1: 組合動作啟用/停用切換 (按鈕或 Space 鍵觸發)
     def toggle_combo_action_enabled(self):
         c_idx = self.get_selected_combo_idx()
         a_idx = self.get_selected_action_idx()
@@ -862,7 +852,6 @@ class App(tk.Tk):
         state_str = "啟用" if actions[a_idx]["enabled"] else "停用"
         self.set_status(f"已將動作 #{a_idx+1} 切換為: {state_str}")
 
-    # 功能 2: 試跑所選單一組合動作
     def test_run_selected_combo_action(self):
         if running: return self.set_status("巨集正在循環執行中，請先停止再試跑！")
         c_idx = self.get_selected_combo_idx()
@@ -871,12 +860,17 @@ class App(tk.Tk):
         act = combos[c_idx]["actions"][a_idx]
 
         def _worker():
-            self.set_status("正在試跑所選動作...")
-            self.execute_single_action(act, "組合動作試跑")
-            self.set_status("試跑動作完成！")
+            global is_testing
+            is_testing = True
+            try:
+                self.set_status("正在試跑所選動作...")
+                self.execute_single_action(act, "組合動作試跑")
+                self.set_status("試跑動作完成！")
+            finally:
+                is_testing = False
+
         threading.Thread(target=_worker, daemon=True).start()
 
-    # 功能 2: 試跑整個當前組合
     def test_run_current_combo(self):
         if running: return self.set_status("巨集正在循環執行中，請先停止再試跑！")
         c_idx = self.get_selected_combo_idx()
@@ -884,11 +878,17 @@ class App(tk.Tk):
         c = combos[c_idx]
 
         def _worker():
-            self.set_status(f"正在試跑組合: [{c['name']}]...")
-            for a_idx, act in enumerate(c.get("actions", [])):
-                if not act.get("enabled", True): continue
-                self.execute_single_action(act, f"[{c['name']}#{a_idx+1}]")
-            self.set_status(f"組合 [{c['name']}] 試跑完畢！")
+            global is_testing
+            is_testing = True
+            try:
+                self.set_status(f"正在試跑組合: [{c['name']}]...")
+                for a_idx, act in enumerate(c.get("actions", [])):
+                    if not act.get("enabled", True): continue
+                    self.execute_single_action(act, f"[{c['name']}#{a_idx+1}]")
+                self.set_status(f"組合 [{c['name']}] 試跑完畢！")
+            finally:
+                is_testing = False
+
         threading.Thread(target=_worker, daemon=True).start()
 
     def combo_add_click_action(self):
@@ -1032,7 +1032,7 @@ class App(tk.Tk):
             self.sync_combo_actions_to_main_steps(combos[c_idx]["name"], [])
             self.set_status("已清空組合所有動作")
 
-    # ======================= 主執行清單邏輯 (支援開關與試跑) =======================
+    # ======================= 主執行順序清單邏輯 =======================
     def get_main_insert_index(self):
         sel = self.step_listbox.curselection()
         return sel[0] + 1 if sel else len(steps)
@@ -1062,7 +1062,6 @@ class App(tk.Tk):
         if select_idx is not None and 0 <= select_idx < len(steps):
             self.step_listbox.selection_set(select_idx)
 
-    # 功能 1: 主步驟啟用/停用切換 (按鈕或 Space 鍵觸發)
     def toggle_main_step_enabled(self):
         sel = self.step_listbox.curselection()
         if not sel: return
@@ -1072,7 +1071,6 @@ class App(tk.Tk):
         state_str = "啟用" if steps[idx]["enabled"] else "停用"
         self.set_status(f"已將步驟 #{idx+1} 切換為: {state_str}")
 
-    # 功能 2: 試跑所選主清單單步
     def test_run_selected_main_step(self):
         if running: return self.set_status("巨集正在循環執行中，請先停止再試跑！")
         sel = self.step_listbox.curselection()
@@ -1081,15 +1079,21 @@ class App(tk.Tk):
         s = steps[idx]
 
         def _worker():
-            self.set_status(f"正在試跑步驟 #{idx+1}...")
-            if s.get("type") == "combo":
-                c_name = s.get("name", "組合")
-                for sub_idx, sub_act in enumerate(s.get("actions", [])):
-                    if not sub_act.get("enabled", True): continue
-                    self.execute_single_action(sub_act, f"[{c_name}#{sub_idx+1}]")
-            else:
-                self.execute_single_action(s, f"步驟#{idx+1}")
-            self.set_status(f"步驟 #{idx+1} 試跑完成！")
+            global is_testing
+            is_testing = True
+            try:
+                self.set_status(f"正在試跑步驟 #{idx+1}...")
+                if s.get("type") == "combo":
+                    c_name = s.get("name", "組合")
+                    for sub_idx, sub_act in enumerate(s.get("actions", [])):
+                        if not sub_act.get("enabled", True): continue
+                        self.execute_single_action(sub_act, f"[{c_name}#{sub_idx+1}]")
+                else:
+                    self.execute_single_action(s, f"步驟#{idx+1}")
+                self.set_status(f"步驟 #{idx+1} 試跑完成！")
+            finally:
+                is_testing = False
+
         threading.Thread(target=_worker, daemon=True).start()
 
     def add_main_click_step(self):
@@ -1173,7 +1177,7 @@ class App(tk.Tk):
             self.update_step_list()
             self.set_status("已清空主執行清單")
 
-    # ======================= 單步執行輔助器 (用於試跑與主循環) =======================
+    # ======================= 單步執行輔助器 =======================
     def execute_single_action(self, act, desc):
         use_bg = self.var_use_bg.get() and IS_WINDOWS and (target_hwnd is not None)
         try: off_x, off_y = int(self.var_offset_x.get() or 0), int(self.var_offset_y.get() or 0)
@@ -1200,7 +1204,7 @@ class App(tk.Tk):
                     if not sub_act.get("enabled", True): continue
                     self.execute_single_action(sub_act, f"{desc}->[{tgt_name}#{sub_idx+1}]")
 
-    # ======================= 主執行引擎 (跳過停用步驟) =======================
+    # ======================= 主執行引擎 (完全不再搶奪游標 Focus) =======================
     def toggle_run(self):
         global running
         if running:
@@ -1224,7 +1228,7 @@ class App(tk.Tk):
         def run_action(act, parent_desc, depth=0, visited_set=None):
             if visited_set is None: visited_set = set()
             if not running or stop_event.is_set(): return False
-            if not act.get("enabled", True): return True  # 跳過已停用動作
+            if not act.get("enabled", True): return True
 
             use_bg = self.var_use_bg.get() and IS_WINDOWS and (target_hwnd is not None)
             try: off_x, off_y = int(self.var_offset_x.get() or 0), int(self.var_offset_y.get() or 0)
@@ -1274,8 +1278,7 @@ class App(tk.Tk):
             while running and not stop_event.is_set():
                 for idx, step in enumerate(steps):
                     if not running or stop_event.is_set(): break
-                    if not step.get("enabled", True): continue  # 跳過已停用步驟
-                    self.highlight_step(idx)
+                    if not step.get("enabled", True): continue
 
                     stype = step["type"]
                     if stype == "combo":
