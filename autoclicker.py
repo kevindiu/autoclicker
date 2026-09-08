@@ -104,7 +104,7 @@ def on_window_select(sender, app_data):
         except Exception:
             target_hwnd = None
 
-# --- 動作發送輔助器 (消除重複邏輯) ---
+# --- 動作發送輔助器 ---
 def post_bg_click(hwnd, client_x, client_y, offset_x=0, offset_y=0):
     if not IS_WINDOWS or not hwnd:
         pyautogui.click(client_x, client_y)
@@ -136,7 +136,6 @@ def post_bg_key(hwnd, key_str):
             user32.PostMessageW(hwnd, 0x0101, vk, 0xC0000001)
 
 def execute_click(x, y, is_rel, use_bg, off_x, off_y):
-    """統一處理單步點擊與技能組合點擊，節省大量重複代碼"""
     if use_bg:
         if not is_rel:
             pt = POINT(int(x), int(y))
@@ -461,7 +460,6 @@ with dpg.theme() as global_theme:
             dpg.add_theme_color(col, (*val, 255) if len(val) == 3 else val)
 dpg.bind_theme(global_theme)
 
-# 迴圈批次建立按鈕主題
 theme_data = [
     ("theme_btn_action", (2, 132, 199, 220), (14, 165, 233, 255), (3, 105, 161, 255)),
     ("theme_btn_danger", (185, 28, 28, 180), (220, 38, 38, 255), (153, 27, 27, 255)),
@@ -502,7 +500,8 @@ with dpg.window(tag="primary_window"):
 
             dpg.add_spacer(height=2)
 
-            with dpg.child_window(height=385, border=True):
+            # 核心調整：高度微調至 410，num_items 擴大到 12 行，完美消除按鈕下方的空白
+            with dpg.child_window(height=410, border=True):
                 dpg.add_text("技能組合預設 (Combinations)", color=(56, 189, 248))
                 dpg.add_separator()
                 with dpg.group(horizontal=True):
@@ -520,7 +519,8 @@ with dpg.window(tag="primary_window"):
                     dpg.add_button(label="新增組合", callback=save_new_combo, width=70)
                     dpg.add_button(label="更新", callback=update_selected_combo, width=50)
 
-                dpg.add_listbox(tag="combo_listbox", items=[], num_items=8, width=415, callback=on_combo_select)
+                # 由 8 行加大至 12 行
+                dpg.add_listbox(tag="combo_listbox", items=[], num_items=12, width=415, callback=on_combo_select)
                 with dpg.group(horizontal=True):
                     b_add = dpg.add_button(label="將所選組合加入執行清單", callback=add_combo_to_steps, width=315)
                     dpg.bind_item_theme(b_add, "theme_btn_action")
@@ -564,10 +564,18 @@ with dpg.window(tag="primary_window"):
             btn_start = dpg.add_button(label="開始循環執行", tag="btn_toggle", callback=toggle_run, width=435, height=42)
             dpg.bind_item_theme(btn_start, "theme_btn_start")
 
-dpg.create_viewport(title="水滸歷險 巨集助手", width=935, height=585, always_on_top=True, resizable=False)
+dpg.create_viewport(
+    title="水滸歷險 巨集助手", 
+    width=935, 
+    height=585, 
+    always_on_top=True, 
+    resizable=False,
+    vsync=False
+)
 dpg.setup_dearpygui()
 dpg.show_viewport()
 dpg.set_primary_window("primary_window", True)
+dpg.configure_app(wait_for_input=False)
 
 refresh_window_dropdown()
 dpg.start_dearpygui()
