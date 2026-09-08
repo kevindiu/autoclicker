@@ -13,10 +13,10 @@ pyautogui.FAILSAFE = False
 pyautogui.PAUSE = 0.0
 
 WINDOW_TITLE = "水滸歷險 巨集助手"
-CONFIG_EXT = ".shm"  # 自訂專屬副檔名 (Shui Hu Macro)
+CONFIG_EXT = ".shm"
 
-combos, steps = [], []
-temp_combo_target = None
+combos = []
+cur_combo_idx = -1
 running = False
 stop_event = threading.Event()
 target_hwnd = None
@@ -111,13 +111,13 @@ def execute_click(x, y, is_rel, use_bg, off_x, off_y):
         return f"前台點擊 ({x},{y})"
 
 # ==============================================================================
-# 原生 Tkinter GUI
+# 主 GUI 介面
 # ==============================================================================
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(WINDOW_TITLE)
-        self.geometry("960x600")
+        self.geometry("980x620")
         self.resizable(False, False)
         self.configure(bg="#15171c")
         self.attributes("-topmost", True)
@@ -127,12 +127,10 @@ class App(tk.Tk):
         self.var_use_rel = tk.BooleanVar(value=True)
         self.var_offset_x = tk.StringVar(value="0")
         self.var_offset_y = tk.StringVar(value="0")
-        self.var_combo_name = tk.StringVar(value="F4補血CD")
-        self.var_combo_keys = tk.StringVar(value="f4")
-        self.var_combo_wait = tk.StringVar(value="10.0")
-        self.var_step_key = tk.StringVar(value="f1")
-        self.var_step_wait = tk.StringVar(value="1.0")
         self.var_window = tk.StringVar(value="未偵測到視窗")
+
+        self.var_action_key = tk.StringVar(value="f1")
+        self.var_action_wait = tk.StringVar(value="1.0")
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
@@ -140,6 +138,7 @@ class App(tk.Tk):
 
         self.build_left_panel()
         self.build_right_panel()
+
         self.refresh_window_dropdown()
         self.refresh_profiles()
 
@@ -151,17 +150,18 @@ class App(tk.Tk):
             if is_running:
                 self.btn_toggle.config(text="停止執行", bg="#dc2626", activebackground="#b91c1c")
             else:
-                self.btn_toggle.config(text="開始循環執行", bg="#16a34a", activebackground="#15803d")
+                self.btn_toggle.config(text="開始循環執行 (當前組合)", bg="#16a34a", activebackground="#15803d")
         self.after(0, _u)
 
-    def highlight_step(self, idx):
+    def highlight_action(self, idx):
         def _hl():
-            self.step_listbox.selection_clear(0, tk.END)
-            if 0 <= idx < self.step_listbox.size():
-                self.step_listbox.selection_set(idx)
-                self.step_listbox.see(idx)
+            self.action_listbox.selection_clear(0, tk.END)
+            if 0 <= idx < self.action_listbox.size():
+                self.action_listbox.selection_set(idx)
+                self.action_listbox.see(idx)
         self.after(0, _hl)
 
+    # ======================= [左欄：設定 + 組合清單] =======================
     def build_left_panel(self):
         f_left = tk.Frame(self, bg="#1c1f26", padx=8, pady=8, highlightbackground="#2d333b", highlightthickness=1)
         f_left.grid(row=0, column=0, padx=(10, 5), pady=10, sticky="nsew")
@@ -196,178 +196,335 @@ class App(tk.Tk):
         self.cbo_window.bind("<<ComboboxSelected>>", self.on_window_select)
         tk.Button(r3, text="重新整理", bg="#334155", fg="#fff", command=self.refresh_window_dropdown).pack(side="left", padx=2)
 
-        # 2. 組合庫
-        f_combo = tk.LabelFrame(f_left, text=" 技能組合預設 (Combinations) ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
+        # 2. COMBINATION LIST (組合清單)
+        f_combo = tk.LabelFrame(f_left, text=" 技能組合清單 (Combination List) ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
         f_combo.pack(fill="both", expand=True)
 
-        cr1 = tk.Frame(f_combo, bg="#1c1f26")
-        cr1.pack(fill="x", pady=2)
-        tk.Label(cr1, text="名稱:", bg="#1c1f26", fg="#cbd5e1").pack(side="left")
-        tk.Entry(cr1, textvariable=self.var_combo_name, width=12, bg="#2d333b", fg="#fff").pack(side="left", padx=3)
-        tk.Label(cr1, text="按鍵:", bg="#1c1f26", fg="#cbd5e1").pack(side="left")
-        tk.Entry(cr1, textvariable=self.var_combo_keys, width=8, bg="#2d333b", fg="#fff").pack(side="left", padx=3)
-        tk.Label(cr1, text="CD(秒):", bg="#1c1f26", fg="#cbd5e1").pack(side="left")
-        tk.Entry(cr1, textvariable=self.var_combo_wait, width=5, bg="#2d333b", fg="#fff").pack(side="left", padx=3)
-
-        cr2 = tk.Frame(f_combo, bg="#1c1f26")
-        cr2.pack(fill="x", pady=4)
-        tk.Label(cr2, text="目標:", bg="#1c1f26", fg="#cbd5e1").pack(side="left")
-        self.lbl_combo_target = tk.Label(cr2, text="無 (原地)", bg="#1c1f26", fg="#7dd3fc", font=("Segoe UI", 9, "bold"))
-        self.lbl_combo_target.pack(side="left", padx=4)
-        self.btn_combo_target = tk.Button(cr2, text="記錄目標 (3秒)", bg="#334155", fg="#fff", command=self.record_combo_target)
-        self.btn_combo_target.pack(side="left", padx=2)
-        tk.Button(cr2, text="清除", bg="#334155", fg="#fff", command=self.clear_combo_target).pack(side="left", padx=2)
-        tk.Button(cr2, text="新增", bg="#334155", fg="#fff", command=self.save_new_combo).pack(side="left", padx=2)
-        tk.Button(cr2, text="更新", bg="#334155", fg="#fff", command=self.update_selected_combo).pack(side="left", padx=2)
+        cr_top = tk.Frame(f_combo, bg="#1c1f26")
+        cr_top.pack(fill="x", pady=(0, 4))
+        tk.Button(cr_top, text="＋ 新建組合", bg="#0284c7", fg="#fff", activebackground="#0369a1", command=self.add_new_combo).pack(side="left", padx=2)
+        tk.Button(cr_top, text="複製組合", bg="#334155", fg="#fff", command=self.duplicate_combo).pack(side="left", padx=2)
+        tk.Button(cr_top, text="重新命名", bg="#334155", fg="#fff", command=self.rename_combo).pack(side="left", padx=2)
+        tk.Button(cr_top, text="刪除組合", bg="#b91c1c", fg="#fff", command=self.delete_combo).pack(side="right", padx=2)
 
         f_list_c = tk.Frame(f_combo, bg="#15171c")
         f_list_c.pack(fill="both", expand=True, pady=4)
-        self.combo_listbox = tk.Listbox(f_list_c, bg="#15171c", fg="#f1f5f9", selectbackground="#0284c7", selectforeground="#fff", bd=0, highlightthickness=0, font=("Segoe UI", 10), exportselection=False)
+        self.combo_listbox = tk.Listbox(
+            f_list_c, bg="#15171c", fg="#f1f5f9", selectbackground="#0284c7", selectforeground="#fff",
+            bd=0, highlightthickness=0, font=("Segoe UI", 10), exportselection=False
+        )
         self.combo_listbox.pack(side="left", fill="both", expand=True)
         self.combo_listbox.bind("<<ListboxSelect>>", self.on_combo_select)
         sc1 = tk.Scrollbar(f_list_c, orient="vertical", command=self.combo_listbox.yview)
         sc1.pack(side="right", fill="y")
         self.combo_listbox.config(yscrollcommand=sc1.set)
 
-        cr3 = tk.Frame(f_combo, bg="#1c1f26")
-        cr3.pack(fill="x", pady=(2, 0))
-        tk.Button(cr3, text="將所選組合加入執行清單", bg="#0284c7", fg="#fff", activebackground="#0369a1", command=self.add_combo_to_steps).pack(side="left", fill="x", expand=True, padx=(0, 4))
-        tk.Button(cr3, text="刪除組合", width=10, bg="#b91c1c", fg="#fff", activebackground="#991b1b", command=self.delete_selected_combo).pack(side="right")
-
+    # ======================= [右欄：組合動作 (ACTIONS) + 控制] =======================
     def build_right_panel(self):
         f_right = tk.Frame(self, bg="#1c1f26", padx=8, pady=8, highlightbackground="#2d333b", highlightthickness=1)
         f_right.grid(row=0, column=1, padx=(5, 10), pady=10, sticky="nsew")
 
-        # 1. 微步
-        f_step = tk.LabelFrame(f_right, text=" 單獨新增微步 (點擊 / 按鍵 / 停頓) ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
-        f_step.pack(fill="x", pady=(0, 6))
+        self.f_action = tk.LabelFrame(f_right, text=" 當前組合動作 (Combination Actions) ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
+        self.f_action.pack(fill="both", expand=True)
 
-        self.btn_step_click = tk.Button(f_step, text="記錄點擊坐標 (3秒)", bg="#334155", fg="#fff", command=self.add_click_step)
-        self.btn_step_click.pack(fill="x", pady=2)
+        self.lbl_cur_combo_title = tk.Label(self.f_action, text="當前組合: 未選取", font=("Segoe UI", 11, "bold"), bg="#1c1f26", fg="#7dd3fc", anchor="w")
+        self.lbl_cur_combo_title.pack(fill="x", pady=(0, 4))
 
-        sr = tk.Frame(f_step, bg="#1c1f26")
-        sr.pack(fill="x", pady=2)
-        tk.Label(sr, text="按鍵:", bg="#1c1f26", fg="#cbd5e1").pack(side="left")
-        tk.Entry(sr, textvariable=self.var_step_key, width=6, bg="#2d333b", fg="#fff").pack(side="left", padx=3)
-        tk.Button(sr, text="加按鍵", bg="#334155", fg="#fff", command=self.add_key_step).pack(side="left", padx=2)
+        # 動作新增工具列
+        f_add_tools = tk.Frame(self.f_action, bg="#1c1f26", pady=2)
+        f_add_tools.pack(fill="x")
 
-        tk.Label(sr, text="停頓:", bg="#1c1f26", fg="#cbd5e1").pack(side="left", padx=(10, 0))
-        tk.Entry(sr, textvariable=self.var_step_wait, width=5, bg="#2d333b", fg="#fff").pack(side="left", padx=3)
-        tk.Button(sr, text="加停頓", bg="#334155", fg="#fff", command=self.add_wait_step).pack(side="left", padx=2)
+        # 動作列：記錄點擊 + 調用其他組合
+        ar0 = tk.Frame(f_add_tools, bg="#1c1f26")
+        ar0.pack(fill="x", pady=(0, 4))
+        self.btn_action_click = tk.Button(ar0, text="記錄點擊坐標 (3秒)", bg="#334155", fg="#fff", command=self.add_click_action)
+        self.btn_action_click.pack(side="left", fill="x", expand=True, padx=(0, 2))
+        self.btn_action_subcombo = tk.Button(ar0, text="＋ 調用其他組合", bg="#0284c7", fg="#fff", activebackground="#0369a1", command=self.add_subcombo_action)
+        self.btn_action_subcombo.pack(side="right", fill="x", expand=True, padx=(2, 0))
 
-        # 2. 執行順序清單
-        f_seq = tk.LabelFrame(f_right, text=" 執行順序清單 (由上至下循環) ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
-        f_seq.pack(fill="both", expand=True)
+        # 動作列：按鍵 + 停頓
+        ar = tk.Frame(f_add_tools, bg="#1c1f26")
+        ar.pack(fill="x")
+        tk.Label(ar, text="按鍵:", bg="#1c1f26", fg="#cbd5e1").pack(side="left")
+        tk.Entry(ar, textvariable=self.var_action_key, width=6, bg="#2d333b", fg="#fff").pack(side="left", padx=3)
+        tk.Button(ar, text="加按鍵", bg="#334155", fg="#fff", command=self.add_key_action).pack(side="left", padx=2)
 
-        f_list_s = tk.Frame(f_seq, bg="#15171c")
-        f_list_s.pack(fill="both", expand=True, pady=4)
-        self.step_listbox = tk.Listbox(f_list_s, bg="#15171c", fg="#f1f5f9", selectbackground="#0284c7", selectforeground="#fff", bd=0, highlightthickness=0, font=("Segoe UI", 10), exportselection=False)
-        self.step_listbox.pack(side="left", fill="both", expand=True)
-        sc2 = tk.Scrollbar(f_list_s, orient="vertical", command=self.step_listbox.yview)
+        tk.Label(ar, text="停頓:", bg="#1c1f26", fg="#cbd5e1").pack(side="left", padx=(12, 0))
+        tk.Entry(ar, textvariable=self.var_action_wait, width=5, bg="#2d333b", fg="#fff").pack(side="left", padx=3)
+        tk.Button(ar, text="加停頓", bg="#334155", fg="#fff", command=self.add_wait_action).pack(side="left", padx=2)
+
+        # 動作清單 (ACTION LISTBOX)
+        f_list_a = tk.Frame(self.f_action, bg="#15171c")
+        f_list_a.pack(fill="both", expand=True, pady=6)
+        self.action_listbox = tk.Listbox(
+            f_list_a, bg="#15171c", fg="#f1f5f9", selectbackground="#0284c7", selectforeground="#fff",
+            bd=0, highlightthickness=0, font=("Segoe UI", 10), exportselection=False
+        )
+        self.action_listbox.pack(side="left", fill="both", expand=True)
+        sc2 = tk.Scrollbar(f_list_a, orient="vertical", command=self.action_listbox.yview)
         sc2.pack(side="right", fill="y")
-        self.step_listbox.config(yscrollcommand=sc2.set)
+        self.action_listbox.config(yscrollcommand=sc2.set)
 
-        # 控制按鈕列：加入「複製所選」
-        sr2 = tk.Frame(f_seq, bg="#1c1f26")
-        sr2.pack(fill="x", pady=(2, 0))
-        tk.Button(sr2, text="上移", width=6, bg="#334155", fg="#fff", command=lambda: self.move_step(-1)).pack(side="left", padx=2)
-        tk.Button(sr2, text="下移", width=6, bg="#334155", fg="#fff", command=lambda: self.move_step(1)).pack(side="left", padx=2)
-        tk.Button(sr2, text="複製所選", width=8, bg="#0284c7", fg="#fff", activebackground="#0369a1", command=self.duplicate_selected).pack(side="left", padx=2)
-        tk.Button(sr2, text="刪除所選", width=8, bg="#b91c1c", fg="#fff", command=self.delete_selected).pack(side="left", padx=2)
-        tk.Button(sr2, text="清空清單", width=8, bg="#b91c1c", fg="#fff", command=self.clear_all).pack(side="left", padx=2)
+        # 動作操作工具列
+        ar2 = tk.Frame(self.f_action, bg="#1c1f26")
+        ar2.pack(fill="x", pady=(2, 0))
+        tk.Button(ar2, text="上移", width=7, bg="#334155", fg="#fff", command=lambda: self.move_action(-1)).pack(side="left", padx=2)
+        tk.Button(ar2, text="下移", width=7, bg="#334155", fg="#fff", command=lambda: self.move_action(1)).pack(side="left", padx=2)
+        tk.Button(ar2, text="複製所選", width=8, bg="#0284c7", fg="#fff", activebackground="#0369a1", command=self.duplicate_action).pack(side="left", padx=2)
+        tk.Button(ar2, text="刪除所選", width=8, bg="#b91c1c", fg="#fff", command=self.delete_action).pack(side="left", padx=2)
+        tk.Button(ar2, text="清空動作", width=8, bg="#b91c1c", fg="#fff", command=self.clear_actions).pack(side="left", padx=2)
 
-        # 3. 狀態與主執行開關
+        # 底部狀態與主執行開關
         bot = tk.Frame(f_right, bg="#1c1f26")
         bot.pack(fill="x", pady=(6, 0))
         self.lbl_status = tk.Label(bot, text="狀態: 已就緒", anchor="w", bg="#1c1f26", fg="#f1f5f9", font=("Segoe UI", 9))
         self.lbl_status.pack(fill="x", pady=(0, 4))
-        self.btn_toggle = tk.Button(bot, text="開始循環執行", height=2, bg="#16a34a", fg="#ffffff", font=("Segoe UI", 11, "bold"), activebackground="#15803d", command=self.toggle_run)
+        self.btn_toggle = tk.Button(bot, text="開始循環執行 (當前組合)", height=2, bg="#16a34a", fg="#ffffff", font=("Segoe UI", 11, "bold"), activebackground="#15803d", command=self.toggle_run)
         self.btn_toggle.pack(fill="x")
 
-    # ======================= 設定檔管理 =======================
-    def get_profile_files(self):
-        try:
-            files = [f[:-len(CONFIG_EXT)] for f in os.listdir(".") if f.endswith(CONFIG_EXT)]
-            return sorted(files)
-        except Exception:
-            return []
+    # ======================= 組合管理邏輯 (左欄) =======================
+    def update_combo_listbox(self, select_idx=None):
+        self.combo_listbox.delete(0, tk.END)
+        for i, c in enumerate(combos):
+            cnt = len(c.get("actions", []))
+            self.combo_listbox.insert(tk.END, f"#{i+1:02d}  {c['name']}  ({cnt} 個動作)")
 
-    def refresh_profiles(self, select_name=None):
-        profiles = self.get_profile_files()
-        if not profiles:
-            profiles = ["default"]
-            if not os.path.exists(f"default{CONFIG_EXT}"):
-                try:
-                    with open(f"default{CONFIG_EXT}", "w", encoding="utf-8") as f:
-                        json.dump({"combos": [], "steps": []}, f)
-                except Exception: pass
+        if select_idx is not None and 0 <= select_idx < len(combos):
+            self.combo_listbox.selection_set(select_idx)
+            self.on_combo_select()
+        elif len(combos) > 0 and not self.combo_listbox.curselection():
+            self.combo_listbox.selection_set(0)
+            self.on_combo_select()
+        elif len(combos) == 0:
+            self.lbl_cur_combo_title.config(text="當前組合: 未選取")
+            self.action_listbox.delete(0, tk.END)
 
-        self.cbo_profile["values"] = profiles
-        if select_name and select_name in profiles:
-            self.cbo_profile.set(select_name)
-        elif self.var_profile_name.get() in profiles:
-            self.cbo_profile.set(self.var_profile_name.get())
-        else:
-            self.cbo_profile.current(0)
+    def on_combo_select(self, event=None):
+        global cur_combo_idx
+        sel = self.combo_listbox.curselection()
+        if not sel: return
+        cur_combo_idx = sel[0]
+        c = combos[cur_combo_idx]
+        self.lbl_cur_combo_title.config(text=f"當前組合: [ {c['name']} ]")
+        self.update_action_listbox()
 
-    def create_new_profile(self):
-        name = simpledialog.askstring("新建設定檔", "請輸入新設定檔名稱 (毋須輸入副檔名):", parent=self)
-        if not name: return
-        name = name.strip()
-        if not name: return
+    def add_new_combo(self):
+        name = simpledialog.askstring("新建組合", "請輸入新組合名稱:", parent=self)
+        if not name or not name.strip(): return
+        new_c = {"name": name.strip(), "actions": []}
+        combos.append(new_c)
+        self.update_combo_listbox(select_idx=len(combos)-1)
+        self.set_status(f"已新增組合：[{name.strip()}]")
 
-        fn = f"{name}{CONFIG_EXT}"
-        if os.path.exists(fn):
-            confirmed = messagebox.askyesno("檔案覆蓋確認", f"設定檔「{name}」已存在！\n請問是否確認覆蓋原有設定？", parent=self)
-            if not confirmed: return
+    def duplicate_combo(self):
+        sel = self.combo_listbox.curselection()
+        if not sel: return self.set_status("請先選擇要複製的組合！")
+        src = combos[sel[0]]
+        new_c = copy.deepcopy(src)
+        new_c["name"] = f"{src['name']} (副本)"
+        combos.insert(sel[0] + 1, new_c)
+        self.update_combo_listbox(select_idx=sel[0] + 1)
+        self.set_status(f"已複製組合：[{new_c['name']}]")
 
-        try:
-            with open(fn, "w", encoding="utf-8") as f:
-                json.dump({"combos": combos, "steps": steps}, f, ensure_ascii=False, indent=2)
-            self.refresh_profiles(select_name=name)
-            self.set_status(f"已新建並儲存至 {fn}")
-        except Exception as e:
-            self.set_status(f"新建失敗: {e}")
+    def rename_combo(self):
+        sel = self.combo_listbox.curselection()
+        if not sel: return self.set_status("請先選擇要重新命名的組合！")
+        old_name = combos[sel[0]]["name"]
+        new_name = simpledialog.askstring("重新命名組合", "請輸入新的組合名稱:", initialvalue=old_name, parent=self)
+        if not new_name or not new_name.strip(): return
+        new_name = new_name.strip()
+        # 同步更新其他組合內部有引用此名稱的 combo_call
+        for c in combos:
+            for act in c.get("actions", []):
+                if act.get("type") == "combo_call" and act.get("target_name") == old_name:
+                    act["target_name"] = new_name
+        combos[sel[0]]["name"] = new_name
+        self.update_combo_listbox(select_idx=sel[0])
+        self.set_status(f"組合已更名為：[{new_name}]")
 
-    def save_config(self):
-        name = self.var_profile_name.get().strip()
-        if not name:
-            self.set_status("請先選擇或新建設定檔")
+    def delete_combo(self):
+        sel = self.combo_listbox.curselection()
+        if not sel: return self.set_status("請先選擇要刪除的組合！")
+        name = combos[sel[0]]["name"]
+        if messagebox.askyesno("刪除確認", f"確定要刪除組合「{name}」及其所有動作？", parent=self):
+            del combos[sel[0]]
+            new_sel = min(sel[0], len(combos) - 1) if combos else None
+            self.update_combo_listbox(select_idx=new_sel)
+            self.set_status(f"已刪除組合：[{name}]")
+
+    # ======================= 組合動作編輯邏輯 (右欄) =======================
+    def get_cur_actions(self):
+        if 0 <= cur_combo_idx < len(combos):
+            if "actions" not in combos[cur_combo_idx]:
+                combos[cur_combo_idx]["actions"] = []
+            return combos[cur_combo_idx]["actions"]
+        return None
+
+    def build_action_display_list(self):
+        actions = self.get_cur_actions()
+        if actions is None: return []
+        items = []
+        for i, s in enumerate(actions):
+            if s["type"] == "click":
+                prefix = "相對:" if s.get("rel", False) else "絕對:"
+                items.append(f"#{i+1:02d}  [點擊] -> {prefix}({s['x']}, {s['y']})")
+            elif s["type"] == "key":
+                items.append(f"#{i+1:02d}  [按鍵] -> [ {s['key'].upper()} ]")
+            elif s["type"] == "wait":
+                items.append(f"#{i+1:02d}  [停頓] -> {s['sec']} 秒")
+            elif s["type"] == "combo_call":
+                items.append(f"#{i+1:02d}  [子組合] -> [ {s['target_name']} ]")
+        return items
+
+    def update_action_listbox(self, select_idx=None):
+        self.action_listbox.delete(0, tk.END)
+        for it in self.build_action_display_list():
+            self.action_listbox.insert(tk.END, it)
+
+        if 0 <= cur_combo_idx < len(combos):
+            cnt = len(self.get_cur_actions())
+            self.combo_listbox.delete(cur_combo_idx)
+            self.combo_listbox.insert(cur_combo_idx, f"#{cur_combo_idx+1:02d}  {combos[cur_combo_idx]['name']}  ({cnt} 個動作)")
+            self.combo_listbox.selection_set(cur_combo_idx)
+
+        if select_idx is not None:
+            actions = self.get_cur_actions()
+            if actions and 0 <= select_idx < len(actions):
+                self.action_listbox.selection_set(select_idx)
+
+    def get_action_insert_index(self):
+        sel = self.action_listbox.curselection()
+        actions = self.get_cur_actions()
+        return sel[0] + 1 if sel else (len(actions) if actions is not None else 0)
+
+    def add_click_action(self):
+        actions = self.get_cur_actions()
+        if actions is None: return self.set_status("請先在左邊選擇或新建組合！")
+        ins = self.get_action_insert_index()
+
+        def cb(x, y, rel):
+            actions.insert(ins, {"type": "click", "x": x, "y": y, "rel": rel})
+            self.update_action_listbox(ins)
+            self.set_status(f"已插入{'相對' if rel else '絕對'}點擊到 #{ins+1}：({x}, {y})")
+
+        self.capture_pos_countdown(self.btn_action_click, cb)
+
+    def add_key_action(self):
+        actions = self.get_cur_actions()
+        if actions is None: return self.set_status("請先在左邊選擇或新建組合！")
+        key = self.var_action_key.get().strip().lower()
+        if not key: return
+        ins = self.get_action_insert_index()
+        actions.insert(ins, {"type": "key", "key": key})
+        self.update_action_listbox(ins)
+        self.set_status(f"已插入按鍵到 #{ins+1}：[{key.upper()}]")
+
+    def add_wait_action(self):
+        actions = self.get_cur_actions()
+        if actions is None: return self.set_status("請先在左邊選擇或新建組合！")
+        try: sec = float(self.var_action_wait.get())
+        except ValueError: return self.set_status("停頓時間格式錯誤！")
+        if sec <= 0: return
+        ins = self.get_action_insert_index()
+        actions.insert(ins, {"type": "wait", "sec": sec})
+        self.update_action_listbox(ins)
+        self.set_status(f"已插入等待到 #{ins+1}：{sec} 秒")
+
+    # 核心：調用其他組合為動作步驟
+    def add_subcombo_action(self):
+        actions = self.get_cur_actions()
+        if actions is None: return self.set_status("請先在左邊選擇或新建組合！")
+        cur_name = combos[cur_combo_idx]["name"]
+
+        # 排除自己，列出其餘可調用組合
+        avail_combos = [c["name"] for i, c in enumerate(combos) if i != cur_combo_idx]
+        if not avail_combos:
+            messagebox.showinfo("提示", "目前沒有其他組合可供調用！\n請先在左邊「＋新建組合」建立其他組合。", parent=self)
             return
-        fn = f"{name}{CONFIG_EXT}"
 
-        if os.path.exists(fn):
-            confirmed = messagebox.askyesno("檔案覆蓋確認", f"請問是否確認覆蓋「{name}」的原有設定？", parent=self)
-            if not confirmed:
-                self.set_status("已取消儲存")
-                return
+        # 彈出小視窗選擇欲調用的組合
+        dlg = tk.Toplevel(self)
+        dlg.title("選擇要調用的子組合")
+        dlg.geometry("320x130")
+        dlg.resizable(False, False)
+        dlg.configure(bg="#1c1f26")
+        dlg.transient(self)
+        dlg.grab_set()
 
-        try:
-            with open(fn, "w", encoding="utf-8") as f:
-                json.dump({"combos": combos, "steps": steps}, f, ensure_ascii=False, indent=2)
-            self.set_status(f"已成功儲存至 {fn}")
-            self.refresh_profiles(select_name=name)
-        except Exception as e:
-            self.set_status(f"儲存失敗: {e}")
+        tk.Label(dlg, text="請選擇要嵌入的子組合:", bg="#1c1f26", fg="#f1f5f9", font=("Segoe UI", 10)).pack(pady=(15, 6))
+        var_choice = tk.StringVar(value=avail_combos[0])
+        cbo = ttk.Combobox(dlg, textvariable=var_choice, values=avail_combos, state="readonly", width=25)
+        cbo.pack(pady=4)
 
-    def load_config(self):
-        name = self.var_profile_name.get().strip()
-        if not name: return
-        fn = f"{name}{CONFIG_EXT}"
-        if not os.path.exists(fn):
-            self.set_status(f"找不到檔案：{fn}")
-            return
-        try:
-            with open(fn, "r", encoding="utf-8") as f: data = json.load(f)
-            combos.clear(); combos.extend(data.get("combos", []) if isinstance(data, dict) else [])
-            steps.clear(); steps.extend(data.get("steps", []) if isinstance(data, dict) else (data if isinstance(data, list) else []))
-            self.update_combo_list()
-            self.update_step_list()
-            self.set_status(f"成功載入設定檔：{name}")
-        except Exception as e:
-            self.set_status(f"載入失敗: {e}")
+        def on_confirm():
+            chosen = var_choice.get()
+            dlg.destroy()
+            ins = self.get_action_insert_index()
+            actions.insert(ins, {"type": "combo_call", "target_name": chosen})
+            self.update_action_listbox(ins)
+            self.set_status(f"已插入子組合調用 #{ins+1}：[{chosen}]")
 
-    # ======================= 邏輯控制 =======================
+        btn_f = tk.Frame(dlg, bg="#1c1f26")
+        btn_f.pack(pady=10)
+        tk.Button(btn_f, text="確定加入", bg="#0284c7", fg="#fff", width=10, command=on_confirm).pack(side="left", padx=4)
+        tk.Button(btn_f, text="取消", bg="#334155", fg="#fff", width=8, command=dlg.destroy).pack(side="left", padx=4)
+
+    def move_action(self, delta):
+        actions = self.get_cur_actions()
+        if not actions: return
+        sel = self.action_listbox.curselection()
+        if sel and 0 <= sel[0] + delta < len(actions):
+            idx = sel[0]
+            actions[idx], actions[idx + delta] = actions[idx + delta], actions[idx]
+            self.update_action_listbox(idx + delta)
+
+    def duplicate_action(self):
+        actions = self.get_cur_actions()
+        if not actions: return
+        sel = self.action_listbox.curselection()
+        if not sel: return self.set_status("請先選擇要複製的動作！")
+        idx = sel[0]
+        ins = idx + 1
+        actions.insert(ins, copy.deepcopy(actions[idx]))
+        self.update_action_listbox(ins)
+        self.set_status(f"已複製動作 #{idx+1} 到 #{ins+1}")
+
+    def delete_action(self):
+        actions = self.get_cur_actions()
+        if not actions: return
+        sel = self.action_listbox.curselection()
+        if sel:
+            idx = sel[0]
+            del actions[idx]
+            self.update_action_listbox(min(idx, len(actions) - 1) if actions else None)
+
+    def clear_actions(self):
+        actions = self.get_cur_actions()
+        if not actions: return self.set_status("動作清單本來就是空的")
+        if messagebox.askyesno("清空確認", "確定要清空當前組合的所有動作？", parent=self):
+            actions.clear()
+            self.update_action_listbox()
+            self.set_status("已清空當前組合的所有動作")
+
+    # ======================= 系統與設定檔管理 =======================
+    def capture_pos_countdown(self, btn, on_finish):
+        def worker():
+            btn.config(state="disabled")
+            for i in range(3, 0, -1):
+                self.set_status(f"請移至目標點... 倒數 {i} 秒")
+                time.sleep(1)
+            pos = pyautogui.position()
+            use_rel = self.var_use_rel.get()
+            if use_rel and IS_WINDOWS and target_hwnd:
+                pt = POINT(int(pos.x), int(pos.y))
+                user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
+                x, y, rel = pt.x, pt.y, True
+            else:
+                x, y, rel = pos.x, pos.y, False
+            on_finish(x, y, rel)
+            btn.config(state="normal")
+        threading.Thread(target=worker, daemon=True).start()
+
     def get_window_list(self):
         if not IS_WINDOWS: return []
         windows = []
@@ -410,206 +567,94 @@ class App(tk.Tk):
             except Exception:
                 target_hwnd = None
 
-    def capture_pos_countdown(self, btn, on_finish):
-        def worker():
-            btn.config(state="disabled")
-            for i in range(3, 0, -1):
-                self.set_status(f"請移至目標點... 倒數 {i} 秒")
-                time.sleep(1)
-            pos = pyautogui.position()
-            use_rel = self.var_use_rel.get()
-            if use_rel and IS_WINDOWS and target_hwnd:
-                pt = POINT(int(pos.x), int(pos.y))
-                user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
-                x, y, rel = pt.x, pt.y, True
-            else:
-                x, y, rel = pos.x, pos.y, False
-            on_finish(x, y, rel)
-            btn.config(state="normal")
-        threading.Thread(target=worker, daemon=True).start()
+    def get_profile_files(self):
+        try:
+            return sorted([f[:-len(CONFIG_EXT)] for f in os.listdir(".") if f.endswith(CONFIG_EXT)])
+        except Exception:
+            return []
 
-    def record_combo_target(self):
-        def cb(x, y, rel):
-            global temp_combo_target
-            temp_combo_target = {"x": x, "y": y, "rel": rel}
-            prefix = "相對" if rel else "絕對"
-            self.lbl_combo_target.config(text=f"{prefix}:({x}, {y})")
-            self.set_status(f"已鎖定組合{prefix}目標：({x}, {y})")
-        self.capture_pos_countdown(self.btn_combo_target, cb)
+    def refresh_profiles(self, select_name=None):
+        profiles = self.get_profile_files()
+        if not profiles:
+            profiles = ["default"]
+            if not os.path.exists(f"default{CONFIG_EXT}"):
+                try:
+                    with open(f"default{CONFIG_EXT}", "w", encoding="utf-8") as f:
+                        json.dump({"combos": [{"name": "預設連招", "actions": []}]}, f)
+                except Exception: pass
 
-    def clear_combo_target(self):
-        global temp_combo_target
-        temp_combo_target = None
-        self.lbl_combo_target.config(text="無 (原地)")
-        self.set_status("已清除目標坐標")
-
-    def update_combo_list(self, select_idx=None):
-        self.combo_listbox.delete(0, tk.END)
-        for c in combos:
-            t = c.get("target")
-            t_tag = f" [{'相對' if t.get('rel') else '絕對'}目標]" if t else ""
-            self.combo_listbox.insert(tk.END, f"{c['name']} ({','.join(c.get('keys', [])).upper()} / {c['wait']}s){t_tag}")
-        if select_idx is not None and 0 <= select_idx < len(combos):
-            self.combo_listbox.selection_set(select_idx)
-
-    def on_combo_select(self, event=None):
-        sel = self.combo_listbox.curselection()
-        if not sel: return
-        c = combos[sel[0]]
-        self.var_combo_name.set(c["name"])
-        self.var_combo_keys.set(",".join(c["keys"]))
-        self.var_combo_wait.set(str(c["wait"]))
-        global temp_combo_target
-        temp_combo_target = c.get("target")
-        prefix = ("相對:" if temp_combo_target.get("rel") else "絕對:") if temp_combo_target else ""
-        self.lbl_combo_target.config(text=f"{prefix}({temp_combo_target['x']}, {temp_combo_target['y']})" if temp_combo_target else "無 (原地)")
-
-    def save_new_combo(self):
-        name = self.var_combo_name.get().strip()
-        keys = [k.strip().lower() for k in self.var_combo_keys.get().replace("，", ",").split(",") if k.strip()]
-        try: wait_sec = max(0.0, float(self.var_combo_wait.get()))
-        except ValueError: return self.set_status("CD等待時間格式錯誤！")
-        if not name or not keys: return self.set_status("請輸入組合名稱與按鍵！")
-
-        combos.append({"name": name, "keys": keys, "wait": wait_sec, "target": dict(temp_combo_target) if temp_combo_target else None})
-        self.update_combo_list(len(combos)-1)
-        self.set_status(f"已建立新組合：[{name}]")
-
-    def update_selected_combo(self):
-        sel = self.combo_listbox.curselection()
-        if not sel: return self.set_status("請先在清單點選要修改的組合！")
-        idx = sel[0]
-        old_name = combos[idx]["name"]
-        name = self.var_combo_name.get().strip()
-        keys = [k.strip().lower() for k in self.var_combo_keys.get().replace("，", ",").split(",") if k.strip()]
-        try: wait_sec = max(0.0, float(self.var_combo_wait.get()))
-        except ValueError: return
-
-        new_target = dict(temp_combo_target) if temp_combo_target else None
-        combos[idx] = {"name": name, "keys": keys, "wait": wait_sec, "target": new_target}
-        self.update_combo_list(idx)
-
-        sync_count = 0
-        for s in steps:
-            if s.get("type") == "combo" and s.get("name") == old_name:
-                s.update({"name": name, "keys": list(keys), "wait": wait_sec, "target": dict(new_target) if new_target else None})
-                sync_count += 1
-        if sync_count > 0: self.update_step_list()
-        self.set_status(f"已更新組合 [{name}]，並同步刷新清單內 {sync_count} 個步驟！")
-
-    def delete_selected_combo(self):
-        sel = self.combo_listbox.curselection()
-        if sel:
-            del combos[sel[0]]
-            self.update_combo_list()
-            self.set_status("已刪除該組合 (執行清單保留原有步驟)")
-
-    def get_insert_index(self):
-        sel = self.step_listbox.curselection()
-        return sel[0] + 1 if sel else len(steps)
-
-    def build_display_list(self):
-        items = []
-        for i, s in enumerate(steps):
-            t = s.get("target")
-            t_str = f"[{'相對:' if t.get('rel') else '絕對:'}({t['x']},{t['y']})] " if t else ""
-            if s["type"] == "click": items.append(f"#{i+1:02d}  [點擊] -> {'相對:' if s.get('rel') else '絕對:'}({s['x']}, {s['y']})")
-            elif s["type"] == "key": items.append(f"#{i+1:02d}  [按鍵] -> [ {s['key'].upper()} ]")
-            elif s["type"] == "wait": items.append(f"#{i+1:02d}  [停頓] -> {s['sec']} 秒")
-            elif s["type"] == "combo": items.append(f"#{i+1:02d}  [{s['name']}] {t_str}[{','.join(s.get('keys', [])).upper()}] [CD:{s['wait']}s]")
-        return items
-
-    def update_step_list(self, select_idx=None):
-        self.step_listbox.delete(0, tk.END)
-        for it in self.build_display_list():
-            self.step_listbox.insert(tk.END, it)
-        if select_idx is not None and 0 <= select_idx < len(steps):
-            self.step_listbox.selection_set(select_idx)
-
-    def add_combo_to_steps(self):
-        sel = self.combo_listbox.curselection()
-        c = combos[sel[0]] if sel else None
-        if not c:
-            name = self.var_combo_name.get().strip()
-            keys = [k.strip().lower() for k in self.var_combo_keys.get().replace("，", ",").split(",") if k.strip()]
-            if name and keys: c = {"name": name, "keys": keys, "wait": float(self.var_combo_wait.get() or 1.0), "target": temp_combo_target}
-        if not c: return self.set_status("請先選擇或填寫組合內容！")
-
-        ins = self.get_insert_index()
-        steps.insert(ins, {"type": "combo", "name": c["name"], "keys": list(c["keys"]), "wait": c["wait"], "target": dict(c["target"]) if c.get("target") else None})
-        self.update_step_list(ins)
-        self.set_status(f"已加入清單 #{ins+1}: [{c['name']}]")
-
-    def add_click_step(self):
-        ins = self.get_insert_index()
-        def cb(x, y, rel):
-            steps.insert(ins, {"type": "click", "x": x, "y": y, "rel": rel})
-            self.update_step_list(ins)
-            self.set_status(f"已插入{'相對' if rel else '絕對'}點擊到 #{ins+1}：({x}, {y})")
-        self.capture_pos_countdown(self.btn_step_click, cb)
-
-    def add_key_step(self):
-        key = self.var_step_key.get().strip().lower()
-        if not key: return
-        ins = self.get_insert_index()
-        steps.insert(ins, {"type": "key", "key": key})
-        self.update_step_list(ins)
-        self.set_status(f"已插入按鍵到 #{ins+1}：[{key.upper()}]")
-
-    def add_wait_step(self):
-        try: sec = float(self.var_step_wait.get())
-        except ValueError: return
-        if sec <= 0: return
-        ins = self.get_insert_index()
-        steps.insert(ins, {"type": "wait", "sec": sec})
-        self.update_step_list(ins)
-        self.set_status(f"已插入等待到 #{ins+1}：{sec} 秒")
-
-    def move_step(self, delta):
-        sel = self.step_listbox.curselection()
-        if sel and 0 <= sel[0] + delta < len(steps):
-            idx = sel[0]
-            steps[idx], steps[idx + delta] = steps[idx + delta], steps[idx]
-            self.update_step_list(idx + delta)
-
-    # 核心新增：複製所選步驟 (Duplicate)
-    def duplicate_selected(self):
-        sel = self.step_listbox.curselection()
-        if not sel:
-            self.set_status("請先在清單點選要複製的步驟！")
-            return
-        idx = sel[0]
-        # 深層複製選中的步驟物件，避免共享參照
-        new_step = copy.deepcopy(steps[idx])
-        ins = idx + 1
-        steps.insert(ins, new_step)
-        self.update_step_list(ins)
-        self.set_status(f"已複製步驟 #{idx+1} 到 #{ins+1}")
-
-    def delete_selected(self):
-        sel = self.step_listbox.curselection()
-        if sel:
-            idx = sel[0]
-            del steps[idx]
-            self.update_step_list(min(idx, len(steps) - 1) if steps else None)
-
-    def clear_all(self):
-        if not steps:
-            self.set_status("執行清單本來就是空的")
-            return
-
-        confirmed = messagebox.askyesno(
-            "清空清單確認",
-            "請問是否確認要清空整個執行順序清單？\n清空後未儲存的步驟將無法還原！",
-            parent=self
-        )
-        if confirmed:
-            steps.clear()
-            self.update_step_list()
-            self.set_status("已清空執行清單")
+        self.cbo_profile["values"] = profiles
+        if select_name and select_name in profiles:
+            self.cbo_profile.set(select_name)
+        elif self.var_profile_name.get() in profiles:
+            self.cbo_profile.set(self.var_profile_name.get())
         else:
-            self.set_status("已取消清空清單")
+            self.cbo_profile.current(0)
+        self.load_config()
 
+    def create_new_profile(self):
+        name = simpledialog.askstring("新建設定檔", "請輸入新設定檔名稱 (毋須輸入副檔名):", parent=self)
+        if not name or not name.strip(): return
+        name = name.strip()
+        fn = f"{name}{CONFIG_EXT}"
+        if os.path.exists(fn) and not messagebox.askyesno("檔案覆蓋確認", f"「{name}」已存在，是否覆蓋？", parent=self):
+            return
+        try:
+            with open(fn, "w", encoding="utf-8") as f:
+                json.dump({"combos": [{"name": "新連招", "actions": []}]}, f, ensure_ascii=False, indent=2)
+            self.refresh_profiles(select_name=name)
+            self.set_status(f"已新建設定檔：{name}")
+        except Exception as e:
+            self.set_status(f"新建失敗: {e}")
+
+    def save_config(self):
+        name = self.var_profile_name.get().strip()
+        if not name: return self.set_status("請先選擇或新建設定檔")
+        fn = f"{name}{CONFIG_EXT}"
+        if os.path.exists(fn) and not messagebox.askyesno("檔案覆蓋確認", f"確定要覆蓋「{name}」的設定？", parent=self):
+            return self.set_status("已取消儲存")
+        try:
+            with open(fn, "w", encoding="utf-8") as f:
+                json.dump({"combos": combos}, f, ensure_ascii=False, indent=2)
+            self.set_status(f"已成功儲存至 {fn}")
+            self.refresh_profiles(select_name=name)
+        except Exception as e:
+            self.set_status(f"儲存失敗: {e}")
+
+    def load_config(self):
+        name = self.var_profile_name.get().strip()
+        if not name: return
+        fn = f"{name}{CONFIG_EXT}"
+        if not os.path.exists(fn): return self.set_status(f"找不到檔案：{fn}")
+        try:
+            with open(fn, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            combos.clear()
+            raw_combos = data.get("combos", []) if isinstance(data, dict) else []
+
+            for rc in raw_combos:
+                if "actions" in rc:
+                    combos.append(rc)
+                else:
+                    actions = []
+                    t = rc.get("target")
+                    if t:
+                        actions.append({"type": "click", "x": t["x"], "y": t["y"], "rel": t.get("rel", True)})
+                    for k in rc.get("keys", []):
+                        actions.append({"type": "key", "key": k})
+                    if rc.get("wait", 0) > 0:
+                        actions.append({"type": "wait", "sec": rc["wait"]})
+                    combos.append({"name": rc.get("name", "未命名"), "actions": actions})
+
+            if not combos:
+                combos.append({"name": "預設連招", "actions": []})
+
+            self.update_combo_listbox(select_idx=0)
+            self.set_status(f"成功載入設定檔：{name}")
+        except Exception as e:
+            self.set_status(f"載入失敗: {e}")
+
+    # ======================= 主執行循環 (支援子組合遞迴調用) =======================
     def toggle_run(self):
         global running
         if running:
@@ -619,55 +664,68 @@ class App(tk.Tk):
             self.set_running_ui(False)
             self.set_status("已手動停止")
         else:
-            if not steps: return self.set_status("執行清單是空的，請先加入步驟！")
+            actions = self.get_cur_actions()
+            if not actions:
+                return self.set_status("當前組合沒有任何動作，請先在右邊加入動作！")
             stop_event.clear()
             running = True
             self.set_running_ui(True)
-            self.set_status("循環運作中...")
+            self.set_status(f"循環運作中... (組合: {combos[cur_combo_idx]['name']})")
             threading.Thread(target=self.macro_worker_loop, daemon=True).start()
 
     def macro_worker_loop(self):
         global running
         round_idx = 1
+
+        # 動作遞迴執行函數 (防死循環呼叫)
+        def run_action_sequence(action_list, call_stack, is_top_level=True):
+            use_bg = self.var_use_bg.get() and IS_WINDOWS and (target_hwnd is not None)
+            try: off_x, off_y = int(self.var_offset_x.get() or 0), int(self.var_offset_y.get() or 0)
+            except Exception: off_x, off_y = 0, 0
+
+            for idx, step in enumerate(action_list):
+                if not running or stop_event.is_set(): return False
+                if is_top_level: self.highlight_action(idx)
+
+                stype = step["type"]
+                if stype == "click":
+                    msg = execute_click(step["x"], step["y"], step.get("rel", True), use_bg, off_x, off_y)
+                    self.set_status(f"第 {round_idx} 輪: {msg}")
+                    if not safe_sleep(0.12): return False
+
+                elif stype == "key":
+                    post_bg_key(target_hwnd, step["key"]) if use_bg else (pyautogui.keyDown(step["key"]), safe_sleep(0.06), pyautogui.keyUp(step["key"]))
+                    self.set_status(f"第 {round_idx} 輪: 按鍵 [{step['key'].upper()}]")
+                    if not safe_sleep(0.10): return False
+
+                elif stype == "wait":
+                    self.set_status(f"第 {round_idx} 輪: 等待 {step['sec']} 秒")
+                    if not safe_sleep(float(step["sec"])): return False
+
+                elif stype == "combo_call":
+                    target_name = step.get("target_name")
+                    if target_name in call_stack:
+                        self.set_status(f"警告: 偵測到循環調用 [{target_name}]，已跳過！")
+                        continue
+
+                    # 尋找目標組合
+                    target_combo = next((c for c in combos if c["name"] == target_name), None)
+                    if target_combo:
+                        self.set_status(f"第 {round_idx} 輪: 進入子組合 [{target_name}]")
+                        new_stack = call_stack | {target_name}
+                        if not run_action_sequence(target_combo.get("actions", []), new_stack, is_top_level=False):
+                            return False
+                    else:
+                        self.set_status(f"警告: 找不到子組合 [{target_name}]")
+            return True
+
         try:
             while running and not stop_event.is_set():
-                use_bg = self.var_use_bg.get() and IS_WINDOWS and (target_hwnd is not None)
-                try: off_x, off_y = int(self.var_offset_x.get() or 0), int(self.var_offset_y.get() or 0)
-                except Exception: off_x, off_y = 0, 0
-
-                for idx, step in enumerate(steps):
-                    if not running or stop_event.is_set(): break
-                    self.highlight_step(idx)
-
-                    stype = step["type"]
-                    if stype == "click":
-                        msg = execute_click(step["x"], step["y"], step.get("rel"), use_bg, off_x, off_y)
-                        self.set_status(f"第 {round_idx} 輪 ({idx+1}/{len(steps)}): {msg}")
-                        if not safe_sleep(0.12): break
-
-                    elif stype == "key":
-                        post_bg_key(target_hwnd, step["key"]) if use_bg else (pyautogui.keyDown(step["key"]), safe_sleep(0.06), pyautogui.keyUp(step["key"]))
-                        self.set_status(f"第 {round_idx} 輪 ({idx+1}/{len(steps)}): 按鍵 [{step['key'].upper()}]")
-                        if not safe_sleep(0.10): break
-
-                    elif stype == "wait":
-                        if not safe_sleep(float(step["sec"])): break
-
-                    elif stype == "combo":
-                        if step.get("target"):
-                            msg = execute_click(step["target"]["x"], step["target"]["y"], step["target"].get("rel"), use_bg, off_x, off_y)
-                            self.set_status(f"第 {round_idx} 輪: 組合[{step['name']}] {msg}")
-                            if not safe_sleep(0.12): break
-
-                        for k in step.get("keys", []):
-                            if not running or stop_event.is_set(): break
-                            post_bg_key(target_hwnd, k) if use_bg else (pyautogui.keyDown(k), safe_sleep(0.06), pyautogui.keyUp(k))
-                            if not safe_sleep(0.12): break
-
-                        if not running or stop_event.is_set(): break
-                        cd = float(step.get("wait", 0))
-                        if cd > 0 and not safe_sleep(cd): break
-
+                if 0 <= cur_combo_idx < len(combos):
+                    top_actions = list(combos[cur_combo_idx].get("actions", []))
+                    top_name = combos[cur_combo_idx]["name"]
+                    if not run_action_sequence(top_actions, call_stack={top_name}, is_top_level=True):
+                        break
                 round_idx += 1
                 if not safe_sleep(0.05): break
         except Exception as e:
