@@ -15,7 +15,7 @@ pyautogui.PAUSE = 0.0
 WINDOW_TITLE = "水滸歷險 巨集助手"
 CONFIG_EXT = ".shm"
 
-# combos: [{"name": "連技名稱", "actions": [{"type": "click"/"key"/"wait", ...}]}]
+# combos: [{"name": "連技名稱", "actions": [{"type": "click"/"key"/"wait"/"call_combo", ...}]}]
 combos = []
 # steps: [{"type": "click"/"key"/"wait"/"combo", ...}]
 steps = []
@@ -136,6 +136,7 @@ class App(tk.Tk):
         self.var_combo_name = tk.StringVar(value="新組合")
         self.var_combo_act_key = tk.StringVar(value="f1")
         self.var_combo_act_wait = tk.StringVar(value="0.5")
+        self.var_combo_to_call = tk.StringVar()
 
         # 主執行微步變數
         self.var_step_key = tk.StringVar(value="f1")
@@ -169,7 +170,7 @@ class App(tk.Tk):
                 self.step_listbox.see(idx)
         self.after(0, _hl)
 
-    # ======================= 左欄佈局 =======================
+    # ======================= 左欄佈局 (設定 + 組合雙分欄) =======================
     def build_left_panel(self):
         f_left = tk.Frame(self, bg="#1c1f26", padx=8, pady=8, highlightbackground="#2d333b", highlightthickness=1)
         f_left.grid(row=0, column=0, padx=(10, 5), pady=10, sticky="nsew")
@@ -214,7 +215,7 @@ class App(tk.Tk):
         f_combo_split.grid_columnconfigure(1, weight=6)
         f_combo_split.grid_rowconfigure(0, weight=1)
 
-        # 2-A. 組合清單 (左分欄)
+        # 2-A. 組合清單 (左分欄：增設「複製」組合功能)
         f_cl = tk.Frame(f_combo_split, bg="#1c1f26", padx=4, pady=2)
         f_cl.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
 
@@ -222,9 +223,10 @@ class App(tk.Tk):
 
         cr_name = tk.Frame(f_cl, bg="#1c1f26")
         cr_name.pack(fill="x", pady=2)
-        tk.Entry(cr_name, textvariable=self.var_combo_name, width=12, bg="#2d333b", fg="#fff").pack(side="left", fill="x", expand=True, padx=(0, 2))
+        tk.Entry(cr_name, textvariable=self.var_combo_name, width=10, bg="#2d333b", fg="#fff").pack(side="left", fill="x", expand=True, padx=(0, 2))
         tk.Button(cr_name, text="新增", width=4, bg="#0284c7", fg="#fff", command=self.add_new_combo).pack(side="left", padx=1)
         tk.Button(cr_name, text="改名", width=4, bg="#334155", fg="#fff", command=self.rename_selected_combo).pack(side="left", padx=1)
+        tk.Button(cr_name, text="複製", width=4, bg="#0284c7", fg="#fff", activebackground="#0369a1", command=self.duplicate_selected_combo).pack(side="left", padx=1)
 
         f_cl_box = tk.Frame(f_cl, bg="#15171c")
         f_cl_box.pack(fill="both", expand=True, pady=4)
@@ -240,15 +242,16 @@ class App(tk.Tk):
         tk.Button(cr_act, text="加入主執行清單 ->", bg="#0284c7", fg="#fff", activebackground="#0369a1", command=self.add_combo_to_main_steps).pack(side="left", fill="x", expand=True, padx=(0, 2))
         tk.Button(cr_act, text="刪除組合", width=8, bg="#b91c1c", fg="#fff", activebackground="#991b1b", command=self.delete_selected_combo).pack(side="right")
 
-        # 2-B. 組合動作 (右分欄)
+        # 2-B. 組合動作 (右分欄：支援加入點擊、按鍵、停頓與呼叫其他組合)
         f_cr = tk.Frame(f_combo_split, bg="#1c1f26", padx=4, pady=2, highlightbackground="#2d333b", highlightthickness=1)
         f_cr.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
 
         self.lbl_combo_editing = tk.Label(f_cr, text="【組合動作編輯: 未選取】", bg="#1c1f26", fg="#7dd3fc", font=("Segoe UI", 9, "bold"))
         self.lbl_combo_editing.pack(anchor="w")
 
+        # 基礎動作行
         f_cr_add = tk.Frame(f_cr, bg="#1c1f26")
-        f_cr_add.pack(fill="x", pady=2)
+        f_cr_add.pack(fill="x", pady=(2, 1))
 
         self.btn_combo_add_click = tk.Button(f_cr_add, text="點擊(3s)", width=7, bg="#334155", fg="#fff", command=self.combo_add_click_action)
         self.btn_combo_add_click.pack(side="left", padx=1)
@@ -259,14 +262,24 @@ class App(tk.Tk):
         tk.Entry(f_cr_add, textvariable=self.var_combo_act_wait, width=4, bg="#2d333b", fg="#fff").pack(side="left", padx=(3, 1))
         tk.Button(f_cr_add, text="+停頓", width=5, bg="#334155", fg="#fff", command=self.combo_add_wait_action).pack(side="left", padx=1)
 
+        # 呼叫其他組合行
+        f_cr_call = tk.Frame(f_cr, bg="#1c1f26")
+        f_cr_call.pack(fill="x", pady=(2, 2))
+        tk.Label(f_cr_call, text="呼叫組合:", bg="#1c1f26", fg="#cbd5e1", font=("Segoe UI", 9)).pack(side="left")
+        self.cbo_call_combo = ttk.Combobox(f_cr_call, textvariable=self.var_combo_to_call, width=12, state="readonly")
+        self.cbo_call_combo.pack(side="left", padx=3, fill="x", expand=True)
+        tk.Button(f_cr_call, text="+呼叫", width=6, bg="#0284c7", fg="#fff", activebackground="#0369a1", command=self.combo_add_call_action).pack(side="left", padx=1)
+
+        # 動作 Listbox
         f_cr_box = tk.Frame(f_cr, bg="#15171c")
-        f_cr_box.pack(fill="both", expand=True, pady=4)
+        f_cr_box.pack(fill="both", expand=True, pady=3)
         self.combo_act_listbox = tk.Listbox(f_cr_box, bg="#15171c", fg="#f1f5f9", selectbackground="#0284c7", selectforeground="#fff", bd=0, highlightthickness=0, font=("Segoe UI", 9), exportselection=False)
         self.combo_act_listbox.pack(side="left", fill="both", expand=True)
         sc_cr = tk.Scrollbar(f_cr_box, orient="vertical", command=self.combo_act_listbox.yview)
         sc_cr.pack(side="right", fill="y")
         self.combo_act_listbox.config(yscrollcommand=sc_cr.set)
 
+        # 動作操控按鈕列
         cr_act_ctrl = tk.Frame(f_cr, bg="#1c1f26")
         cr_act_ctrl.pack(fill="x", pady=(2, 0))
         tk.Button(cr_act_ctrl, text="上移", width=5, bg="#334155", fg="#fff", command=lambda: self.move_combo_action(-1)).pack(side="left", padx=1)
@@ -275,7 +288,7 @@ class App(tk.Tk):
         tk.Button(cr_act_ctrl, text="刪除動作", width=8, bg="#b91c1c", fg="#fff", command=self.delete_combo_action).pack(side="left", padx=1)
         tk.Button(cr_act_ctrl, text="清空", width=5, bg="#b91c1c", fg="#fff", command=self.clear_combo_actions).pack(side="right", padx=1)
 
-    # ======================= 右欄佈局 =======================
+    # ======================= 右欄佈局 (主執行順序清單) =======================
     def build_right_panel(self):
         f_right = tk.Frame(self, bg="#1c1f26", padx=8, pady=8, highlightbackground="#2d333b", highlightthickness=1)
         f_right.grid(row=0, column=1, padx=(5, 10), pady=10, sticky="nsew")
@@ -325,7 +338,7 @@ class App(tk.Tk):
         self.btn_toggle = tk.Button(bot, text="開始循環執行", height=2, bg="#16a34a", fg="#ffffff", font=("Segoe UI", 11, "bold"), activebackground="#15803d", command=self.toggle_run)
         self.btn_toggle.pack(fill="x")
 
-    # ======================= 設定檔管理 (純淨直讀直寫) =======================
+    # ======================= 設定檔管理 =======================
     def get_profile_files(self):
         try:
             return sorted([f[:-len(CONFIG_EXT)] for f in os.listdir(".") if f.endswith(CONFIG_EXT)])
@@ -468,6 +481,18 @@ class App(tk.Tk):
         sel = self.combo_listbox.curselection()
         return sel[0] if sel and 0 <= sel[0] < len(combos) else None
 
+    def refresh_call_combo_dropdown(self):
+        """刷新呼叫組合的下拉選單，自動排除當前編輯中的組合以防自調用"""
+        idx = self.get_selected_combo_idx()
+        curr_name = combos[idx]["name"] if idx is not None else None
+        avail = [c["name"] for c in combos if c["name"] != curr_name]
+        self.cbo_call_combo["values"] = avail
+        if avail:
+            if self.var_combo_to_call.get() not in avail:
+                self.cbo_call_combo.current(0)
+        else:
+            self.var_combo_to_call.set("")
+
     def refresh_combo_list(self, select_idx=None):
         self.combo_listbox.delete(0, tk.END)
         for i, c in enumerate(combos):
@@ -476,23 +501,51 @@ class App(tk.Tk):
         if select_idx is not None and 0 <= select_idx < len(combos):
             self.combo_listbox.selection_set(select_idx)
             self.on_combo_select()
+        else:
+            self.refresh_call_combo_dropdown()
 
     def on_combo_select(self, event=None):
         idx = self.get_selected_combo_idx()
         if idx is None:
             self.lbl_combo_editing.config(text="【組合動作編輯: 未選取】")
             self.combo_act_listbox.delete(0, tk.END)
+            self.refresh_call_combo_dropdown()
             return
         c = combos[idx]
         self.var_combo_name.set(c["name"])
         self.lbl_combo_editing.config(text=f"【編輯: {c['name']}】")
         self.refresh_combo_actions_list()
+        self.refresh_call_combo_dropdown()
 
     def add_new_combo(self):
         name = self.var_combo_name.get().strip() or f"組合{len(combos)+1}"
         combos.append({"name": name, "actions": []})
         self.refresh_combo_list(select_idx=len(combos)-1)
         self.set_status(f"已建立新組合: [{name}]")
+
+    # 組合複製功能 (Duplicate Combo)
+    def duplicate_selected_combo(self):
+        idx = self.get_selected_combo_idx()
+        if idx is None:
+            return self.set_status("請先在左邊清單點選要複製的組合！")
+        orig = combos[idx]
+        base_name = orig["name"]
+
+        # 自動生成不重複的副本名稱
+        new_name = f"{base_name}_副本"
+        count = 1
+        while any(c["name"] == new_name for c in combos):
+            count += 1
+            new_name = f"{base_name}_副本{count}"
+
+        new_combo = {
+            "name": new_name,
+            "actions": copy.deepcopy(orig.get("actions", []))
+        }
+        ins = idx + 1
+        combos.insert(ins, new_combo)
+        self.refresh_combo_list(select_idx=ins)
+        self.set_status(f"已複製組合 [{base_name}] 為 [{new_name}]")
 
     def rename_selected_combo(self):
         idx = self.get_selected_combo_idx()
@@ -502,15 +555,27 @@ class App(tk.Tk):
         old_name = combos[idx]["name"]
         combos[idx]["name"] = new_name
 
+        # 同步更新其他組合內部呼叫該組合的標籤
+        for c in combos:
+            for act in c.get("actions", []):
+                if act.get("type") == "call_combo" and act.get("target_name") == old_name:
+                    act["target_name"] = new_name
+
+        # 同步更新主清單
         sync_cnt = 0
         for s in steps:
-            if s.get("type") == "combo" and s.get("name") == old_name:
-                s["name"] = new_name
-                sync_cnt += 1
+            if s.get("type") == "combo":
+                if s.get("name") == old_name:
+                    s["name"] = new_name
+                    sync_cnt += 1
+                for act in s.get("actions", []):
+                    if act.get("type") == "call_combo" and act.get("target_name") == old_name:
+                        act["target_name"] = new_name
+
         if sync_cnt > 0: self.update_step_list()
 
         self.refresh_combo_list(select_idx=idx)
-        self.set_status(f"已將組合改名為 [{new_name}]，同步刷新了 {sync_cnt} 個主步驟")
+        self.set_status(f"已將組合改名為 [{new_name}]，同步刷新了關聯步驟")
 
     def delete_selected_combo(self):
         idx = self.get_selected_combo_idx()
@@ -557,6 +622,8 @@ class App(tk.Tk):
                 self.combo_act_listbox.insert(tk.END, f"#{i+1:02d} [按鍵] -> [ {act['key'].upper()} ]")
             elif atype == "wait":
                 self.combo_act_listbox.insert(tk.END, f"#{i+1:02d} [停頓] -> {act['sec']} 秒")
+            elif atype == "call_combo":
+                self.combo_act_listbox.insert(tk.END, f"#{i+1:02d} [呼叫] -> 組合:【{act['target_name']}】")
         if select_idx is not None and 0 <= select_idx < len(actions):
             self.combo_act_listbox.selection_set(select_idx)
 
@@ -611,6 +678,25 @@ class App(tk.Tk):
         self.refresh_combo_list(select_idx=idx)
         self.sync_combo_actions_to_main_steps(combos[idx]["name"], actions)
         self.set_status(f"已在組合加入停頓 {sec} 秒")
+
+    # 新增「呼叫其他組合」動作
+    def combo_add_call_action(self):
+        idx = self.get_selected_combo_idx()
+        if idx is None: return self.set_status("請先選取一個組合！")
+        target_name = self.var_combo_to_call.get().strip()
+        if not target_name:
+            return self.set_status("請先在下拉選單選擇要呼叫的組合！")
+        if target_name == combos[idx]["name"]:
+            return self.set_status("不能在組合內呼叫自己！")
+
+        actions = combos[idx].setdefault("actions", [])
+        ins = self.get_selected_action_idx()
+        ins = ins + 1 if ins is not None else len(actions)
+        actions.insert(ins, {"type": "call_combo", "target_name": target_name})
+        self.refresh_combo_actions_list(select_idx=ins)
+        self.refresh_combo_list(select_idx=idx)
+        self.sync_combo_actions_to_main_steps(combos[idx]["name"], actions)
+        self.set_status(f"已在組合加入呼叫: [{target_name}]")
 
     def move_combo_action(self, delta):
         c_idx = self.get_selected_combo_idx()
@@ -742,7 +828,7 @@ class App(tk.Tk):
             self.update_step_list()
             self.set_status("已清空主執行清單")
 
-    # ======================= 主執行引擎 =======================
+    # ======================= 主執行引擎 (支援遞迴巢狀呼叫) =======================
     def toggle_run(self):
         global running
         if running:
@@ -762,51 +848,76 @@ class App(tk.Tk):
     def macro_worker_loop(self):
         global running
         round_idx = 1
+
+        # 遞迴執行動作 (支援組合內呼叫其他組合)
+        def run_action(act, parent_desc, depth=0, visited_set=None):
+            if visited_set is None:
+                visited_set = set()
+            if not running or stop_event.is_set():
+                return False
+
+            use_bg = self.var_use_bg.get() and IS_WINDOWS and (target_hwnd is not None)
+            try: off_x, off_y = int(self.var_offset_x.get() or 0), int(self.var_offset_y.get() or 0)
+            except Exception: off_x, off_y = 0, 0
+
+            atype = act.get("type")
+            if atype == "click":
+                msg = execute_click(act["x"], act["y"], act.get("rel"), use_bg, off_x, off_y)
+                self.set_status(f"第 {round_idx} 輪: {parent_desc} {msg}")
+                if not safe_sleep(0.12): return False
+
+            elif atype == "key":
+                post_bg_key(target_hwnd, act["key"]) if use_bg else (pyautogui.keyDown(act["key"]), safe_sleep(0.06), pyautogui.keyUp(act["key"]))
+                self.set_status(f"第 {round_idx} 輪: {parent_desc} 按鍵 [{act['key'].upper()}]")
+                if not safe_sleep(0.10): return False
+
+            elif atype == "wait":
+                sec = float(act.get("sec", 0.5))
+                self.set_status(f"第 {round_idx} 輪: {parent_desc} 等待 {sec}s")
+                if not safe_sleep(sec): return False
+
+            elif atype == "call_combo":
+                tgt_name = act.get("target_name")
+                if not tgt_name: return True
+                if depth >= 10:
+                    self.set_status(f"第 {round_idx} 輪: 呼叫 [{tgt_name}] 超過深度上限 (防死循環)")
+                    return True
+                if tgt_name in visited_set:
+                    self.set_status(f"第 {round_idx} 輪: 循環呼叫 [{tgt_name}]，自動跳過")
+                    return True
+
+                # 動態尋找被呼叫的組合 (實時取得最新配置)
+                tgt_combo = next((c for c in combos if c["name"] == tgt_name), None)
+                if tgt_combo:
+                    new_visited = visited_set | {tgt_name}
+                    for sub_idx, sub_act in enumerate(tgt_combo.get("actions", [])):
+                        if not running or stop_event.is_set(): return False
+                        sub_desc = f"{parent_desc}->[{tgt_name}#{sub_idx+1}]"
+                        if not run_action(sub_act, sub_desc, depth + 1, new_visited):
+                            return False
+                else:
+                    self.set_status(f"第 {round_idx} 輪: 找不到被呼叫的組合 [{tgt_name}]")
+
+            return True
+
         try:
             while running and not stop_event.is_set():
-                use_bg = self.var_use_bg.get() and IS_WINDOWS and (target_hwnd is not None)
-                try: off_x, off_y = int(self.var_offset_x.get() or 0), int(self.var_offset_y.get() or 0)
-                except Exception: off_x, off_y = 0, 0
-
                 for idx, step in enumerate(steps):
                     if not running or stop_event.is_set(): break
                     self.highlight_step(idx)
 
                     stype = step["type"]
-                    if stype == "click":
-                        msg = execute_click(step["x"], step["y"], step.get("rel"), use_bg, off_x, off_y)
-                        self.set_status(f"第 {round_idx} 輪 ({idx+1}/{len(steps)}): {msg}")
-                        if not safe_sleep(0.12): break
-
-                    elif stype == "key":
-                        post_bg_key(target_hwnd, step["key"]) if use_bg else (pyautogui.keyDown(step["key"]), safe_sleep(0.06), pyautogui.keyUp(step["key"]))
-                        self.set_status(f"第 {round_idx} 輪 ({idx+1}/{len(steps)}): 按鍵 [{step['key'].upper()}]")
-                        if not safe_sleep(0.10): break
-
-                    elif stype == "wait":
-                        self.set_status(f"第 {round_idx} 輪 ({idx+1}/{len(steps)}): 等待 {step['sec']} 秒")
-                        if not safe_sleep(float(step["sec"])): break
-
-                    elif stype == "combo":
+                    if stype == "combo":
                         c_name = step.get("name", "組合")
                         c_actions = step.get("actions", [])
                         for a_idx, act in enumerate(c_actions):
                             if not running or stop_event.is_set(): break
-                            atype = act.get("type")
-                            if atype == "click":
-                                msg = execute_click(act["x"], act["y"], act.get("rel"), use_bg, off_x, off_y)
-                                self.set_status(f"第 {round_idx} 輪 ({idx+1}/{len(steps)}): [{c_name}] #{a_idx+1} {msg}")
-                                if not safe_sleep(0.12): break
-                            elif atype == "key":
-                                post_bg_key(target_hwnd, act["key"]) if use_bg else (pyautogui.keyDown(act["key"]), safe_sleep(0.06), pyautogui.keyUp(act["key"]))
-                                self.set_status(f"第 {round_idx} 輪 ({idx+1}/{len(steps)}): [{c_name}] #{a_idx+1} 按鍵 [{act['key'].upper()}]")
-                                if not safe_sleep(0.10): break
-                            elif atype == "wait":
-                                sec = float(act.get("sec", 0.5))
-                                self.set_status(f"第 {round_idx} 輪 ({idx+1}/{len(steps)}): [{c_name}] #{a_idx+1} 等待 {sec}s")
-                                if not safe_sleep(sec): break
-
-                        if not running or stop_event.is_set(): break
+                            act_desc = f"[{c_name}#{a_idx+1}]"
+                            if not run_action(act, act_desc, depth=0, visited_set={c_name}):
+                                break
+                    else:
+                        if not run_action(step, f"步驟#{idx+1}", depth=0, visited_set=set()):
+                            break
 
                 round_idx += 1
                 if not safe_sleep(0.05): break
