@@ -7,16 +7,11 @@ import threading
 import pyautogui
 import tkinter as tk
 from tkinter import ttk
-import customtkinter as ctk
 
-# --- 基礎配置 ---
 pyautogui.FAILSAFE = False
 pyautogui.PAUSE = 0.0
 
 WINDOW_TITLE = "水滸歷險 巨集助手"
-
-ctk.set_appearance_mode("Dark")
-ctk.set_default_color_theme("blue")
 
 combos, steps = [], []
 temp_combo_target = None
@@ -61,7 +56,7 @@ def safe_sleep(seconds):
 def emergency_release_bg_only():
     if IS_WINDOWS and target_hwnd:
         try:
-            user32.PostMessageW(target_hwnd, 0x0202, 0, 0)  # WM_LBUTTONUP
+            user32.PostMessageW(target_hwnd, 0x0202, 0, 0)
         except Exception:
             pass
 
@@ -114,15 +109,29 @@ def execute_click(x, y, is_rel, use_bg, off_x, off_y):
         return f"前台點擊 ({x},{y})"
 
 # ==============================================================================
-# 主 GUI 介面類別 (CustomTkinter)
+# 原生 Tkinter GUI
 # ==============================================================================
-class App(ctk.CTk):
+class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(WINDOW_TITLE)
         self.geometry("960x600")
         self.resizable(False, False)
+        self.configure(bg="#15171c")
         self.attributes("-topmost", True)
+
+        # 變數定義
+        self.var_cfg_name = tk.StringVar(value="sh_macro.json")
+        self.var_use_bg = tk.BooleanVar(value=True)
+        self.var_use_rel = tk.BooleanVar(value=True)
+        self.var_offset_x = tk.StringVar(value="0")
+        self.var_offset_y = tk.StringVar(value="0")
+        self.var_combo_name = tk.StringVar(value="F4補血CD")
+        self.var_combo_keys = tk.StringVar(value="f4")
+        self.var_combo_wait = tk.StringVar(value="10.0")
+        self.var_step_key = tk.StringVar(value="f1")
+        self.var_step_wait = tk.StringVar(value="1.0")
+        self.var_window = tk.StringVar(value="未偵測到視窗")
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
@@ -130,20 +139,18 @@ class App(ctk.CTk):
 
         self.build_left_panel()
         self.build_right_panel()
-
         self.refresh_window_dropdown()
 
-    # --- 執行安全 UI 更新（線程安全分發） ---
     def set_status(self, msg):
-        self.after(0, lambda: self.lbl_status.configure(text=f"狀態: {msg}"))
+        self.after(0, lambda: self.lbl_status.config(text=f"狀態: {msg}"))
 
     def set_running_ui(self, is_running):
-        def _update():
+        def _u():
             if is_running:
-                self.btn_toggle.configure(text="停止執行", fg_color="#dc2626", hover_color="#b91c1c")
+                self.btn_toggle.config(text="停止執行", bg="#dc2626", activebackground="#b91c1c")
             else:
-                self.btn_toggle.configure(text="開始循環執行", fg_color="#16a34a", hover_color="#15803d")
-        self.after(0, _update)
+                self.btn_toggle.config(text="開始循環執行", bg="#16a34a", activebackground="#15803d")
+        self.after(0, _u)
 
     def highlight_step(self, idx):
         def _hl():
@@ -153,194 +160,126 @@ class App(ctk.CTk):
                 self.step_listbox.see(idx)
         self.after(0, _hl)
 
-    # ======================= 左欄佈局 =======================
     def build_left_panel(self):
-        left_frame = ctk.CTkFrame(self, corner_radius=8)
-        left_frame.grid(row=0, column=0, padx=(10, 5), pady=10, sticky="nsew")
+        f_left = tk.Frame(self, bg="#1c1f26", padx=8, pady=8, highlightbackground="#2d333b", highlightthickness=1)
+        f_left.grid(row=0, column=0, padx=(10, 5), pady=10, sticky="nsew")
 
-        # 1. 設定檔與 Win32 視窗綁定
-        cfg_box = ctk.CTkFrame(left_frame, corner_radius=6)
-        cfg_box.pack(fill="x", padx=10, pady=(10, 5))
+        # 1. 設定與後台
+        f_cfg = tk.LabelFrame(f_left, text=" 設定與 Win32 後台綁定 ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
+        f_cfg.pack(fill="x", pady=(0, 6))
 
-        ctk.CTkLabel(cfg_box, text="設定與 Win32 後台綁定", font=ctk.CTkFont(size=13, weight="bold"), text_color="#38bdf8").pack(anchor="w", padx=10, pady=(6, 2))
+        r1 = tk.Frame(f_cfg, bg="#1c1f26")
+        r1.pack(fill="x", pady=2)
+        tk.Label(r1, text="設定檔:", bg="#1c1f26", fg="#cbd5e1").pack(side="left")
+        tk.Entry(r1, textvariable=self.var_cfg_name, width=20, bg="#2d333b", fg="#ffffff", insertbackground="#fff").pack(side="left", padx=4)
+        tk.Button(r1, text="儲存", width=6, bg="#334155", fg="#fff", command=self.save_config).pack(side="left", padx=2)
+        tk.Button(r1, text="載入", width=6, bg="#334155", fg="#fff", command=self.load_config).pack(side="left", padx=2)
 
-        # 存取檔行
-        r1 = ctk.CTkFrame(cfg_box, fg_color="transparent")
-        r1.pack(fill="x", padx=10, pady=2)
-        ctk.CTkLabel(r1, text="設定檔:").pack(side="left")
-        self.ent_cfg_name = ctk.CTkEntry(r1, width=190)
-        self.ent_cfg_name.insert(0, "sh_macro.json")
-        self.ent_cfg_name.pack(side="left", padx=5)
-        ctk.CTkButton(r1, text="儲存", width=60, command=self.save_config).pack(side="left", padx=2)
-        ctk.CTkButton(r1, text="載入", width=60, command=self.load_config).pack(side="left", padx=2)
+        r2 = tk.Frame(f_cfg, bg="#1c1f26")
+        r2.pack(fill="x", pady=4)
+        tk.Checkbutton(r2, text="Win32後台", variable=self.var_use_bg, bg="#1c1f26", fg="#cbd5e1", selectcolor="#1c1f26", activebackground="#1c1f26").pack(side="left")
+        tk.Checkbutton(r2, text="相對坐標 (Relative)", variable=self.var_use_rel, bg="#1c1f26", fg="#cbd5e1", selectcolor="#1c1f26", activebackground="#1c1f26").pack(side="left", padx=4)
+        tk.Label(r2, text="微調X:", bg="#1c1f26", fg="#cbd5e1").pack(side="left")
+        tk.Entry(r2, textvariable=self.var_offset_x, width=4, bg="#2d333b", fg="#ffffff").pack(side="left", padx=2)
+        tk.Label(r2, text="Y:", bg="#1c1f26", fg="#cbd5e1").pack(side="left")
+        tk.Entry(r2, textvariable=self.var_offset_y, width=4, bg="#2d333b", fg="#ffffff").pack(side="left", padx=2)
 
-        # 模式勾選與微調
-        r2 = ctk.CTkFrame(cfg_box, fg_color="transparent")
-        r2.pack(fill="x", padx=10, pady=4)
-        self.chk_use_bg = ctk.CTkCheckBox(r2, text="Win32後台")
-        self.chk_use_bg.select()
-        self.chk_use_bg.pack(side="left", padx=(0, 5))
+        r3 = tk.Frame(f_cfg, bg="#1c1f26")
+        r3.pack(fill="x", pady=2)
+        tk.Label(r3, text="目標視窗:", bg="#1c1f26", fg="#cbd5e1").pack(side="left")
+        self.cbo_window = ttk.Combobox(r3, textvariable=self.var_window, width=28, state="readonly")
+        self.cbo_window.pack(side="left", padx=4)
+        self.cbo_window.bind("<<ComboboxSelected>>", self.on_window_select)
+        tk.Button(r3, text="重新整理", bg="#334155", fg="#fff", command=self.refresh_window_dropdown).pack(side="left", padx=2)
 
-        self.chk_use_rel = ctk.CTkCheckBox(r2, text="相對坐標 (Relative)")
-        self.chk_use_rel.select()
-        self.chk_use_rel.pack(side="left", padx=5)
+        # 2. 組合庫
+        f_combo = tk.LabelFrame(f_left, text=" 技能組合預設 (Combinations) ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
+        f_combo.pack(fill="both", expand=True)
 
-        ctk.CTkLabel(r2, text="微調X:").pack(side="left", padx=(5, 2))
-        self.ent_offset_x = ctk.CTkEntry(r2, width=35)
-        self.ent_offset_x.insert(0, "0")
-        self.ent_offset_x.pack(side="left")
+        cr1 = tk.Frame(f_combo, bg="#1c1f26")
+        cr1.pack(fill="x", pady=2)
+        tk.Label(cr1, text="名稱:", bg="#1c1f26", fg="#cbd5e1").pack(side="left")
+        tk.Entry(cr1, textvariable=self.var_combo_name, width=12, bg="#2d333b", fg="#fff").pack(side="left", padx=3)
+        tk.Label(cr1, text="按鍵:", bg="#1c1f26", fg="#cbd5e1").pack(side="left")
+        tk.Entry(cr1, textvariable=self.var_combo_keys, width=8, bg="#2d333b", fg="#fff").pack(side="left", padx=3)
+        tk.Label(cr1, text="CD(秒):", bg="#1c1f26", fg="#cbd5e1").pack(side="left")
+        tk.Entry(cr1, textvariable=self.var_combo_wait, width=5, bg="#2d333b", fg="#fff").pack(side="left", padx=3)
 
-        ctk.CTkLabel(r2, text="Y:").pack(side="left", padx=(5, 2))
-        self.ent_offset_y = ctk.CTkEntry(r2, width=35)
-        self.ent_offset_y.insert(0, "0")
-        self.ent_offset_y.pack(side="left")
-
-        # 目標視窗
-        r3 = ctk.CTkFrame(cfg_box, fg_color="transparent")
-        r3.pack(fill="x", padx=10, pady=(2, 8))
-        ctk.CTkLabel(r3, text="目標視窗:").pack(side="left")
-        self.cbo_window = ctk.CTkOptionMenu(r3, width=250, values=["未偵測到視窗"], command=self.on_window_select)
-        self.cbo_window.pack(side="left", padx=5)
-        ctk.CTkButton(r3, text="重新整理", width=70, command=self.refresh_window_dropdown).pack(side="left", padx=2)
-
-        # 2. 技能組合預設 (Combinations)
-        combo_box = ctk.CTkFrame(left_frame, corner_radius=6)
-        combo_box.pack(fill="both", expand=True, padx=10, pady=(5, 10))
-
-        ctk.CTkLabel(combo_box, text="技能組合預設 (Combinations)", font=ctk.CTkFont(size=13, weight="bold"), text_color="#38bdf8").pack(anchor="w", padx=10, pady=(6, 2))
-
-        # 組合輸入
-        cr1 = ctk.CTkFrame(combo_box, fg_color="transparent")
-        cr1.pack(fill="x", padx=10, pady=2)
-        ctk.CTkLabel(cr1, text="名稱:").pack(side="left")
-        self.ent_combo_name = ctk.CTkEntry(cr1, width=120)
-        self.ent_combo_name.insert(0, "F4補血CD")
-        self.ent_combo_name.pack(side="left", padx=4)
-
-        ctk.CTkLabel(cr1, text="按鍵:").pack(side="left", padx=(4, 0))
-        self.ent_combo_keys = ctk.CTkEntry(cr1, width=80)
-        self.ent_combo_keys.insert(0, "f4")
-        self.ent_combo_keys.pack(side="left", padx=4)
-
-        ctk.CTkLabel(cr1, text="CD(秒):").pack(side="left", padx=(4, 0))
-        self.ent_combo_wait = ctk.CTkEntry(cr1, width=45)
-        self.ent_combo_wait.insert(0, "10.0")
-        self.ent_combo_wait.pack(side="left", padx=4)
-
-        # 目標坐標行
-        cr2 = ctk.CTkFrame(combo_box, fg_color="transparent")
-        cr2.pack(fill="x", padx=10, pady=3)
-        ctk.CTkLabel(cr2, text="目標:").pack(side="left")
-        self.lbl_combo_target = ctk.CTkLabel(cr2, text="無 (原地)", text_color="#7dd3fc", font=ctk.CTkFont(weight="bold"))
+        cr2 = tk.Frame(f_combo, bg="#1c1f26")
+        cr2.pack(fill="x", pady=4)
+        tk.Label(cr2, text="目標:", bg="#1c1f26", fg="#cbd5e1").pack(side="left")
+        self.lbl_combo_target = tk.Label(cr2, text="無 (原地)", bg="#1c1f26", fg="#7dd3fc", font=("Segoe UI", 9, "bold"))
         self.lbl_combo_target.pack(side="left", padx=4)
-
-        self.btn_combo_target = ctk.CTkButton(cr2, text="記錄目標 (3秒)", width=105, command=self.record_combo_target)
-        self.btn_combo_target.pack(side="left", padx=3)
-        ctk.CTkButton(cr2, text="清除", width=45, command=self.clear_combo_target).pack(side="left", padx=2)
-        ctk.CTkButton(cr2, text="新增組合", width=68, command=self.save_new_combo).pack(side="left", padx=2)
-        ctk.CTkButton(cr2, text="更新", width=50, command=self.update_selected_combo).pack(side="left", padx=2)
+        self.btn_combo_target = tk.Button(cr2, text="記錄目標 (3秒)", bg="#334155", fg="#fff", command=self.record_combo_target)
+        self.btn_combo_target.pack(side="left", padx=2)
+        tk.Button(cr2, text="清除", bg="#334155", fg="#fff", command=self.clear_combo_target).pack(side="left", padx=2)
+        tk.Button(cr2, text="新增", bg="#334155", fg="#fff", command=self.save_new_combo).pack(side="left", padx=2)
+        tk.Button(cr2, text="更新", bg="#334155", fg="#fff", command=self.update_selected_combo).pack(side="left", padx=2)
 
         # 組合 Listbox
-        list_container = ctk.CTkFrame(combo_box, fg_color="#181a1f", corner_radius=4)
-        list_container.pack(fill="both", expand=True, padx=10, pady=5)
-
-        self.combo_listbox = tk.Listbox(
-            list_container,
-            bg="#1c1f26",
-            fg="#f1f5f9",
-            selectbackground="#0284c7",
-            selectforeground="#ffffff",
-            borderwidth=0,
-            highlightthickness=0,
-            font=("Segoe UI", 10),
-            exportselection=False
-        )
-        self.combo_listbox.pack(side="left", fill="both", expand=True, padx=2, pady=2)
+        f_list_c = tk.Frame(f_combo, bg="#15171c")
+        f_list_c.pack(fill="both", expand=True, pady=4)
+        self.combo_listbox = tk.Listbox(f_list_c, bg="#15171c", fg="#f1f5f9", selectbackground="#0284c7", selectforeground="#fff", bd=0, highlightthickness=0, font=("Segoe UI", 10), exportselection=False)
+        self.combo_listbox.pack(side="left", fill="both", expand=True)
         self.combo_listbox.bind("<<ListboxSelect>>", self.on_combo_select)
+        sc1 = tk.Scrollbar(f_list_c, orient="vertical", command=self.combo_listbox.yview)
+        sc1.pack(side="right", fill="y")
+        self.combo_listbox.config(yscrollcommand=sc1.set)
 
-        c_scroll = ttk.Scrollbar(list_container, orient="vertical", command=self.combo_listbox.yview)
-        c_scroll.pack(side="right", fill="y")
-        self.combo_listbox.configure(yscrollcommand=c_scroll.set)
+        cr3 = tk.Frame(f_combo, bg="#1c1f26")
+        cr3.pack(fill="x", pady=(2, 0))
+        tk.Button(cr3, text="將所選組合加入執行清單", bg="#0284c7", fg="#fff", activebackground="#0369a1", command=self.add_combo_to_steps).pack(side="left", fill="x", expand=True, padx=(0, 4))
+        tk.Button(cr3, text="刪除組合", width=10, bg="#b91c1c", fg="#fff", activebackground="#991b1b", command=self.delete_selected_combo).pack(side="right")
 
-        # 組合操作按鈕
-        cr3 = ctk.CTkFrame(combo_box, fg_color="transparent")
-        cr3.pack(fill="x", padx=10, pady=(2, 8))
-        ctk.CTkButton(cr3, text="將所選組合加入執行清單", fg_color="#0284c7", hover_color="#0369a1", command=self.add_combo_to_steps).pack(side="left", fill="x", expand=True, padx=(0, 5))
-        ctk.CTkButton(cr3, text="刪除組合", width=80, fg_color="#b91c1c", hover_color="#991b1b", command=self.delete_selected_combo).pack(side="right")
-
-    # ======================= 右欄佈局 =======================
     def build_right_panel(self):
-        right_frame = ctk.CTkFrame(self, corner_radius=8)
-        right_frame.grid(row=0, column=1, padx=(5, 10), pady=10, sticky="nsew")
+        f_right = tk.Frame(self, bg="#1c1f26", padx=8, pady=8, highlightbackground="#2d333b", highlightthickness=1)
+        f_right.grid(row=0, column=1, padx=(5, 10), pady=10, sticky="nsew")
 
-        # 1. 單獨新增微步
-        step_box = ctk.CTkFrame(right_frame, corner_radius=6)
-        step_box.pack(fill="x", padx=10, pady=(10, 5))
+        # 1. 微步
+        f_step = tk.LabelFrame(f_right, text=" 單獨新增微步 (點擊 / 按鍵 / 停頓) ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
+        f_step.pack(fill="x", pady=(0, 6))
 
-        ctk.CTkLabel(step_box, text="單獨新增微步 (點擊 / 按鍵 / 停頓)", font=ctk.CTkFont(size=13, weight="bold"), text_color="#38bdf8").pack(anchor="w", padx=10, pady=(6, 2))
+        self.btn_step_click = tk.Button(f_step, text="記錄點擊坐標 (3秒)", bg="#334155", fg="#fff", command=self.add_click_step)
+        self.btn_step_click.pack(fill="x", pady=2)
 
-        self.btn_step_click = ctk.CTkButton(step_box, text="記錄點擊坐標 (3秒)", command=self.add_click_step)
-        self.btn_step_click.pack(fill="x", padx=10, pady=3)
+        sr = tk.Frame(f_step, bg="#1c1f26")
+        sr.pack(fill="x", pady=2)
+        tk.Label(sr, text="按鍵:", bg="#1c1f26", fg="#cbd5e1").pack(side="left")
+        tk.Entry(sr, textvariable=self.var_step_key, width=6, bg="#2d333b", fg="#fff").pack(side="left", padx=3)
+        tk.Button(sr, text="加按鍵", bg="#334155", fg="#fff", command=self.add_key_step).pack(side="left", padx=2)
 
-        sr = ctk.CTkFrame(step_box, fg_color="transparent")
-        sr.pack(fill="x", padx=10, pady=(2, 6))
-        ctk.CTkLabel(sr, text="按鍵:").pack(side="left")
-        self.ent_key = ctk.CTkEntry(sr, width=65)
-        self.ent_key.insert(0, "f1")
-        self.ent_key.pack(side="left", padx=4)
-        ctk.CTkButton(sr, text="加按鍵", width=75, command=self.add_key_step).pack(side="left", padx=2)
-
-        ctk.CTkLabel(sr, text="停頓:").pack(side="left", padx=(10, 0))
-        self.ent_wait = ctk.CTkEntry(sr, width=45)
-        self.ent_wait.insert(0, "1.0")
-        self.ent_wait.pack(side="left", padx=4)
-        ctk.CTkButton(sr, text="加停頓", width=75, command=self.add_wait_step).pack(side="left", padx=2)
+        tk.Label(sr, text="停頓:", bg="#1c1f26", fg="#cbd5e1").pack(side="left", padx=(10, 0))
+        tk.Entry(sr, textvariable=self.var_step_wait, width=5, bg="#2d333b", fg="#fff").pack(side="left", padx=3)
+        tk.Button(sr, text="加停頓", bg="#334155", fg="#fff", command=self.add_wait_step).pack(side="left", padx=2)
 
         # 2. 執行順序清單
-        seq_box = ctk.CTkFrame(right_frame, corner_radius=6)
-        seq_box.pack(fill="both", expand=True, padx=10, pady=5)
+        f_seq = tk.LabelFrame(f_right, text=" 執行順序清單 (由上至下循環) ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
+        f_seq.pack(fill="both", expand=True)
 
-        ctk.CTkLabel(seq_box, text="執行順序清單 (由上至下循環)", font=ctk.CTkFont(size=13, weight="bold"), text_color="#38bdf8").pack(anchor="w", padx=10, pady=(6, 2))
+        f_list_s = tk.Frame(f_seq, bg="#15171c")
+        f_list_s.pack(fill="both", expand=True, pady=4)
+        self.step_listbox = tk.Listbox(f_list_s, bg="#15171c", fg="#f1f5f9", selectbackground="#0284c7", selectforeground="#fff", bd=0, highlightthickness=0, font=("Segoe UI", 10), exportselection=False)
+        self.step_listbox.pack(side="left", fill="both", expand=True)
+        sc2 = tk.Scrollbar(f_list_s, orient="vertical", command=self.step_listbox.yview)
+        sc2.pack(side="right", fill="y")
+        self.step_listbox.config(yscrollcommand=sc2.set)
 
-        list_container2 = ctk.CTkFrame(seq_box, fg_color="#181a1f", corner_radius=4)
-        list_container2.pack(fill="both", expand=True, padx=10, pady=5)
+        sr2 = tk.Frame(f_seq, bg="#1c1f26")
+        sr2.pack(fill="x", pady=(2, 0))
+        tk.Button(sr2, text="上移", width=8, bg="#334155", fg="#fff", command=lambda: self.move_step(-1)).pack(side="left", padx=2)
+        tk.Button(sr2, text="下移", width=8, bg="#334155", fg="#fff", command=lambda: self.move_step(1)).pack(side="left", padx=2)
+        tk.Button(sr2, text="刪除所選", width=10, bg="#b91c1c", fg="#fff", command=self.delete_selected).pack(side="left", padx=2)
+        tk.Button(sr2, text="清空清單", width=10, bg="#b91c1c", fg="#fff", command=self.clear_all).pack(side="left", padx=2)
 
-        self.step_listbox = tk.Listbox(
-            list_container2,
-            bg="#1c1f26",
-            fg="#f1f5f9",
-            selectbackground="#0284c7",
-            selectforeground="#ffffff",
-            borderwidth=0,
-            highlightthickness=0,
-            font=("Segoe UI", 10),
-            exportselection=False
-        )
-        self.step_listbox.pack(side="left", fill="both", expand=True, padx=2, pady=2)
-
-        s_scroll = ttk.Scrollbar(list_container2, orient="vertical", command=self.step_listbox.yview)
-        s_scroll.pack(side="right", fill="y")
-        self.step_listbox.configure(yscrollcommand=s_scroll.set)
-
-        # 清單控制按鈕
-        cr4 = ctk.CTkFrame(seq_box, fg_color="transparent")
-        cr4.pack(fill="x", padx=10, pady=(2, 8))
-        ctk.CTkButton(cr4, text="上移", width=85, command=lambda: self.move_step(-1)).pack(side="left", padx=2)
-        ctk.CTkButton(cr4, text="下移", width=85, command=lambda: self.move_step(1)).pack(side="left", padx=2)
-        ctk.CTkButton(cr4, text="刪除所選", width=95, fg_color="#b91c1c", hover_color="#991b1b", command=self.delete_selected).pack(side="left", padx=2)
-        ctk.CTkButton(cr4, text="清空清單", width=95, fg_color="#b91c1c", hover_color="#991b1b", command=self.clear_all).pack(side="left", padx=2)
-
-        # 3. 狀態與主開關
-        bot_box = ctk.CTkFrame(right_frame, fg_color="transparent")
-        bot_box.pack(fill="x", padx=10, pady=(2, 10))
-
-        self.lbl_status = ctk.CTkLabel(bot_box, text="狀態: 已就緒", anchor="w", font=ctk.CTkFont(size=12))
+        # 3. 狀態與主執行開關
+        bot = tk.Frame(f_right, bg="#1c1f26")
+        bot.pack(fill="x", pady=(6, 0))
+        self.lbl_status = tk.Label(bot, text="狀態: 已就緒", anchor="w", bg="#1c1f26", fg="#f1f5f9", font=("Segoe UI", 9))
         self.lbl_status.pack(fill="x", pady=(0, 4))
-
-        self.btn_toggle = ctk.CTkButton(bot_box, text="開始循環執行", height=42, fg_color="#16a34a", hover_color="#15803d", font=ctk.CTkFont(size=14, weight="bold"), command=self.toggle_run)
+        self.btn_toggle = tk.Button(bot, text="開始循環執行", height=2, bg="#16a34a", fg="#ffffff", font=("Segoe UI", 11, "bold"), activebackground="#15803d", command=self.toggle_run)
         self.btn_toggle.pack(fill="x")
 
-    # ======================= 視窗與坐標邏輯 =======================
+    # ======================= 邏輯控制 =======================
     def get_window_list(self):
         if not IS_WINDOWS: return []
         windows = []
@@ -368,28 +307,29 @@ class App(ctk.CTk):
         else:
             target_hwnd = win_list[target_idx][0]
 
-        self.cbo_window.configure(values=items)
-        self.cbo_window.set(items[target_idx])
+        self.cbo_window["values"] = items
+        self.cbo_window.current(target_idx)
         if target_hwnd:
             self.set_status(f"已綁定目標視窗 HWND: {target_hwnd}")
 
-    def on_window_select(self, val):
+    def on_window_select(self, event=None):
         global target_hwnd
-        if val and str(val).startswith("["):
+        val = self.var_window.get()
+        if val and val.startswith("["):
             try:
-                target_hwnd = int(str(val).split("]")[0].replace("[", ""))
+                target_hwnd = int(val.split("]")[0].replace("[", ""))
                 self.set_status(f"已綁定目標視窗 HWND: {target_hwnd}")
             except Exception:
                 target_hwnd = None
 
     def capture_pos_countdown(self, btn, on_finish):
         def worker():
-            btn.configure(state="disabled")
+            btn.config(state="disabled")
             for i in range(3, 0, -1):
                 self.set_status(f"請移至目標點... 倒數 {i} 秒")
                 time.sleep(1)
             pos = pyautogui.position()
-            use_rel = bool(self.chk_use_rel.get())
+            use_rel = self.var_use_rel.get()
             if use_rel and IS_WINDOWS and target_hwnd:
                 pt = POINT(int(pos.x), int(pos.y))
                 user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
@@ -397,7 +337,7 @@ class App(ctk.CTk):
             else:
                 x, y, rel = pos.x, pos.y, False
             on_finish(x, y, rel)
-            btn.configure(state="normal")
+            btn.config(state="normal")
         threading.Thread(target=worker, daemon=True).start()
 
     def record_combo_target(self):
@@ -405,17 +345,16 @@ class App(ctk.CTk):
             global temp_combo_target
             temp_combo_target = {"x": x, "y": y, "rel": rel}
             prefix = "相對" if rel else "絕對"
-            self.lbl_combo_target.configure(text=f"{prefix}:({x}, {y})")
+            self.lbl_combo_target.config(text=f"{prefix}:({x}, {y})")
             self.set_status(f"已鎖定組合{prefix}目標：({x}, {y})")
         self.capture_pos_countdown(self.btn_combo_target, cb)
 
     def clear_combo_target(self):
         global temp_combo_target
         temp_combo_target = None
-        self.lbl_combo_target.configure(text="無 (原地)")
+        self.lbl_combo_target.config(text="無 (原地)")
         self.set_status("已清除目標坐標")
 
-    # ======================= 組合庫操作 =======================
     def update_combo_list(self, select_idx=None):
         self.combo_listbox.delete(0, tk.END)
         for c in combos:
@@ -425,22 +364,22 @@ class App(ctk.CTk):
         if select_idx is not None and 0 <= select_idx < len(combos):
             self.combo_listbox.selection_set(select_idx)
 
-    def on_combo_select(self, event):
+    def on_combo_select(self, event=None):
         sel = self.combo_listbox.curselection()
         if not sel: return
         c = combos[sel[0]]
-        self.ent_combo_name.delete(0, tk.END); self.ent_combo_name.insert(0, c["name"])
-        self.ent_combo_keys.delete(0, tk.END); self.ent_combo_keys.insert(0, ",".join(c["keys"]))
-        self.ent_combo_wait.delete(0, tk.END); self.ent_combo_wait.insert(0, str(c["wait"]))
+        self.var_combo_name.set(c["name"])
+        self.var_combo_keys.set(",".join(c["keys"]))
+        self.var_combo_wait.set(str(c["wait"]))
         global temp_combo_target
         temp_combo_target = c.get("target")
         prefix = ("相對:" if temp_combo_target.get("rel") else "絕對:") if temp_combo_target else ""
-        self.lbl_combo_target.configure(text=f"{prefix}({temp_combo_target['x']}, {temp_combo_target['y']})" if temp_combo_target else "無 (原地)")
+        self.lbl_combo_target.config(text=f"{prefix}({temp_combo_target['x']}, {temp_combo_target['y']})" if temp_combo_target else "無 (原地)")
 
     def save_new_combo(self):
-        name = self.ent_combo_name.get().strip()
-        keys = [k.strip().lower() for k in self.ent_combo_keys.get().replace("，", ",").split(",") if k.strip()]
-        try: wait_sec = max(0.0, float(self.ent_combo_wait.get()))
+        name = self.var_combo_name.get().strip()
+        keys = [k.strip().lower() for k in self.var_combo_keys.get().replace("，", ",").split(",") if k.strip()]
+        try: wait_sec = max(0.0, float(self.var_combo_wait.get()))
         except ValueError: return self.set_status("CD等待時間格式錯誤！")
         if not name or not keys: return self.set_status("請輸入組合名稱與按鍵！")
 
@@ -453,16 +392,15 @@ class App(ctk.CTk):
         if not sel: return self.set_status("請先在清單點選要修改的組合！")
         idx = sel[0]
         old_name = combos[idx]["name"]
-        name = self.ent_combo_name.get().strip()
-        keys = [k.strip().lower() for k in self.ent_combo_keys.get().replace("，", ",").split(",") if k.strip()]
-        try: wait_sec = max(0.0, float(self.ent_combo_wait.get()))
+        name = self.var_combo_name.get().strip()
+        keys = [k.strip().lower() for k in self.var_combo_keys.get().replace("，", ",").split(",") if k.strip()]
+        try: wait_sec = max(0.0, float(self.var_combo_wait.get()))
         except ValueError: return
 
         new_target = dict(temp_combo_target) if temp_combo_target else None
         combos[idx] = {"name": name, "keys": keys, "wait": wait_sec, "target": new_target}
         self.update_combo_list(idx)
 
-        # 核心聯動：自動同步執行清單所有步驟
         sync_count = 0
         for s in steps:
             if s.get("type") == "combo" and s.get("name") == old_name:
@@ -478,7 +416,6 @@ class App(ctk.CTk):
             self.update_combo_list()
             self.set_status("已刪除該組合 (執行清單保留原有步驟)")
 
-    # ======================= 步驟清單操作 =======================
     def get_insert_index(self):
         sel = self.step_listbox.curselection()
         return sel[0] + 1 if sel else len(steps)
@@ -505,9 +442,9 @@ class App(ctk.CTk):
         sel = self.combo_listbox.curselection()
         c = combos[sel[0]] if sel else None
         if not c:
-            name = self.ent_combo_name.get().strip()
-            keys = [k.strip().lower() for k in self.ent_combo_keys.get().replace("，", ",").split(",") if k.strip()]
-            if name and keys: c = {"name": name, "keys": keys, "wait": float(self.ent_combo_wait.get() or 1.0), "target": temp_combo_target}
+            name = self.var_combo_name.get().strip()
+            keys = [k.strip().lower() for k in self.var_combo_keys.get().replace("，", ",").split(",") if k.strip()]
+            if name and keys: c = {"name": name, "keys": keys, "wait": float(self.var_combo_wait.get() or 1.0), "target": temp_combo_target}
         if not c: return self.set_status("請先選擇或填寫組合內容！")
 
         ins = self.get_insert_index()
@@ -524,7 +461,7 @@ class App(ctk.CTk):
         self.capture_pos_countdown(self.btn_step_click, cb)
 
     def add_key_step(self):
-        key = self.ent_key.get().strip().lower()
+        key = self.var_step_key.get().strip().lower()
         if not key: return
         ins = self.get_insert_index()
         steps.insert(ins, {"type": "key", "key": key})
@@ -532,7 +469,7 @@ class App(ctk.CTk):
         self.set_status(f"已插入按鍵到 #{ins+1}：[{key.upper()}]")
 
     def add_wait_step(self):
-        try: sec = float(self.ent_wait.get())
+        try: sec = float(self.var_step_wait.get())
         except ValueError: return
         if sec <= 0: return
         ins = self.get_insert_index()
@@ -559,9 +496,8 @@ class App(ctk.CTk):
         self.update_step_list()
         self.set_status("已清空執行清單")
 
-    # ======================= 存檔與讀檔 =======================
     def save_config(self):
-        fn = self.ent_cfg_name.get().strip() or "macro_config.json"
+        fn = self.var_cfg_name.get().strip() or "macro_config.json"
         if not fn.endswith(".json"): fn += ".json"
         try:
             with open(fn, "w", encoding="utf-8") as f:
@@ -571,7 +507,7 @@ class App(ctk.CTk):
             self.set_status(f"儲存失敗: {e}")
 
     def load_config(self):
-        fn = self.ent_cfg_name.get().strip() or "macro_config.json"
+        fn = self.var_cfg_name.get().strip() or "macro_config.json"
         if not fn.endswith(".json"): fn += ".json"
         if not os.path.exists(fn): return self.set_status(f"找不到檔案：{fn}")
         try:
@@ -583,7 +519,6 @@ class App(ctk.CTk):
         except Exception as e:
             self.set_status(f"載入失敗: {e}")
 
-    # ======================= 主執行循環 =======================
     def toggle_run(self):
         global running
         if running:
@@ -605,8 +540,8 @@ class App(ctk.CTk):
         round_idx = 1
         try:
             while running and not stop_event.is_set():
-                use_bg = bool(self.chk_use_bg.get()) and IS_WINDOWS and (target_hwnd is not None)
-                try: off_x, off_y = int(self.ent_offset_x.get() or 0), int(self.ent_offset_y.get() or 0)
+                use_bg = self.var_use_bg.get() and IS_WINDOWS and (target_hwnd is not None)
+                try: off_x, off_y = int(self.var_offset_x.get() or 0), int(self.var_offset_y.get() or 0)
                 except Exception: off_x, off_y = 0, 0
 
                 for idx, step in enumerate(steps):
