@@ -122,11 +122,10 @@ class App(tk.Tk):
         self.resizable(False, False)
         self.configure(bg="#15171c")
 
-        # 變數定義
         self.var_profile_name = tk.StringVar()
         self.var_use_bg = tk.BooleanVar(value=True)
         self.var_use_rel = tk.BooleanVar(value=True)
-        self.var_topmost = tk.BooleanVar(value=False)  # 預設不置頂
+        self.var_topmost = tk.BooleanVar(value=False)
         self.var_offset_x = tk.StringVar(value="0")
         self.var_offset_y = tk.StringVar(value="0")
         self.var_window = tk.StringVar(value="未偵測到視窗")
@@ -153,12 +152,9 @@ class App(tk.Tk):
         self.build_right_panel()
         self.refresh_window_dropdown()
         self.refresh_profiles()
-
-        # 啟動游標即時坐標監聽 HUD
         self.track_mouse_live()
 
     def toggle_topmost(self):
-        """動態切換視窗是否置頂"""
         self.attributes("-topmost", self.var_topmost.get())
 
     def set_status(self, msg):
@@ -192,6 +188,131 @@ class App(tk.Tk):
         except Exception:
             pass
         self.after(150, self.track_mouse_live)
+
+    # ======================= 全功能動作編輯通用彈窗 =======================
+    def prompt_edit_action(self, action, available_combos=None):
+        """智慧彈窗：根據動作類型自動識別並編輯坐標、按鍵、停頓秒數或目標組合"""
+        atype = action.get("type")
+        if not atype: return False
+
+        dialog = tk.Toplevel(self)
+        dialog.geometry("280x150")
+        dialog.configure(bg="#1c1f26")
+        dialog.resizable(False, False)
+        dialog.attributes("-topmost", True)
+        dialog.transient(self)
+        dialog.grab_set()
+
+        modified = [False]
+        f = tk.Frame(dialog, bg="#1c1f26", pady=12)
+        f.pack()
+
+        if atype == "click":
+            dialog.title("修改點擊坐標")
+            var_x = tk.StringVar(value=str(action.get("x", 0)))
+            var_y = tk.StringVar(value=str(action.get("y", 0)))
+            tk.Label(f, text="X 坐標:", bg="#1c1f26", fg="#cbd5e1").grid(row=0, column=0, padx=6, pady=4, sticky="e")
+            e_x = tk.Entry(f, textvariable=var_x, width=10, bg="#2d333b", fg="#fff")
+            e_x.grid(row=0, column=1, padx=6, pady=4)
+            tk.Label(f, text="Y 坐標:", bg="#1c1f26", fg="#cbd5e1").grid(row=1, column=0, padx=6, pady=4, sticky="e")
+            e_y = tk.Entry(f, textvariable=var_y, width=10, bg="#2d333b", fg="#fff")
+            e_y.grid(row=1, column=1, padx=6, pady=4)
+            e_x.focus_set()
+
+            def on_ok():
+                try:
+                    action["x"] = int(var_x.get().strip())
+                    action["y"] = int(var_y.get().strip())
+                    modified[0] = True
+                    dialog.destroy()
+                except ValueError:
+                    messagebox.showerror("錯誤", "X 和 Y 必須輸入整數！", parent=dialog)
+
+        elif atype == "key":
+            dialog.title("修改按鍵")
+            var_k = tk.StringVar(value=str(action.get("key", "f1")))
+            tk.Label(f, text="按鍵名稱:", bg="#1c1f26", fg="#cbd5e1").grid(row=0, column=0, padx=6, pady=10, sticky="e")
+            e_k = tk.Entry(f, textvariable=var_k, width=12, bg="#2d333b", fg="#fff")
+            e_k.grid(row=0, column=1, padx=6, pady=10)
+            e_k.focus_set()
+
+            def on_ok():
+                k = var_k.get().strip().lower()
+                if not k:
+                    messagebox.showerror("錯誤", "按鍵名稱不可為空！", parent=dialog)
+                    return
+                action["key"] = k
+                modified[0] = True
+                dialog.destroy()
+
+        elif atype == "wait":
+            dialog.title("修改停頓時間")
+            var_w = tk.StringVar(value=str(action.get("sec", 1.0)))
+            tk.Label(f, text="等待秒數:", bg="#1c1f26", fg="#cbd5e1").grid(row=0, column=0, padx=6, pady=10, sticky="e")
+            e_w = tk.Entry(f, textvariable=var_w, width=10, bg="#2d333b", fg="#fff")
+            e_w.grid(row=0, column=1, padx=6, pady=10)
+            e_w.focus_set()
+
+            def on_ok():
+                try:
+                    sec = float(var_w.get().strip())
+                    if sec <= 0: raise ValueError
+                    action["sec"] = sec
+                    modified[0] = True
+                    dialog.destroy()
+                except ValueError:
+                    messagebox.showerror("錯誤", "停頓時間必須輸入大於 0 的數字！", parent=dialog)
+
+        elif atype == "call_combo":
+            dialog.title("修改呼叫目標組合")
+            curr_tgt = action.get("target_name", "")
+            var_c = tk.StringVar(value=curr_tgt)
+            combos_list = available_combos or [c["name"] for c in combos]
+            tk.Label(f, text="目標組合:", bg="#1c1f26", fg="#cbd5e1").grid(row=0, column=0, padx=6, pady=10, sticky="e")
+            cbo = ttk.Combobox(f, textvariable=var_c, values=combos_list, width=14, state="readonly")
+            cbo.grid(row=0, column=1, padx=6, pady=10)
+            if curr_tgt in combos_list: cbo.set(curr_tgt)
+            elif combos_list: cbo.current(0)
+
+            def on_ok():
+                tgt = var_c.get().strip()
+                if not tgt:
+                    messagebox.showerror("錯誤", "請先選擇有效的組合名稱！", parent=dialog)
+                    return
+                action["target_name"] = tgt
+                modified[0] = True
+                dialog.destroy()
+
+        elif atype == "combo":
+            dialog.title("切換執行組合")
+            curr_c = action.get("name", "")
+            var_mc = tk.StringVar(value=curr_c)
+            combos_list = [c["name"] for c in combos]
+            tk.Label(f, text="切換組合:", bg="#1c1f26", fg="#cbd5e1").grid(row=0, column=0, padx=6, pady=10, sticky="e")
+            cbo = ttk.Combobox(f, textvariable=var_mc, values=combos_list, width=14, state="readonly")
+            cbo.grid(row=0, column=1, padx=6, pady=10)
+            if curr_c in combos_list: cbo.set(curr_c)
+            elif combos_list: cbo.current(0)
+
+            def on_ok():
+                chosen = var_mc.get().strip()
+                match = next((c for c in combos if c["name"] == chosen), None)
+                if match:
+                    action["name"] = match["name"]
+                    action["actions"] = copy.deepcopy(match.get("actions", []))
+                    modified[0] = True
+                dialog.destroy()
+
+        bf = tk.Frame(dialog, bg="#1c1f26")
+        bf.pack(pady=4)
+        tk.Button(bf, text="確定", width=8, bg="#0284c7", fg="#fff", command=on_ok).pack(side="left", padx=5)
+        tk.Button(bf, text="取消", width=8, bg="#334155", fg="#fff", command=dialog.destroy).pack(side="left", padx=5)
+
+        dialog.bind("<Return>", lambda e: on_ok())
+        dialog.bind("<Escape>", lambda e: dialog.destroy())
+
+        self.wait_window(dialog)
+        return modified[0]
 
     # ======================= 左欄佈局 =======================
     def build_left_panel(self):
@@ -230,7 +351,7 @@ class App(tk.Tk):
         tk.Button(r3, text="重新整理", bg="#334155", fg="#fff", command=self.refresh_window_dropdown).pack(side="left", padx=2)
 
         # 2. 技能組合區塊 (左右雙分欄)
-        f_combo = tk.LabelFrame(f_left, text=" 技能組合庫 (雙擊動作清單可直接修改坐標) ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
+        f_combo = tk.LabelFrame(f_left, text=" 技能組合庫 (雙擊動作清單可直接修改任意內容) ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
         f_combo.pack(fill="both", expand=True)
 
         f_combo_split = tk.Frame(f_combo, bg="#1c1f26")
@@ -300,7 +421,7 @@ class App(tk.Tk):
         self.cbo_call_combo.pack(side="left", padx=2, fill="x", expand=True)
         tk.Button(f_cr_call, text="+呼叫", width=5, bg="#0284c7", fg="#fff", command=self.combo_add_call_action).pack(side="left", padx=1)
 
-        # 動作 Listbox
+        # 動作 Listbox (支援雙擊編輯任意項目)
         f_cr_box = tk.Frame(f_cr, bg="#15171c")
         f_cr_box.pack(fill="both", expand=True, pady=3)
         self.combo_act_listbox = tk.Listbox(f_cr_box, bg="#15171c", fg="#f1f5f9", selectbackground="#0284c7", selectforeground="#fff", bd=0, highlightthickness=0, font=("Segoe UI", 9), exportselection=False)
@@ -315,7 +436,7 @@ class App(tk.Tk):
         tk.Button(cr_act_ctrl, text="上移", width=5, bg="#334155", fg="#fff", command=lambda: self.move_combo_action(-1)).pack(side="left", padx=1)
         tk.Button(cr_act_ctrl, text="下移", width=5, bg="#334155", fg="#fff", command=lambda: self.move_combo_action(1)).pack(side="left", padx=1)
         tk.Button(cr_act_ctrl, text="複製", width=5, bg="#0284c7", fg="#fff", command=self.duplicate_combo_action).pack(side="left", padx=1)
-        tk.Button(cr_act_ctrl, text="修改坐標", width=7, bg="#334155", fg="#fff", command=self.edit_selected_combo_action_coord).pack(side="left", padx=1)
+        tk.Button(cr_act_ctrl, text="修改動作", width=7, bg="#334155", fg="#fff", command=self.edit_selected_combo_action).pack(side="left", padx=1)
         tk.Button(cr_act_ctrl, text="刪除", width=5, bg="#b91c1c", fg="#fff", command=self.delete_combo_action).pack(side="left", padx=1)
         tk.Button(cr_act_ctrl, text="清空", width=5, bg="#b91c1c", fg="#fff", command=self.clear_combo_actions).pack(side="right", padx=1)
 
@@ -325,7 +446,7 @@ class App(tk.Tk):
         f_right.grid(row=0, column=1, padx=(5, 10), pady=10, sticky="nsew")
 
         # 1. 微步新增
-        f_step = tk.LabelFrame(f_right, text=" 單獨新增微步 (雙擊清單可直接修改坐標) ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
+        f_step = tk.LabelFrame(f_right, text=" 單獨新增微步 (雙擊清單可直接修改任意動作) ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
         f_step.pack(fill="x", pady=(0, 6))
 
         sr_click = tk.Frame(f_step, bg="#1c1f26")
@@ -348,7 +469,7 @@ class App(tk.Tk):
         tk.Entry(sr, textvariable=self.var_step_wait, width=4, bg="#2d333b", fg="#fff").pack(side="left", padx=3)
         tk.Button(sr, text="加停頓", width=7, bg="#334155", fg="#fff", command=self.add_main_wait_step).pack(side="left", padx=2)
 
-        # 2. 執行順序清單
+        # 2. 執行順序清單 (支援雙擊編輯任意步驟)
         f_seq = tk.LabelFrame(f_right, text=" 執行順序清單 (由上至下循環) ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
         f_seq.pack(fill="both", expand=True)
 
@@ -366,7 +487,7 @@ class App(tk.Tk):
         tk.Button(sr2, text="上移", width=5, bg="#334155", fg="#fff", command=lambda: self.move_main_step(-1)).pack(side="left", padx=1)
         tk.Button(sr2, text="下移", width=5, bg="#334155", fg="#fff", command=lambda: self.move_main_step(1)).pack(side="left", padx=1)
         tk.Button(sr2, text="複製", width=5, bg="#0284c7", fg="#fff", activebackground="#0369a1", command=self.duplicate_main_step).pack(side="left", padx=1)
-        tk.Button(sr2, text="修改坐標", width=7, bg="#334155", fg="#fff", command=self.edit_selected_main_step_coord).pack(side="left", padx=1)
+        tk.Button(sr2, text="修改動作", width=7, bg="#334155", fg="#fff", command=self.edit_selected_main_step).pack(side="left", padx=1)
         tk.Button(sr2, text="刪除", width=5, bg="#b91c1c", fg="#fff", command=self.delete_main_step).pack(side="left", padx=1)
         tk.Button(sr2, text="清空清單", width=7, bg="#b91c1c", fg="#fff", command=self.clear_main_steps).pack(side="right", padx=1)
 
@@ -381,47 +502,6 @@ class App(tk.Tk):
         self.lbl_status.pack(fill="x", pady=(0, 3))
         self.btn_toggle = tk.Button(bot, text="開始循環執行", height=2, bg="#16a34a", fg="#ffffff", font=("Segoe UI", 11, "bold"), activebackground="#15803d", command=self.toggle_run)
         self.btn_toggle.pack(fill="x")
-
-    # ======================= 坐標彈窗快速編輯 =======================
-    def prompt_edit_coord(self, old_x, old_y):
-        dialog = tk.Toplevel(self)
-        dialog.title("修改點擊坐標")
-        dialog.geometry("240x120")
-        dialog.configure(bg="#1c1f26")
-        dialog.resizable(False, False)
-        dialog.attributes("-topmost", True)
-        dialog.transient(self)
-        dialog.grab_set()
-
-        var_x = tk.StringVar(value=str(old_x))
-        var_y = tk.StringVar(value=str(old_y))
-        res = [None]
-
-        f = tk.Frame(dialog, bg="#1c1f26", pady=10)
-        f.pack()
-        tk.Label(f, text="X:", bg="#1c1f26", fg="#cbd5e1").grid(row=0, column=0, padx=5, pady=5)
-        e_x = tk.Entry(f, textvariable=var_x, width=8, bg="#2d333b", fg="#fff")
-        e_x.grid(row=0, column=1, padx=5, pady=5)
-
-        tk.Label(f, text="Y:", bg="#1c1f26", fg="#cbd5e1").grid(row=1, column=0, padx=5, pady=5)
-        e_y = tk.Entry(f, textvariable=var_y, width=8, bg="#2d333b", fg="#fff")
-        e_y.grid(row=1, column=1, padx=5, pady=5)
-
-        def on_ok():
-            try:
-                res[0] = (int(var_x.get().strip()), int(var_y.get().strip()))
-                dialog.destroy()
-            except ValueError:
-                messagebox.showerror("錯誤", "X 和 Y 必須是整數！", parent=dialog)
-
-        bf = tk.Frame(dialog, bg="#1c1f26")
-        bf.pack(pady=2)
-        tk.Button(bf, text="確定", width=8, bg="#0284c7", fg="#fff", command=on_ok).pack(side="left", padx=5)
-        tk.Button(bf, text="取消", width=8, bg="#334155", fg="#fff", command=dialog.destroy).pack(side="left", padx=5)
-
-        e_x.focus_set()
-        self.wait_window(dialog)
-        return res[0]
 
     # ======================= 設定檔管理 =======================
     def get_profile_files(self):
@@ -735,23 +815,23 @@ class App(tk.Tk):
         self.sync_combo_actions_to_main_steps(combos[idx]["name"], actions)
         self.set_status(f"已手動在組合加入點擊: ({x}, {y})")
 
-    def edit_selected_combo_action_coord(self):
+    # 組合動作修改（按鈕或雙擊呼叫）
+    def edit_selected_combo_action(self):
         c_idx = self.get_selected_combo_idx()
         a_idx = self.get_selected_action_idx()
         if c_idx is None or a_idx is None: return self.set_status("請先選擇組合動作！")
-        act = combos[c_idx]["actions"][a_idx]
-        if act.get("type") != "click":
-            return self.set_status("該動作不是點擊動作，無法修改坐標！")
 
-        new_pt = self.prompt_edit_coord(act["x"], act["y"])
-        if new_pt:
-            act["x"], act["y"] = new_pt
+        act = combos[c_idx]["actions"][a_idx]
+        curr_combo_name = combos[c_idx]["name"]
+        avail_combos = [c["name"] for c in combos if c["name"] != curr_combo_name]
+
+        if self.prompt_edit_action(act, available_combos=avail_combos):
             self.refresh_combo_actions_list(select_idx=a_idx)
             self.sync_combo_actions_to_main_steps(combos[c_idx]["name"], combos[c_idx]["actions"])
-            self.set_status(f"已更新組合動作坐標為: ({new_pt[0]}, {new_pt[1]})")
+            self.set_status(f"已成功更新組合動作 #{a_idx+1}")
 
     def on_double_click_combo_action(self, event=None):
-        self.edit_selected_combo_action_coord()
+        self.edit_selected_combo_action()
 
     def combo_add_key_action(self):
         idx = self.get_selected_combo_idx()
@@ -894,22 +974,19 @@ class App(tk.Tk):
         self.update_step_list(ins)
         self.set_status(f"已手動插入點擊到主清單 #{ins+1}: ({x}, {y})")
 
-    def edit_selected_main_step_coord(self):
+    # 主步驟修改（按鈕或雙擊呼叫）
+    def edit_selected_main_step(self):
         sel = self.step_listbox.curselection()
-        if not sel: return self.set_status("請先在清單選擇步驟！")
+        if not sel: return self.set_status("請先在主清單選擇步驟！")
         idx = sel[0]
         s = steps[idx]
-        if s.get("type") != "click":
-            return self.set_status("所選步驟不是點擊，無法修改坐標！")
 
-        new_pt = self.prompt_edit_coord(s["x"], s["y"])
-        if new_pt:
-            s["x"], s["y"] = new_pt
+        if self.prompt_edit_action(s):
             self.update_step_list(idx)
-            self.set_status(f"已更新步驟 #{idx+1} 坐標為: ({new_pt[0]}, {new_pt[1]})")
+            self.set_status(f"已成功更新主步驟 #{idx+1}")
 
     def on_double_click_main_step(self, event=None):
-        self.edit_selected_main_step_coord()
+        self.edit_selected_main_step()
 
     def add_main_key_step(self):
         key = self.var_step_key.get().strip().lower()
