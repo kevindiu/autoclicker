@@ -101,11 +101,6 @@ def on_window_select(sender, app_data):
 
 def post_bg_click(hwnd, step_x, step_y, is_rel=False):
     if not IS_WINDOWS or not hwnd:
-        if is_rel and IS_WINDOWS and hwnd:
-            pt = POINT(int(step_x), int(step_y))
-            user32.ClientToScreen(hwnd, ctypes.byref(pt))
-            pyautogui.click(pt.x, pt.y)
-            return pt.x, pt.y
         pyautogui.click(step_x, step_y)
         return int(step_x), int(step_y)
 
@@ -119,7 +114,6 @@ def post_bg_click(hwnd, step_x, step_y, is_rel=False):
         cx = int(step_x) + offset_x
         cy = int(step_y) + offset_y
     else:
-        # 相容舊版絕對坐標
         pt = POINT(int(step_x), int(step_y))
         user32.ScreenToClient(hwnd, ctypes.byref(pt))
         cx = pt.x + offset_x
@@ -166,7 +160,6 @@ def countdown_combo_target():
     pos = pyautogui.position()
     global temp_combo_target
     
-    # 核心修復：立即換算為視窗相對坐標存檔
     if IS_WINDOWS and target_hwnd:
         pt = POINT(int(pos.x), int(pos.y))
         user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
@@ -179,6 +172,9 @@ def countdown_combo_target():
         dpg.set_value("lbl_status", f"已鎖定目標坐標：({pos.x}, {pos.y})")
         
     dpg.configure_item("btn_combo_target", enabled=True)
+
+def record_combo_target():
+    threading.Thread(target=countdown_combo_target, daemon=True).start()
 
 def clear_combo_target():
     global temp_combo_target
@@ -349,7 +345,6 @@ def countdown_click(insert_at):
         time.sleep(1)
     pos = pyautogui.position()
     
-    # 核心修復：即時計算相對坐標，讓視窗可隨意移動
     if IS_WINDOWS and target_hwnd:
         pt = POINT(int(pos.x), int(pos.y))
         user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
