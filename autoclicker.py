@@ -41,7 +41,7 @@ if IS_WINDOWS:
     user32.ScreenToClient.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
     user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
     user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-    user32.FlashWindow.argtypes = [wintypes.HWND, wintypes.BOOL]
+    user32.FlashWindow.argtypes = [wintypes.HWND, ctypes.BOOL]
     user32.SetForegroundWindow.argtypes = [wintypes.HWND]
     user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
     user32.BringWindowToTop.argtypes = [wintypes.HWND]
@@ -62,9 +62,10 @@ VK_MAP = {
 def safe_sleep(seconds):
     end = time.time() + float(seconds)
     while time.time() < end:
-        if not is_testing:
-            if not running or stop_event.is_set() or reload_requested:
-                return False
+        if stop_event.is_set():
+            return False
+        if not is_testing and (not running or reload_requested):
+            return False
         time.sleep(0.02)
     return True
 
@@ -290,6 +291,9 @@ class App(tk.Tk):
         self.resizable(False, False)
         self.configure(bg="#15171c")
 
+        self.is_closing = False
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+
         self.var_profile_name = tk.StringVar()
         self.var_use_bg = tk.BooleanVar(value=True)
         self.var_use_rel = tk.BooleanVar(value=True)
@@ -327,14 +331,23 @@ class App(tk.Tk):
         self.refresh_profiles()
         self.track_mouse_live()
 
+    def on_close(self):
+        self.is_closing = True
+        global running
+        running = False
+        stop_event.set()
+        self.destroy()
+
     def toggle_topmost(self):
         self.attributes("-topmost", self.var_topmost.get())
 
     def set_status(self, msg):
-        self.after(0, lambda: self.lbl_status.config(text=f"狀態: {msg}"))
+        if not self.is_closing:
+            self.after(0, lambda: self.lbl_status.config(text=f"狀態: {msg}"))
 
     def set_running_ui(self, is_running):
         def _u():
+            if self.is_closing: return
             if is_running:
                 self.btn_toggle.config(text="停止執行", bg="#dc2626", activebackground="#b91c1c")
                 self.f_hot.pack(fill="x", pady=(6, 2))
@@ -345,6 +358,8 @@ class App(tk.Tk):
         self.after(0, _u)
 
     def track_mouse_live(self):
+        if self.is_closing:
+            return
         try:
             pos = pyautogui.position()
             if IS_WINDOWS and target_hwnd and self.var_use_rel.get():
@@ -375,6 +390,7 @@ class App(tk.Tk):
             pass
 
     def force_bring_self_to_front(self):
+        if self.is_closing: return
         self.deiconify()
         self.lift()
         self.focus_force()
@@ -397,7 +413,7 @@ class App(tk.Tk):
         except Exception as e:
             self.set_status(f"定位失敗: {e}")
 
-    # ======================= 取點：按 SPACE 記錄 + 純文字頂部提示 =======================
+    # ======================= 取點防重入機制 + 頂部提示 =======================
     def capture_pos_space(self, on_finish, on_cancel=None, btn="left"):
         global target_hwnd
         val = self.var_window.get()
@@ -413,7 +429,6 @@ class App(tk.Tk):
             return
 
         btn_cn = "右鍵" if btn == "right" else "左鍵"
-
         self.force_bring_window_to_front(target_hwnd)
         self.set_status(f"【設定{btn_cn}點擊】遊戲已置頂！請將滑鼠指住目標，按 [SPACE 空白鍵] 確定")
 
@@ -444,8 +459,10 @@ class App(tk.Tk):
             user32.GetAsyncKeyState(0x20)
             user32.GetAsyncKeyState(0x1B)
 
+        is_handled = [False]
+
         def poll_keys():
-            if not banner.winfo_exists():
+            if not banner.winfo_exists() or is_handled[0]:
                 return
 
             pos = pyautogui.position()
@@ -462,6 +479,7 @@ class App(tk.Tk):
 
             if IS_WINDOWS:
                 if user32.GetAsyncKeyState(0x20) & 0x8000:
+                    is_handled[0] = True
                     banner.destroy()
                     self.force_bring_self_to_front()
                     self.set_status(f"已成功設定{btn_cn}位置: ({rx}, {ry})")
@@ -469,6 +487,7 @@ class App(tk.Tk):
                     return
 
                 if user32.GetAsyncKeyState(0x1B) & 0x8000:
+                    is_handled[0] = True
                     banner.destroy()
                     self.force_bring_self_to_front()
                     self.set_status("已取消設定位置")
@@ -797,7 +816,7 @@ class App(tk.Tk):
         tk.Button(r3, text="定位視窗", bg="#4f46e5", fg="#fff", activebackground="#4338ca", command=self.locate_target_window).pack(side="left", padx=2)
 
         # 2. 技能組合區塊
-        f_combo = tk.LabelFrame(f_left, text=" 技能組合庫 (右側真實 Checkbox: 啟用/停用 | 雙擊: 修改動作) ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
+        f_combo = tk.LabelFrame(f_left, text=" 技能組合庫 (右側真實 Checkbox: 啟用/停用 | 雙擊: 加入掛機流程) ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
         f_combo.pack(fill="both", expand=True)
 
         f_combo_split = tk.Frame(f_combo, bg="#1c1f26")
@@ -806,11 +825,11 @@ class App(tk.Tk):
         f_combo_split.grid_columnconfigure(1, weight=6)
         f_combo_split.grid_rowconfigure(0, weight=1)
 
-        # 2-A. 組合清單
+        # 2-A. 組合清單 (支援雙擊加入掛機流程)
         f_cl = tk.Frame(f_combo_split, bg="#1c1f26", padx=4, pady=2)
         f_cl.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
 
-        tk.Label(f_cl, text="【組合清單】", bg="#1c1f26", fg="#94a3b8", font=("Segoe UI", 9, "bold")).pack(anchor="w")
+        tk.Label(f_cl, text="【組合清單 (雙擊加入)】", bg="#1c1f26", fg="#94a3b8", font=("Segoe UI", 9, "bold")).pack(anchor="w")
 
         cr_name = tk.Frame(f_cl, bg="#1c1f26")
         cr_name.pack(fill="x", pady=2)
@@ -824,6 +843,7 @@ class App(tk.Tk):
         self.combo_listbox = tk.Listbox(f_cl_box, bg="#15171c", fg="#f1f5f9", selectbackground="#2563eb", selectforeground="#fff", bd=0, highlightthickness=0, font=("Segoe UI", 10), exportselection=False)
         self.combo_listbox.pack(side="left", fill="both", expand=True)
         self.combo_listbox.bind("<<ListboxSelect>>", self.on_combo_select)
+        self.combo_listbox.bind("<Double-Button-1>", self.on_combo_double_click_add) # 雙擊加入掛機流程
         sc_cl = tk.Scrollbar(f_cl_box, orient="vertical", command=self.combo_listbox.yview)
         sc_cl.pack(side="right", fill="y")
         self.combo_listbox.config(yscrollcommand=sc_cl.set)
@@ -974,7 +994,22 @@ class App(tk.Tk):
         self.btn_toggle = tk.Button(bot, text="開始循環執行", height=2, bg="#16a34a", fg="#ffffff", font=("Segoe UI", 11, "bold"), activebackground="#15803d", command=self.toggle_run)
         self.btn_toggle.pack(fill="x")
 
-    # ======================= 設定檔管理 =======================
+    def on_combo_double_click_add(self, event):
+        """雙擊組合清單時直接加入掛機流程"""
+        sel = self.combo_listbox.curselection()
+        if not sel: return
+        idx = sel[0]
+        if not (0 <= idx < len(combos)): return
+        c = combos[idx]
+        if not c.get("actions"):
+            return self.set_status(f"組合 [{c['name']}] 內尚未加入任何動作！")
+
+        ins = self.get_main_insert_index()
+        steps.insert(ins, {"type": "combo", "name": c["name"], "actions": copy.deepcopy(c["actions"]), "enabled": True})
+        self.update_step_list(select_idx=ins)
+        self.set_status(f"已透過雙擊將組合 [{c['name']}] 加入掛機流程 #{ins+1}")
+
+    # ======================= 設定檔管理 (附帶 Schema 遷移) =======================
     def get_profile_files(self):
         try:
             return sorted([f[:-len(CONFIG_EXT)] for f in os.listdir(".") if f.endswith(CONFIG_EXT)])
@@ -1039,6 +1074,18 @@ class App(tk.Tk):
             with open(fn, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
+            for c in data.get("combos", []):
+                for act in c.get("actions", []):
+                    if act.get("type") == "click" and "btn" not in act:
+                        act["btn"] = "left"
+            for s in data.get("steps", []):
+                if s.get("type") == "click" and "btn" not in s:
+                    s["btn"] = "left"
+                if s.get("type") == "combo":
+                    for act in s.get("actions", []):
+                        if act.get("type") == "click" and "btn" not in act:
+                            act["btn"] = "left"
+
             combos.clear()
             combos.extend(data.get("combos", []))
             steps.clear()
@@ -1053,7 +1100,10 @@ class App(tk.Tk):
 
     # ======================= 視窗綁定 =======================
     def get_window_list(self):
-        if not IS_WINDOWS: return []
+        if IS_WINDOWS:
+            pass
+        else:
+            return []
         windows = []
         def enum_proc(hwnd, lParam):
             if user32.IsWindowVisible(hwnd) and user32.GetWindowTextLengthW(hwnd) > 0:
