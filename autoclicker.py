@@ -32,18 +32,45 @@ IS_WINDOWS = hasattr(ctypes, "windll")
 class POINT(ctypes.Structure):
     _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
 
+class MSLLHOOKSTRUCT(ctypes.Structure):
+    _fields_ = [
+        ("pt", POINT),
+        ("mouseData", wintypes.DWORD),
+        ("flags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", ctypes.c_size_t)
+    ]
+
+HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_int, wintypes.WPARAM, ctypes.POINTER(MSLLHOOKSTRUCT))
+
+WH_MOUSE_LL = 14
+WM_LBUTTONDOWN = 0x0201
+WM_LBUTTONUP = 0x0202
+
 if IS_WINDOWS:
     for fn in (lambda: ctypes.windll.shcore.SetProcessDpiAwareness(2), lambda: ctypes.windll.user32.SetProcessDPIAware()):
         try: fn(); break
         except Exception: pass
 
     user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+
     user32.ScreenToClient.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
     user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
     user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
     user32.FlashWindow.argtypes = [wintypes.HWND, wintypes.BOOL]
     user32.SetForegroundWindow.argtypes = [wintypes.HWND]
     user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.BringWindowToTop.argtypes = [wintypes.HWND]
+    user32.SetWindowPos.argtypes = [wintypes.HWND, ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
+    user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ctypes.c_size_t]
+    user32.GetAsyncKeyState.argtypes = [ctypes.c_int]
+
+    user32.SetWindowsHookExW.argtypes = [ctypes.c_int, HOOKPROC, wintypes.HINSTANCE, wintypes.DWORD]
+    user32.SetWindowsHookExW.restype = wintypes.HHOOK
+    user32.UnhookWindowsHookEx.argtypes = [wintypes.HHOOK]
+    user32.CallNextHookEx.argtypes = [wintypes.HHOOK, ctypes.c_int, wintypes.WPARAM, ctypes.c_void_p]
+    user32.PostThreadMessageW.argtypes = [wintypes.DWORD, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
 
 VK_MAP = {
     "space": 0x20, "enter": 0x0D, "return": 0x0D, "esc": 0x1B, "escape": 0x1B,
@@ -325,7 +352,6 @@ class App(tk.Tk):
             if is_running:
                 self.btn_toggle.config(text="停止執行", bg="#dc2626", activebackground="#b91c1c")
                 self.f_hot.pack(fill="x", pady=(6, 2))
-                self.view_active_steps()
             else:
                 self.btn_toggle.config(text="開始循環執行", bg="#16a34a", activebackground="#15803d")
                 self.f_hot.pack_forget()
@@ -345,14 +371,42 @@ class App(tk.Tk):
             pass
         self.after(150, self.track_mouse_live)
 
+    # ======================= 強制喚醒與置頂視窗工具 =======================
+    def force_bring_window_to_front(self, hwnd):
+        """突破 Windows 前台鎖定，強制還原並帶到最前面"""
+        if not IS_WINDOWS or not hwnd:
+            return
+        try:
+            user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            SWP_FLAGS = 0x0001 | 0x0002 | 0x0040
+            user32.SetWindowPos(hwnd, ctypes.c_void_p(-1), 0, 0, 0, 0, SWP_FLAGS)
+            user32.SetWindowPos(hwnd, ctypes.c_void_p(-2), 0, 0, 0, 0, SWP_FLAGS)
+
+            user32.keybd_event(0x12, 0, 0, 0)
+            user32.keybd_event(0x12, 0, 2, 0)
+
+            user32.SetForegroundWindow(hwnd)
+            user32.BringWindowToTop(hwnd)
+        except Exception:
+            pass
+
+    def force_bring_self_to_front(self):
+        """將連點器主視窗強制彈回最前"""
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+        if IS_WINDOWS:
+            hwnd_self = user32.FindWindowW(None, WINDOW_TITLE)
+            if hwnd_self:
+                self.force_bring_window_to_front(hwnd_self)
+
     def locate_target_window(self):
         global target_hwnd
         if not IS_WINDOWS or not target_hwnd:
             return self.set_status("未綁定有效視窗，無法定位！")
 
         try:
-            user32.ShowWindow(target_hwnd, 9)
-            user32.SetForegroundWindow(target_hwnd)
+            self.force_bring_window_to_front(target_hwnd)
             for _ in range(4):
                 user32.FlashWindow(target_hwnd, True)
                 time.sleep(0.08)
@@ -360,61 +414,96 @@ class App(tk.Tk):
         except Exception as e:
             self.set_status(f"定位失敗: {e}")
 
-    # ======================= 全螢幕透明遮罩取點 (點擊自動彈出遊戲) =======================
-    def capture_pos_overlay(self, on_finish, on_cancel=None):
-        """取點前先將遊戲帶到最前還原，然後覆蓋全螢幕半透明遮罩以十字準星取點"""
-        # 1. 若已綁定目標視窗，取點前先自動將遊戲彈出並帶到最前
-        if IS_WINDOWS and target_hwnd:
+    # ======================= 方案 3：底層 Mouse Hook 點擊取點 (原生 Hover + 吞噬點擊 + 彈回) =======================
+    def capture_pos_hook(self, on_finish, on_cancel=None):
+        global target_hwnd
+        val = self.var_window.get()
+        if val and val.startswith("["):
             try:
-                user32.ShowWindow(target_hwnd, 9)  # SW_RESTORE (若最小化則自動復原)
-                user32.SetForegroundWindow(target_hwnd)
-                time.sleep(0.12)  # 留出 120ms 緩衝讓遊戲視窗繪製到畫面上
+                target_hwnd = int(val.split("]")[0].replace("[", ""))
             except Exception:
                 pass
 
-        self.set_status("【十字取點中】請直接左鍵點擊遊戲目標位置（按 Esc 取消）")
+        if not target_hwnd:
+            messagebox.showwarning("提示", "尚未綁定目標視窗，請先在上方選擇遊戲視窗！", parent=self)
+            if on_cancel: on_cancel()
+            return
 
-        # 2. 鋪設全螢幕半透明遮罩視窗
-        overlay = tk.Toplevel(self)
-        overlay.attributes("-fullscreen", True)
-        overlay.attributes("-alpha", 0.12)  # 微暗半透明，讓遊戲畫面完全可見
-        overlay.configure(bg="#000000", cursor="crosshair")
-        overlay.attributes("-topmost", True)
+        # 1. 第一步：先將遊戲視窗強制彈出並帶到最前面
+        self.force_bring_window_to_front(target_hwnd)
+        self.set_status("【取點模式】已切換至遊戲！請正常指住目標（Hover正常顯示），按左鍵吸取坐標（按 Esc 取消）")
 
-        banner = tk.Label(
-            overlay,
-            text="★ 十字準星取點：請直接左鍵點擊目標位置（按 Esc 鍵取消）★",
-            bg="#0284c7",
-            fg="#ffffff",
-            font=("Segoe UI", 11, "bold"),
-            padx=16,
-            pady=8
-        )
-        banner.pack(pady=20)
+        # 2. 啟動背景 Hook 線程監聽左鍵點擊
+        def hook_worker():
+            h_hook = None
+            hook_thread_id = kernel32.GetCurrentThreadId()
+            captured = False
+            click_point = [0, 0]
 
-        def on_click(event):
-            x_root, y_root = event.x_root, event.y_root
-            overlay.destroy()
+            def low_level_mouse_proc(nCode, wParam, lParam):
+                nonlocal captured
+                if nCode >= 0:
+                    if wParam == WM_LBUTTONDOWN:
+                        captured = True
+                        pt = lParam.contents.pt
+                        click_point[0], click_point[1] = pt.x, pt.y
+                        # 收到左鍵瞬間停止該線程訊息泵
+                        user32.PostThreadMessageW(hook_thread_id, 0x0012, 0, 0) # WM_QUIT
+                        return 1  # ★ 核心：回傳 1，徹底吞噬這一次左鍵點擊，遊戲完全收唔到！
+                    elif wParam == WM_LBUTTONUP and captured:
+                        return 1  # 同步吞噬放開訊號
+                return user32.CallNextHookEx(h_hook, nCode, wParam, lParam)
 
-            use_rel = self.var_use_rel.get()
-            if use_rel and IS_WINDOWS and target_hwnd:
-                pt = POINT(int(x_root), int(y_root))
-                user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
-                rx, ry, rel = pt.x, pt.y, True
+            hook_cb = HOOKPROC(low_level_mouse_proc)
+            h_hook = user32.SetWindowsHookExW(WH_MOUSE_LL, hook_cb, kernel32.GetModuleHandleW(None), 0)
+            if not h_hook:
+                self.set_status("Hook 安裝失敗，請重試")
+                self.after(0, self.force_bring_self_to_front)
+                if on_cancel: self.after(0, on_cancel)
+                return
+
+            # Esc 取消監聽線程
+            is_active = True
+            def esc_watcher():
+                while is_active:
+                    if user32.GetAsyncKeyState(0x1B) & 0x8000: # Esc
+                        user32.PostThreadMessageW(hook_thread_id, 0x0012, 0, 0)
+                        break
+                    time.sleep(0.04)
+            threading.Thread(target=esc_watcher, daemon=True).start()
+
+            # 訊息循環等待那一次點擊
+            msg = wintypes.MSG()
+            while user32.GetMessageW(ctypes.byref(msg), 0, 0, 0) > 0:
+                user32.TranslateMessage(ctypes.byref(msg))
+                user32.DispatchMessageW(ctypes.byref(msg))
+
+            is_active = False
+            user32.UnhookWindowsHookEx(h_hook)
+
+            # 3. 處理點擊結果或取消，並自動將連點器視窗彈番出嚟
+            if captured:
+                gx, gy = click_point[0], click_point[1]
+                use_rel = self.var_use_rel.get()
+                if use_rel and IS_WINDOWS and target_hwnd:
+                    pt = POINT(int(gx), int(gy))
+                    user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
+                    rx, ry, rel = pt.x, pt.y, True
+                else:
+                    rx, ry, rel = gx, gy, False
+
+                def _done():
+                    self.force_bring_self_to_front()
+                    on_finish(rx, ry, rel)
+                self.after(10, _done)
             else:
-                rx, ry, rel = x_root, y_root, False
+                def _abort():
+                    self.force_bring_self_to_front()
+                    self.set_status("已取消取點")
+                    if on_cancel: on_cancel()
+                self.after(10, _abort)
 
-            on_finish(rx, ry, rel)
-
-        def on_esc(event=None):
-            overlay.destroy()
-            self.set_status("已取消取點")
-            if on_cancel:
-                on_cancel()
-
-        overlay.bind("<Button-1>", on_click)
-        overlay.bind("<Escape>", on_esc)
-        overlay.focus_force()
+        threading.Thread(target=hook_worker, daemon=True).start()
 
     # ======================= 彈窗內部高亮與熱更新邏輯 =======================
     def highlight_active_step(self, idx):
@@ -561,25 +650,29 @@ class App(tk.Tk):
             e_y = tk.Entry(f, textvariable=var_y, width=10, bg="#2d333b", fg="#fff")
             e_y.grid(row=1, column=1, padx=6, pady=3)
 
-            btn_rec = tk.Button(f, text="點擊取點 (十字準星)", width=18, bg="#0284c7", fg="#fff")
+            btn_rec = tk.Button(f, text="取點 (點擊左鍵)", width=18, bg="#0284c7", fg="#fff")
             btn_rec.grid(row=2, column=0, columnspan=2, pady=(6, 2))
 
             def do_rec():
                 dialog.grab_release()
                 dialog.withdraw()
 
-                def on_finish_overlay(rx, ry, rel):
+                def on_finish_hook(rx, ry, rel):
                     dialog.deiconify()
+                    dialog.lift()
+                    dialog.focus_force()
                     dialog.grab_set()
                     var_x.set(str(rx))
                     var_y.set(str(ry))
                     self.set_status(f"已獲取坐標: ({rx}, {ry})")
 
-                def on_cancel_overlay():
+                def on_cancel_hook():
                     dialog.deiconify()
+                    dialog.lift()
+                    dialog.focus_force()
                     dialog.grab_set()
 
-                self.capture_pos_overlay(on_finish_overlay, on_cancel_overlay)
+                self.capture_pos_hook(on_finish_hook, on_cancel_hook)
 
             btn_rec.config(command=do_rec)
             e_x.focus_set()
@@ -763,10 +856,10 @@ class App(tk.Tk):
         self.lbl_combo_editing.pack(side="left")
         tk.Button(f_cr_top, text="▶ 試跑此組合", bg="#16a34a", fg="#fff", activebackground="#15803d", command=self.test_run_current_combo).pack(side="right", padx=1)
 
-        # 點擊新增列
+        # 點擊新增列 (方案3：點擊取點)
         f_cr_click = tk.Frame(f_cr, bg="#1c1f26")
         f_cr_click.pack(fill="x", pady=1)
-        self.btn_combo_add_click = tk.Button(f_cr_click, text="十字取點", width=8, bg="#0284c7", fg="#fff", command=self.combo_add_click_action)
+        self.btn_combo_add_click = tk.Button(f_cr_click, text="取點(點擊左鍵)", width=12, bg="#0284c7", fg="#fff", command=self.combo_add_click_action)
         self.btn_combo_add_click.pack(side="left", padx=1)
         tk.Label(f_cr_click, text="X:", bg="#1c1f26", fg="#cbd5e1").pack(side="left", padx=(3, 0))
         tk.Entry(f_cr_click, textvariable=self.var_combo_manual_x, width=4, bg="#2d333b", fg="#fff").pack(side="left", padx=1)
@@ -817,13 +910,13 @@ class App(tk.Tk):
         f_right = tk.Frame(self, bg="#1c1f26", padx=8, pady=8, highlightbackground="#2d333b", highlightthickness=1)
         f_right.grid(row=0, column=1, padx=(5, 10), pady=10, sticky="nsew")
 
-        # 1. 微步新增
+        # 1. 微步新增 (方案3：點擊取點)
         f_step = tk.LabelFrame(f_right, text=" 單獨新增微步 (右側真實 Checkbox: 啟用/停用 | 雙擊: 修改動作) ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
         f_step.pack(fill="x", pady=(0, 6))
 
         sr_click = tk.Frame(f_step, bg="#1c1f26")
         sr_click.pack(fill="x", pady=2)
-        self.btn_step_click = tk.Button(sr_click, text="十字取點 (左鍵)", width=13, bg="#0284c7", fg="#fff", command=self.add_main_click_step)
+        self.btn_step_click = tk.Button(sr_click, text="取點 (點擊左鍵)", width=14, bg="#0284c7", fg="#fff", command=self.add_main_click_step)
         self.btn_step_click.pack(side="left", padx=2)
         tk.Label(sr_click, text="手動 X:", bg="#1c1f26", fg="#cbd5e1").pack(side="left", padx=(5, 1))
         tk.Entry(sr_click, textvariable=self.var_step_manual_x, width=4, bg="#2d333b", fg="#fff").pack(side="left", padx=1)
@@ -1218,7 +1311,7 @@ class App(tk.Tk):
             self.sync_combo_actions_to_main_steps(combos[idx]["name"], actions)
             self.set_status(f"已在組合加入點擊 ({x},{y})")
 
-        self.capture_pos_overlay(cb)
+        self.capture_pos_hook(cb)
 
     def combo_add_manual_click(self):
         idx = self.get_selected_combo_idx()
@@ -1408,7 +1501,7 @@ class App(tk.Tk):
             steps.insert(ins, {"type": "click", "x": x, "y": y, "rel": rel, "enabled": True})
             self.update_step_list(ins)
             self.set_status(f"已插入點擊到主清單 #{ins+1}")
-        self.capture_pos_overlay(cb)
+        self.capture_pos_hook(cb)
 
     def add_main_manual_click(self):
         try:
@@ -1507,7 +1600,7 @@ class App(tk.Tk):
                     if not sub_act.get("enabled", True): continue
                     self.execute_single_action(sub_act, f"{desc}->[{tgt_name}#{sub_idx+1}]")
 
-    # ======================= 主執行引擎 (支援無縫熱更新與彈窗高亮) =======================
+    # ======================= 主執行引擎 =======================
     def toggle_run(self):
         global running, active_steps, reload_requested
         if running:
