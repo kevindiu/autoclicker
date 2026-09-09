@@ -16,10 +16,13 @@ WINDOW_TITLE = "水滸歷險 巨集助手"
 CONFIG_EXT = ".shm"
 
 combos = []
-steps = []
+steps = []           # UI 編輯器草稿 (Draft)
+active_steps = []    # 背景運行實例 (Active Snapshot)
 
 running = False
 is_testing = False
+reload_requested = False
+steps_lock = threading.Lock()
 stop_event = threading.Event()
 target_hwnd = None
 
@@ -56,7 +59,7 @@ def safe_sleep(seconds):
     end = time.time() + float(seconds)
     while time.time() < end:
         if not is_testing:
-            if not running or stop_event.is_set():
+            if not running or stop_event.is_set() or reload_requested:
                 return False
         time.sleep(0.02)
     return True
@@ -123,7 +126,7 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(WINDOW_TITLE)
-        self.geometry("1240x670")
+        self.geometry("1240x690")
         self.resizable(False, False)
         self.configure(bg="#15171c")
 
@@ -200,6 +203,66 @@ class App(tk.Tk):
             self.set_status(f"已定位並閃爍視窗 HWND: {target_hwnd}")
         except Exception as e:
             self.set_status(f"定位失敗: {e}")
+
+    # ======================= 熱更新與運行中清單檢視 =======================
+    def apply_hot_reload(self):
+        """將 UI 編輯的草稿同步到背景正在執行的線程"""
+        global active_steps, reload_requested
+        if not running:
+            return self.set_status("巨集尚未執行，儲存設定即可生效")
+        if not steps:
+            return self.set_status("草稿清單是空的，無法套用")
+
+        with steps_lock:
+            active_steps = copy.deepcopy(steps)
+            reload_requested = True
+        self.set_status("已套用最新清單！背景將於當前動作結束後自動切換")
+
+    def view_active_steps(self):
+        """彈窗顯示目前背景線程正在循環執行的步驟"""
+        if not running or not active_steps:
+            return self.set_status("目前背景未有任何正在執行的清單")
+
+        dialog = tk.Toplevel(self)
+        dialog.title("背景目前執行中的清單 (Active Snapshot)")
+        dialog.geometry("380x360")
+        dialog.configure(bg="#1c1f26")
+        dialog.attributes("-topmost", True)
+        dialog.transient(self)
+
+        w, h = 380, 360
+        pos_x = self.winfo_x() + max(0, (self.winfo_width() - w) // 2)
+        pos_y = self.winfo_y() + max(0, (self.winfo_height() - h) // 2)
+        dialog.geometry(f"{w}x{h}+{pos_x}+{pos_y}")
+
+        tk.Label(dialog, text="★ 以下為背景線程實時掛機採用的步驟 ★", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold")).pack(pady=(8, 4))
+
+        f_box = tk.Frame(dialog, bg="#15171c")
+        f_box.pack(fill="both", expand=True, padx=10, pady=6)
+
+        lb = tk.Listbox(f_box, bg="#15171c", fg="#f1f5f9", selectbackground="#0284c7", selectforeground="#fff", bd=0, highlightthickness=0, font=("Segoe UI", 9))
+        lb.pack(side="left", fill="both", expand=True)
+
+        sc = tk.Scrollbar(f_box, orient="vertical", command=lb.yview)
+        sc.pack(side="right", fill="y")
+        lb.config(yscrollcommand=sc.set)
+
+        with steps_lock:
+            for i, s in enumerate(active_steps):
+                en_tag = "[✓]" if s.get("enabled", True) else "[✗]"
+                stype = s["type"]
+                if stype == "click":
+                    prefix = "相對:" if s.get("rel") else "絕對:"
+                    lb.insert(tk.END, f"{en_tag} #{i+1:02d} [點擊] -> {prefix}({s['x']},{s['y']})")
+                elif stype == "key":
+                    lb.insert(tk.END, f"{en_tag} #{i+1:02d} [按鍵] -> [ {s['key'].upper()} ]")
+                elif stype == "wait":
+                    lb.insert(tk.END, f"{en_tag} #{i+1:02d} [停頓] -> {s['sec']} 秒")
+                elif stype == "combo":
+                    act_cnt = len(s.get("actions", []))
+                    lb.insert(tk.END, f"{en_tag} #{i+1:02d} [組合: {s.get('name', '組合')}] ({act_cnt}動作)")
+
+        tk.Button(dialog, text="關閉視窗", width=10, bg="#334155", fg="#fff", command=dialog.destroy).pack(pady=(2, 8))
 
     # ======================= 全功能動作編輯彈窗 =======================
     def prompt_edit_action(self, action, available_combos=None):
@@ -549,9 +612,15 @@ class App(tk.Tk):
         tk.Button(sr2, text="刪除", width=4, bg="#b91c1c", fg="#fff", command=self.delete_main_step).pack(side="left", padx=1)
         tk.Button(sr2, text="清空", width=4, bg="#b91c1c", fg="#fff", command=self.clear_main_steps).pack(side="right", padx=1)
 
+        # 核心新增：熱更新與檢視列
+        f_hot = tk.Frame(f_right, bg="#1c1f26")
+        f_hot.pack(fill="x", pady=(6, 2))
+        tk.Button(f_hot, text="👁 檢視執行中清單", width=16, bg="#334155", fg="#38bdf8", command=self.view_active_steps).pack(side="left", padx=2)
+        tk.Button(f_hot, text="⚡ 套用更新至執行中 (Hot-Reload)", bg="#0284c7", fg="#ffffff", font=("Segoe UI", 9, "bold"), activebackground="#0369a1", command=self.apply_hot_reload).pack(side="left", fill="x", expand=True, padx=2)
+
         # 3. HUD 與主開關
         bot = tk.Frame(f_right, bg="#1c1f26")
-        bot.pack(fill="x", pady=(4, 0))
+        bot.pack(fill="x", pady=(2, 0))
 
         self.lbl_mouse_hud = tk.Label(bot, text="游標實時坐標: (0, 0)", anchor="w", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 9, "bold"))
         self.lbl_mouse_hud.pack(fill="x")
@@ -1204,9 +1273,9 @@ class App(tk.Tk):
                     if not sub_act.get("enabled", True): continue
                     self.execute_single_action(sub_act, f"{desc}->[{tgt_name}#{sub_idx+1}]")
 
-    # ======================= 主執行引擎 (完全不再搶奪游標 Focus) =======================
+    # ======================= 主執行引擎 (支援無縫熱更新) =======================
     def toggle_run(self):
-        global running
+        global running, active_steps, reload_requested
         if running:
             running = False
             stop_event.set()
@@ -1215,6 +1284,9 @@ class App(tk.Tk):
             self.set_status("已手動停止")
         else:
             if not steps: return self.set_status("執行清單是空的，請先加入步驟！")
+            with steps_lock:
+                active_steps = copy.deepcopy(steps)
+                reload_requested = False
             stop_event.clear()
             running = True
             self.set_running_ui(True)
@@ -1222,12 +1294,12 @@ class App(tk.Tk):
             threading.Thread(target=self.macro_worker_loop, daemon=True).start()
 
     def macro_worker_loop(self):
-        global running
+        global running, reload_requested
         round_idx = 1
 
         def run_action(act, parent_desc, depth=0, visited_set=None):
             if visited_set is None: visited_set = set()
-            if not running or stop_event.is_set(): return False
+            if not running or stop_event.is_set() or reload_requested: return False
             if not act.get("enabled", True): return True
 
             use_bg = self.var_use_bg.get() and IS_WINDOWS and (target_hwnd is not None)
@@ -1264,7 +1336,7 @@ class App(tk.Tk):
                 if tgt_combo:
                     new_visited = visited_set | {tgt_name}
                     for sub_idx, sub_act in enumerate(tgt_combo.get("actions", [])):
-                        if not running or stop_event.is_set(): return False
+                        if not running or stop_event.is_set() or reload_requested: return False
                         if not sub_act.get("enabled", True): continue
                         sub_desc = f"{parent_desc}->[{tgt_name}#{sub_idx+1}]"
                         if not run_action(sub_act, sub_desc, depth + 1, new_visited):
@@ -1276,8 +1348,16 @@ class App(tk.Tk):
 
         try:
             while running and not stop_event.is_set():
-                for idx, step in enumerate(steps):
+                with steps_lock:
+                    current_steps = copy.deepcopy(active_steps)
+                    reload_requested = False
+
+                for idx, step in enumerate(current_steps):
                     if not running or stop_event.is_set(): break
+                    if reload_requested:
+                        self.set_status("已檢測到熱更新，即時重新加載最新流程...")
+                        break
+
                     if not step.get("enabled", True): continue
 
                     stype = step["type"]
@@ -1285,7 +1365,7 @@ class App(tk.Tk):
                         c_name = step.get("name", "組合")
                         c_actions = step.get("actions", [])
                         for a_idx, act in enumerate(c_actions):
-                            if not running or stop_event.is_set(): break
+                            if not running or stop_event.is_set() or reload_requested: break
                             if not act.get("enabled", True): continue
                             act_desc = f"[{c_name}#{a_idx+1}]"
                             if not run_action(act, act_desc, depth=0, visited_set={c_name}):
@@ -1295,7 +1375,10 @@ class App(tk.Tk):
                             break
 
                 round_idx += 1
-                if not safe_sleep(0.05): break
+                if not safe_sleep(0.05):
+                    if reload_requested:
+                        continue
+                    break
         except Exception as e:
             self.set_status(f"異常中斷: {e}")
         finally:
