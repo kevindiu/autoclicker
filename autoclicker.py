@@ -32,29 +32,12 @@ IS_WINDOWS = hasattr(ctypes, "windll")
 class POINT(ctypes.Structure):
     _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
 
-class MSLLHOOKSTRUCT(ctypes.Structure):
-    _fields_ = [
-        ("pt", POINT),
-        ("mouseData", wintypes.DWORD),
-        ("flags", wintypes.DWORD),
-        ("time", wintypes.DWORD),
-        ("dwExtraInfo", ctypes.c_size_t)
-    ]
-
-HOOKPROC = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_int, wintypes.WPARAM, ctypes.POINTER(MSLLHOOKSTRUCT))
-
-WH_MOUSE_LL = 14
-WM_LBUTTONDOWN = 0x0201
-WM_LBUTTONUP = 0x0202
-
 if IS_WINDOWS:
     for fn in (lambda: ctypes.windll.shcore.SetProcessDpiAwareness(2), lambda: ctypes.windll.user32.SetProcessDPIAware()):
         try: fn(); break
         except Exception: pass
 
     user32 = ctypes.windll.user32
-    kernel32 = ctypes.windll.kernel32
-
     user32.ScreenToClient.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
     user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
     user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
@@ -65,12 +48,6 @@ if IS_WINDOWS:
     user32.SetWindowPos.argtypes = [wintypes.HWND, ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
     user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ctypes.c_size_t]
     user32.GetAsyncKeyState.argtypes = [ctypes.c_int]
-
-    user32.SetWindowsHookExW.argtypes = [ctypes.c_int, HOOKPROC, wintypes.HINSTANCE, wintypes.DWORD]
-    user32.SetWindowsHookExW.restype = wintypes.HHOOK
-    user32.UnhookWindowsHookEx.argtypes = [wintypes.HHOOK]
-    user32.CallNextHookEx.argtypes = [wintypes.HHOOK, ctypes.c_int, wintypes.WPARAM, ctypes.c_void_p]
-    user32.PostThreadMessageW.argtypes = [wintypes.DWORD, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
 
 VK_MAP = {
     "space": 0x20, "enter": 0x0D, "return": 0x0D, "esc": 0x1B, "escape": 0x1B,
@@ -95,23 +72,30 @@ def emergency_release_bg_only():
     if IS_WINDOWS and target_hwnd:
         try:
             user32.PostMessageW(target_hwnd, 0x0202, 0, 0)
+            user32.PostMessageW(target_hwnd, 0x0205, 0, 0)
         except Exception:
             pass
 
-# --- 動作發送輔助器 ---
-def post_bg_click(hwnd, client_x, client_y, offset_x=0, offset_y=0):
+# --- 動作發送輔助器 (支援左鍵/右鍵) ---
+def post_bg_click(hwnd, client_x, client_y, offset_x=0, offset_y=0, btn="left"):
     if not IS_WINDOWS or not hwnd:
-        pyautogui.click(client_x, client_y)
+        pyautogui.click(client_x, client_y, button=btn)
         return int(client_x), int(client_y)
     cx, cy = int(client_x) + offset_x, int(client_y) + offset_y
     lparam = ((int(cy) & 0xFFFF) << 16) | (int(cx) & 0xFFFF)
     user32.PostMessageW(hwnd, 0x0200, 0, lparam)
     if safe_sleep(0.02):
         try:
-            user32.PostMessageW(hwnd, 0x0201, 0x0001, lparam)
+            if btn == "right":
+                user32.PostMessageW(hwnd, 0x0204, 0x0002, lparam)
+            else:
+                user32.PostMessageW(hwnd, 0x0201, 0x0001, lparam)
             safe_sleep(0.08)
         finally:
-            user32.PostMessageW(hwnd, 0x0202, 0, lparam)
+            if btn == "right":
+                user32.PostMessageW(hwnd, 0x0205, 0, lparam)
+            else:
+                user32.PostMessageW(hwnd, 0x0202, 0, lparam)
     return cx, cy
 
 def post_bg_key(hwnd, key_str):
@@ -129,22 +113,23 @@ def post_bg_key(hwnd, key_str):
         finally:
             user32.PostMessageW(hwnd, 0x0101, vk, 0xC0000001)
 
-def execute_click(x, y, is_rel, use_bg, off_x, off_y):
+def execute_click(x, y, is_rel, use_bg, off_x, off_y, btn="left"):
+    btn_cn = "右鍵" if btn == "right" else "左鍵"
     if use_bg:
         if not is_rel:
             pt = POINT(int(x), int(y))
             user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
             x, y = pt.x, pt.y
-        cx, cy = post_bg_click(target_hwnd, x, y, off_x, off_y)
-        return f"後台點擊相對:({cx},{cy})"
+        cx, cy = post_bg_click(target_hwnd, x, y, off_x, off_y, btn=btn)
+        return f"後台{btn_cn}相對:({cx},{cy})"
     else:
         if is_rel and IS_WINDOWS and target_hwnd:
             pt = POINT(int(x), int(y))
             user32.ClientToScreen(target_hwnd, ctypes.byref(pt))
-            pyautogui.click(pt.x, pt.y)
-            return f"前台追蹤點擊 ({pt.x},{pt.y})"
-        pyautogui.click(x, y)
-        return f"前台點擊 ({x},{y})"
+            pyautogui.click(pt.x, pt.y, button=btn)
+            return f"前台追蹤{btn_cn} ({pt.x},{pt.y})"
+        pyautogui.click(x, y, button=btn)
+        return f"前台{btn_cn} ({x},{y})"
 
 # ==============================================================================
 # 自訂組件：帶右側真實 Checkbox 的滾動清單 (CheckList)
@@ -318,12 +303,14 @@ class App(tk.Tk):
         self.var_combo_act_key = tk.StringVar(value="f1")
         self.var_combo_act_wait = tk.StringVar(value="0.5")
         self.var_combo_to_call = tk.StringVar()
+        self.var_combo_btn = tk.StringVar(value="左鍵")
         self.var_combo_manual_x = tk.StringVar(value="0")
         self.var_combo_manual_y = tk.StringVar(value="0")
 
         # 主執行微步變數
         self.var_step_key = tk.StringVar(value="f1")
         self.var_step_wait = tk.StringVar(value="1.0")
+        self.var_step_btn = tk.StringVar(value="左鍵")
         self.var_step_manual_x = tk.StringVar(value="0")
         self.var_step_manual_y = tk.StringVar(value="0")
 
@@ -371,7 +358,7 @@ class App(tk.Tk):
             pass
         self.after(150, self.track_mouse_live)
 
-    # ======================= 強制喚醒與置頂視窗工具 =======================
+    # ======================= 強制喚醒視窗工具 =======================
     def force_bring_window_to_front(self, hwnd):
         """突破 Windows 前台鎖定，強制還原並帶到最前面"""
         if not IS_WINDOWS or not hwnd:
@@ -414,8 +401,8 @@ class App(tk.Tk):
         except Exception as e:
             self.set_status(f"定位失敗: {e}")
 
-    # ======================= 方案 3：底層 Mouse Hook 點擊取點 (原生 Hover + 吞噬點擊 + 彈回) =======================
-    def capture_pos_hook(self, on_finish, on_cancel=None):
+    # ======================= 核心取點：按 SPACE 記錄 + 頂部通俗 HUD 提示 =======================
+    def capture_pos_space(self, on_finish, on_cancel=None, btn="left"):
         global target_hwnd
         val = self.var_window.get()
         if val and val.startswith("["):
@@ -429,81 +416,72 @@ class App(tk.Tk):
             if on_cancel: on_cancel()
             return
 
-        # 1. 第一步：先將遊戲視窗強制彈出並帶到最前面
+        btn_cn = "右鍵" if btn == "right" else "左鍵"
+
         self.force_bring_window_to_front(target_hwnd)
-        self.set_status("【取點模式】已切換至遊戲！請正常指住目標（Hover正常顯示），按左鍵吸取坐標（按 Esc 取消）")
+        self.set_status(f"【設定{btn_cn}點擊】遊戲已置頂！請將滑鼠指住目標，按 [SPACE 空白鍵] 確定")
 
-        # 2. 啟動背景 Hook 線程監聽左鍵點擊
-        def hook_worker():
-            h_hook = None
-            hook_thread_id = kernel32.GetCurrentThreadId()
-            captured = False
-            click_point = [0, 0]
+        banner = tk.Toplevel(self)
+        banner.overrideredirect(True)
+        banner.attributes("-topmost", True)
+        banner.configure(bg="#0284c7")
 
-            def low_level_mouse_proc(nCode, wParam, lParam):
-                nonlocal captured
-                if nCode >= 0:
-                    if wParam == WM_LBUTTONDOWN:
-                        captured = True
-                        pt = lParam.contents.pt
-                        click_point[0], click_point[1] = pt.x, pt.y
-                        # 收到左鍵瞬間停止該線程訊息泵
-                        user32.PostThreadMessageW(hook_thread_id, 0x0012, 0, 0) # WM_QUIT
-                        return 1  # ★ 核心：回傳 1，徹底吞噬這一次左鍵點擊，遊戲完全收唔到！
-                    elif wParam == WM_LBUTTONUP and captured:
-                        return 1  # 同步吞噬放開訊號
-                return user32.CallNextHookEx(h_hook, nCode, wParam, lParam)
+        sw = self.winfo_screenwidth()
+        bw, bh = 760, 44
+        bx = max(0, (sw - bw) // 2)
+        by = 12
+        banner.geometry(f"{bw}x{bh}+{bx}+{by}")
 
-            hook_cb = HOOKPROC(low_level_mouse_proc)
-            h_hook = user32.SetWindowsHookExW(WH_MOUSE_LL, hook_cb, kernel32.GetModuleHandleW(None), 0)
-            if not h_hook:
-                self.set_status("Hook 安裝失敗，請重試")
-                self.after(0, self.force_bring_self_to_front)
-                if on_cancel: self.after(0, on_cancel)
+        inner_frame = tk.Frame(banner, bg="#0f172a", padx=10, pady=4)
+        inner_frame.pack(fill="both", expand=True, padx=2, pady=2)
+
+        lbl_hud = tk.Label(
+            inner_frame,
+            text=f"🎯【設定{btn_cn}點擊】將滑鼠指住你想點擊嘅目標 ➜ 按 [SPACE 空白鍵] 確定！(按 ESC 取消)",
+            bg="#0f172a",
+            fg="#38bdf8",
+            font=("Segoe UI", 10, "bold")
+        )
+        lbl_hud.pack(fill="both", expand=True)
+
+        if IS_WINDOWS:
+            user32.GetAsyncKeyState(0x20)
+            user32.GetAsyncKeyState(0x1B)
+
+        def poll_keys():
+            if not banner.winfo_exists():
                 return
 
-            # Esc 取消監聽線程
-            is_active = True
-            def esc_watcher():
-                while is_active:
-                    if user32.GetAsyncKeyState(0x1B) & 0x8000: # Esc
-                        user32.PostThreadMessageW(hook_thread_id, 0x0012, 0, 0)
-                        break
-                    time.sleep(0.04)
-            threading.Thread(target=esc_watcher, daemon=True).start()
-
-            # 訊息循環等待那一次點擊
-            msg = wintypes.MSG()
-            while user32.GetMessageW(ctypes.byref(msg), 0, 0, 0) > 0:
-                user32.TranslateMessage(ctypes.byref(msg))
-                user32.DispatchMessageW(ctypes.byref(msg))
-
-            is_active = False
-            user32.UnhookWindowsHookEx(h_hook)
-
-            # 3. 處理點擊結果或取消，並自動將連點器視窗彈番出嚟
-            if captured:
-                gx, gy = click_point[0], click_point[1]
-                use_rel = self.var_use_rel.get()
-                if use_rel and IS_WINDOWS and target_hwnd:
-                    pt = POINT(int(gx), int(gy))
-                    user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
-                    rx, ry, rel = pt.x, pt.y, True
-                else:
-                    rx, ry, rel = gx, gy, False
-
-                def _done():
-                    self.force_bring_self_to_front()
-                    on_finish(rx, ry, rel)
-                self.after(10, _done)
+            pos = pyautogui.position()
+            if IS_WINDOWS and target_hwnd and self.var_use_rel.get():
+                pt = POINT(int(pos.x), int(pos.y))
+                user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
+                coord_desc = f"({pt.x}, {pt.y})"
+                rx, ry, rel = pt.x, pt.y, True
             else:
-                def _abort():
-                    self.force_bring_self_to_front()
-                    self.set_status("已取消取點")
-                    if on_cancel: on_cancel()
-                self.after(10, _abort)
+                coord_desc = f"({pos.x}, {pos.y})"
+                rx, ry, rel = pos.x, pos.y, False
 
-        threading.Thread(target=hook_worker, daemon=True).start()
+            lbl_hud.config(text=f"🎯【設定{btn_cn}點擊】滑鼠指住怪獸/按鈕 ➜ 按 [SPACE 空白鍵] 確定！(目前坐標: {coord_desc} | ESC 取消)")
+
+            if IS_WINDOWS:
+                if user32.GetAsyncKeyState(0x20) & 0x8000:
+                    banner.destroy()
+                    self.force_bring_self_to_front()
+                    self.set_status(f"已成功設定{btn_cn}位置: ({rx}, {ry})")
+                    on_finish(rx, ry, rel)
+                    return
+
+                if user32.GetAsyncKeyState(0x1B) & 0x8000:
+                    banner.destroy()
+                    self.force_bring_self_to_front()
+                    self.set_status("已取消設定位置")
+                    if on_cancel: on_cancel()
+                    return
+
+            banner.after(30, poll_keys)
+
+        self.after(150, poll_keys)
 
     # ======================= 彈窗內部高亮與熱更新邏輯 =======================
     def highlight_active_step(self, idx):
@@ -525,7 +503,8 @@ class App(tk.Tk):
                 stype = s["type"]
                 if stype == "click":
                     prefix = "相對:" if s.get("rel") else "絕對:"
-                    self.active_lb.insert(tk.END, f"{en_tag} #{i+1:02d} [點擊] -> {prefix}({s['x']},{s['y']})")
+                    btn_tag = "右鍵" if s.get("btn") == "right" else "左鍵"
+                    self.active_lb.insert(tk.END, f"{en_tag} #{i+1:02d} [{btn_tag}] -> {prefix}({s['x']},{s['y']})")
                 elif stype == "key":
                     self.active_lb.insert(tk.END, f"{en_tag} #{i+1:02d} [按鍵] -> [ {s['key'].upper()} ]")
                 elif stype == "wait":
@@ -539,7 +518,7 @@ class App(tk.Tk):
         if not running:
             return self.set_status("巨集尚未執行，儲存設定即可生效")
         if not steps:
-            return self.set_status("草稿清單是空的，無法套用")
+            return self.set_status("步驟清單是空的，無法套用")
 
         with steps_lock:
             active_steps = copy.deepcopy(steps)
@@ -564,7 +543,7 @@ class App(tk.Tk):
             return
 
         self.active_dlg = tk.Toplevel(self)
-        self.active_dlg.title("背景實時執行清單 (即時監控)")
+        self.active_dlg.title("當前掛機進度監控")
         self.active_dlg.configure(bg="#1c1f26")
         self.active_dlg.attributes("-topmost", True)
         self.active_dlg.transient(self)
@@ -577,7 +556,7 @@ class App(tk.Tk):
 
         self.active_dlg.protocol("WM_DELETE_WINDOW", self.close_active_dlg)
 
-        tk.Label(self.active_dlg, text="★ 背景實時掛機步驟 (即時高亮中) ★", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold")).pack(pady=(8, 4))
+        tk.Label(self.active_dlg, text="★ 當前掛機進度監控 ★", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold")).pack(pady=(8, 4))
 
         f_box = tk.Frame(self.active_dlg, bg="#15171c")
         f_box.pack(fill="both", expand=True, padx=10, pady=4)
@@ -605,7 +584,7 @@ class App(tk.Tk):
 
         tk.Button(
             f_ctrl,
-            text="⚡ 套用最新草稿至執行中 (Hot-Reload)",
+            text="⚡ 即時套用修改（不用重開）",
             bg="#0284c7",
             fg="#ffffff",
             font=("Segoe UI", 9, "bold"),
@@ -627,7 +606,7 @@ class App(tk.Tk):
         dialog.transient(self)
         dialog.grab_set()
 
-        w, h = 300, 185
+        w, h = 330, 225
         self.update_idletasks()
         pos_x = self.winfo_x() + max(0, (self.winfo_width() - w) // 2)
         pos_y = self.winfo_y() + max(0, (self.winfo_height() - h) // 2)
@@ -638,41 +617,48 @@ class App(tk.Tk):
         f.pack()
 
         if atype == "click":
-            dialog.title("修改點擊坐標")
+            dialog.title("修改點擊動作")
             var_x = tk.StringVar(value=str(action.get("x", 0)))
             var_y = tk.StringVar(value=str(action.get("y", 0)))
-            
-            tk.Label(f, text="X 坐標:", bg="#1c1f26", fg="#cbd5e1").grid(row=0, column=0, padx=6, pady=3, sticky="e")
-            e_x = tk.Entry(f, textvariable=var_x, width=10, bg="#2d333b", fg="#fff")
-            e_x.grid(row=0, column=1, padx=6, pady=3)
-            
-            tk.Label(f, text="Y 坐標:", bg="#1c1f26", fg="#cbd5e1").grid(row=1, column=0, padx=6, pady=3, sticky="e")
-            e_y = tk.Entry(f, textvariable=var_y, width=10, bg="#2d333b", fg="#fff")
-            e_y.grid(row=1, column=1, padx=6, pady=3)
+            curr_btn = "右鍵" if action.get("btn") == "right" else "左鍵"
+            var_btn = tk.StringVar(value=curr_btn)
 
-            btn_rec = tk.Button(f, text="取點 (點擊左鍵)", width=18, bg="#0284c7", fg="#fff")
-            btn_rec.grid(row=2, column=0, columnspan=2, pady=(6, 2))
+            tk.Label(f, text="按鍵類型:", bg="#1c1f26", fg="#cbd5e1").grid(row=0, column=0, padx=6, pady=3, sticky="e")
+            cbo_btn = ttk.Combobox(f, textvariable=var_btn, values=["左鍵", "右鍵"], width=8, state="readonly")
+            cbo_btn.grid(row=0, column=1, padx=6, pady=3, sticky="w")
+            
+            tk.Label(f, text="X 坐標:", bg="#1c1f26", fg="#cbd5e1").grid(row=1, column=0, padx=6, pady=3, sticky="e")
+            e_x = tk.Entry(f, textvariable=var_x, width=10, bg="#2d333b", fg="#fff")
+            e_x.grid(row=1, column=1, padx=6, pady=3, sticky="w")
+            
+            tk.Label(f, text="Y 坐標:", bg="#1c1f26", fg="#cbd5e1").grid(row=2, column=0, padx=6, pady=3, sticky="e")
+            e_y = tk.Entry(f, textvariable=var_y, width=10, bg="#2d333b", fg="#fff")
+            e_y.grid(row=2, column=1, padx=6, pady=3, sticky="w")
+
+            btn_rec = tk.Button(f, text="🎯 重新瞄準目標 (按 Space 確定)", width=24, bg="#0284c7", fg="#fff", font=("Segoe UI", 9, "bold"))
+            btn_rec.grid(row=3, column=0, columnspan=2, pady=(8, 2))
 
             def do_rec():
                 dialog.grab_release()
                 dialog.withdraw()
 
-                def on_finish_hook(rx, ry, rel):
+                def on_finish_space(rx, ry, rel):
                     dialog.deiconify()
                     dialog.lift()
                     dialog.focus_force()
                     dialog.grab_set()
                     var_x.set(str(rx))
                     var_y.set(str(ry))
-                    self.set_status(f"已獲取坐標: ({rx}, {ry})")
+                    self.set_status(f"已更新點擊位置: ({rx}, {ry})")
 
-                def on_cancel_hook():
+                def on_cancel_space():
                     dialog.deiconify()
                     dialog.lift()
                     dialog.focus_force()
                     dialog.grab_set()
 
-                self.capture_pos_hook(on_finish_hook, on_cancel_hook)
+                target_btn = "right" if var_btn.get() == "右鍵" else "left"
+                self.capture_pos_space(on_finish_space, on_cancel_space, btn=target_btn)
 
             btn_rec.config(command=do_rec)
             e_x.focus_set()
@@ -681,6 +667,7 @@ class App(tk.Tk):
                 try:
                     action["x"] = int(var_x.get().strip())
                     action["y"] = int(var_y.get().strip())
+                    action["btn"] = "right" if var_btn.get() == "右鍵" else "left"
                     modified[0] = True
                     dialog.destroy()
                 except ValueError:
@@ -778,7 +765,7 @@ class App(tk.Tk):
         f_left.grid(row=0, column=0, padx=(10, 5), pady=10, sticky="nsew")
 
         # 1. 設定與後台
-        f_cfg = tk.LabelFrame(f_left, text=" 設定與 Win32 後台綁定 ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
+        f_cfg = tk.LabelFrame(f_left, text=" 設定與視窗綁定 ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
         f_cfg.pack(fill="x", pady=(0, 6))
 
         r1 = tk.Frame(f_cfg, bg="#1c1f26")
@@ -792,13 +779,17 @@ class App(tk.Tk):
 
         r2 = tk.Frame(f_cfg, bg="#1c1f26")
         r2.pack(fill="x", pady=4)
-        tk.Checkbutton(r2, text="Win32後台", variable=self.var_use_bg, bg="#1c1f26", fg="#cbd5e1", selectcolor="#1c1f26", activebackground="#1c1f26").pack(side="left")
-        tk.Checkbutton(r2, text="相對坐標 (Relative)", variable=self.var_use_rel, bg="#1c1f26", fg="#cbd5e1", selectcolor="#1c1f26", activebackground="#1c1f26").pack(side="left", padx=4)
+        tk.Checkbutton(r2, text="背景掛機（滑鼠可移走做其他事）", variable=self.var_use_bg, bg="#1c1f26", fg="#cbd5e1", selectcolor="#1c1f26", activebackground="#1c1f26").pack(side="left")
+        tk.Checkbutton(r2, text="相對坐標", variable=self.var_use_rel, bg="#1c1f26", fg="#cbd5e1", selectcolor="#1c1f26", activebackground="#1c1f26").pack(side="left", padx=4)
         tk.Checkbutton(r2, text="視窗置頂", variable=self.var_topmost, command=self.toggle_topmost, bg="#1c1f26", fg="#cbd5e1", selectcolor="#1c1f26", activebackground="#1c1f26").pack(side="left", padx=4)
-        tk.Label(r2, text="微調X:", bg="#1c1f26", fg="#cbd5e1").pack(side="left")
-        tk.Entry(r2, textvariable=self.var_offset_x, width=4, bg="#2d333b", fg="#ffffff").pack(side="left", padx=2)
-        tk.Label(r2, text="Y:", bg="#1c1f26", fg="#cbd5e1").pack(side="left")
-        tk.Entry(r2, textvariable=self.var_offset_y, width=4, bg="#2d333b", fg="#ffffff").pack(side="left", padx=2)
+
+        r2_sub = tk.Frame(f_cfg, bg="#1c1f26")
+        r2_sub.pack(fill="x", pady=2)
+        tk.Label(r2_sub, text="點擊偏差校正 (X/Y):", bg="#1c1f26", fg="#cbd5e1").pack(side="left")
+        tk.Label(r2_sub, text="X:", bg="#1c1f26", fg="#94a3b8").pack(side="left", padx=(4, 1))
+        tk.Entry(r2_sub, textvariable=self.var_offset_x, width=4, bg="#2d333b", fg="#ffffff").pack(side="left", padx=1)
+        tk.Label(r2_sub, text="Y:", bg="#1c1f26", fg="#94a3b8").pack(side="left", padx=(4, 1))
+        tk.Entry(r2_sub, textvariable=self.var_offset_y, width=4, bg="#2d333b", fg="#ffffff").pack(side="left", padx=1)
 
         r3 = tk.Frame(f_cfg, bg="#1c1f26")
         r3.pack(fill="x", pady=2)
@@ -843,7 +834,7 @@ class App(tk.Tk):
 
         cr_act = tk.Frame(f_cl, bg="#1c1f26")
         cr_act.pack(fill="x", pady=(2, 0))
-        tk.Button(cr_act, text="加入主執行清單 ->", bg="#0284c7", fg="#fff", activebackground="#0369a1", command=self.add_combo_to_main_steps).pack(side="left", fill="x", expand=True, padx=(0, 2))
+        tk.Button(cr_act, text="加入掛機流程 ->", bg="#0284c7", fg="#fff", activebackground="#0369a1", command=self.add_combo_to_main_steps).pack(side="left", fill="x", expand=True, padx=(0, 2))
         tk.Button(cr_act, text="刪除組合", width=8, bg="#b91c1c", fg="#fff", activebackground="#991b1b", command=self.delete_selected_combo).pack(side="right")
 
         # 2-B. 組合動作 (右分欄)
@@ -856,16 +847,17 @@ class App(tk.Tk):
         self.lbl_combo_editing.pack(side="left")
         tk.Button(f_cr_top, text="▶ 試跑此組合", bg="#16a34a", fg="#fff", activebackground="#15803d", command=self.test_run_current_combo).pack(side="right", padx=1)
 
-        # 點擊新增列 (方案3：點擊取點)
+        # 點擊新增列
         f_cr_click = tk.Frame(f_cr, bg="#1c1f26")
         f_cr_click.pack(fill="x", pady=1)
-        self.btn_combo_add_click = tk.Button(f_cr_click, text="取點(點擊左鍵)", width=12, bg="#0284c7", fg="#fff", command=self.combo_add_click_action)
+        ttk.Combobox(f_cr_click, textvariable=self.var_combo_btn, values=["左鍵", "右鍵"], width=4, state="readonly").pack(side="left", padx=(0, 2))
+        self.btn_combo_add_click = tk.Button(f_cr_click, text="🎯 瞄準點擊", width=10, bg="#0284c7", fg="#fff", font=("Segoe UI", 9, "bold"), command=self.combo_add_click_action)
         self.btn_combo_add_click.pack(side="left", padx=1)
-        tk.Label(f_cr_click, text="X:", bg="#1c1f26", fg="#cbd5e1").pack(side="left", padx=(3, 0))
+        tk.Label(f_cr_click, text="X:", bg="#1c1f26", fg="#94a3b8", font=("Segoe UI", 8)).pack(side="left", padx=(2, 0))
         tk.Entry(f_cr_click, textvariable=self.var_combo_manual_x, width=4, bg="#2d333b", fg="#fff").pack(side="left", padx=1)
-        tk.Label(f_cr_click, text="Y:", bg="#1c1f26", fg="#cbd5e1").pack(side="left")
+        tk.Label(f_cr_click, text="Y:", bg="#1c1f26", fg="#94a3b8", font=("Segoe UI", 8)).pack(side="left")
         tk.Entry(f_cr_click, textvariable=self.var_combo_manual_y, width=4, bg="#2d333b", fg="#fff").pack(side="left", padx=1)
-        tk.Button(f_cr_click, text="+手動點擊", width=8, bg="#334155", fg="#fff", command=self.combo_add_manual_click).pack(side="left", padx=2)
+        tk.Button(f_cr_click, text="+手動", width=5, bg="#334155", fg="#fff", command=self.combo_add_manual_click).pack(side="left", padx=1)
 
         # 按鍵與等待
         f_cr_add = tk.Frame(f_cr, bg="#1c1f26")
@@ -910,19 +902,20 @@ class App(tk.Tk):
         f_right = tk.Frame(self, bg="#1c1f26", padx=8, pady=8, highlightbackground="#2d333b", highlightthickness=1)
         f_right.grid(row=0, column=1, padx=(5, 10), pady=10, sticky="nsew")
 
-        # 1. 微步新增 (方案3：點擊取點)
-        f_step = tk.LabelFrame(f_right, text=" 單獨新增微步 (右側真實 Checkbox: 啟用/停用 | 雙擊: 修改動作) ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
+        # 1. 步驟新增（單一動作）
+        f_step = tk.LabelFrame(f_right, text=" 單一動作（單次點擊 / 單鍵） ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
         f_step.pack(fill="x", pady=(0, 6))
 
         sr_click = tk.Frame(f_step, bg="#1c1f26")
         sr_click.pack(fill="x", pady=2)
-        self.btn_step_click = tk.Button(sr_click, text="取點 (點擊左鍵)", width=14, bg="#0284c7", fg="#fff", command=self.add_main_click_step)
+        ttk.Combobox(sr_click, textvariable=self.var_step_btn, values=["左鍵", "右鍵"], width=4, state="readonly").pack(side="left", padx=(0, 2))
+        self.btn_step_click = tk.Button(sr_click, text="🎯 瞄準目標新增點擊", width=18, bg="#0284c7", fg="#fff", font=("Segoe UI", 9, "bold"), activebackground="#0369a1", command=self.add_main_click_step)
         self.btn_step_click.pack(side="left", padx=2)
-        tk.Label(sr_click, text="手動 X:", bg="#1c1f26", fg="#cbd5e1").pack(side="left", padx=(5, 1))
+        tk.Label(sr_click, text="手動X:", bg="#1c1f26", fg="#94a3b8", font=("Segoe UI", 8)).pack(side="left", padx=(4, 1))
         tk.Entry(sr_click, textvariable=self.var_step_manual_x, width=4, bg="#2d333b", fg="#fff").pack(side="left", padx=1)
-        tk.Label(sr_click, text="Y:", bg="#1c1f26", fg="#cbd5e1").pack(side="left", padx=1)
+        tk.Label(sr_click, text="Y:", bg="#1c1f26", fg="#94a3b8", font=("Segoe UI", 8)).pack(side="left", padx=1)
         tk.Entry(sr_click, textvariable=self.var_step_manual_y, width=4, bg="#2d333b", fg="#fff").pack(side="left", padx=1)
-        tk.Button(sr_click, text="+手動點擊", width=8, bg="#334155", fg="#fff", command=self.add_main_manual_click).pack(side="left", padx=3)
+        tk.Button(sr_click, text="+手動", width=5, bg="#334155", fg="#fff", command=self.add_main_manual_click).pack(side="left", padx=2)
 
         sr = tk.Frame(f_step, bg="#1c1f26")
         sr.pack(fill="x", pady=2)
@@ -934,8 +927,8 @@ class App(tk.Tk):
         tk.Entry(sr, textvariable=self.var_step_wait, width=4, bg="#2d333b", fg="#fff").pack(side="left", padx=3)
         tk.Button(sr, text="加停頓", width=7, bg="#334155", fg="#fff", command=self.add_main_wait_step).pack(side="left", padx=2)
 
-        # 2. 執行順序清單
-        f_seq = tk.LabelFrame(f_right, text=" 執行順序清單 (由上至下循環) ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
+        # 2. 自動循環清單（掛機流程）
+        f_seq = tk.LabelFrame(f_right, text=" 自動循環清單（掛機流程） ", bg="#1c1f26", fg="#38bdf8", font=("Segoe UI", 10, "bold"), padx=6, pady=6)
         f_seq.pack(fill="both", expand=True)
 
         f_list_s = tk.Frame(f_seq, bg="#15171c")
@@ -964,7 +957,7 @@ class App(tk.Tk):
         self.f_hot = tk.Frame(f_right, bg="#1c1f26")
         self.btn_view_active = tk.Button(
             self.f_hot,
-            text="👁 檢視 / 熱更新執行中清單 (正在運行)",
+            text="👁 檢視當前掛機進度監控",
             bg="#334155",
             fg="#38bdf8",
             font=("Segoe UI", 9, "bold"),
@@ -1211,7 +1204,7 @@ class App(tk.Tk):
         ins = self.get_main_insert_index()
         steps.insert(ins, {"type": "combo", "name": c["name"], "actions": copy.deepcopy(c["actions"]), "enabled": True})
         self.update_step_list(select_idx=ins)
-        self.set_status(f"已將組合 [{c['name']}] 加入主執行清單 #{ins+1}")
+        self.set_status(f"已將組合 [{c['name']}] 加入掛機流程 #{ins+1}")
 
     # ======================= 組合動作邏輯 =======================
     def get_selected_action_idx(self):
@@ -1229,7 +1222,8 @@ class App(tk.Tk):
             atype = act.get("type")
             if atype == "click":
                 prefix = "相對:" if act.get("rel") else "絕對:"
-                text = f"#{i+1:02d} [點擊] -> {prefix}({act['x']},{act['y']})"
+                btn_tag = "右鍵" if act.get("btn") == "right" else "左鍵"
+                text = f"#{i+1:02d} [{btn_tag}] -> {prefix}({act['x']},{act['y']})"
             elif atype == "key":
                 text = f"#{i+1:02d} [按鍵] -> [ {act['key'].upper()} ]"
             elif atype == "wait":
@@ -1300,18 +1294,20 @@ class App(tk.Tk):
     def combo_add_click_action(self):
         idx = self.get_selected_combo_idx()
         if idx is None: return self.set_status("請先選取一個組合！")
+        target_btn = "right" if self.var_combo_btn.get() == "右鍵" else "left"
         
         def cb(x, y, rel):
             actions = combos[idx].setdefault("actions", [])
             ins = self.get_selected_action_idx()
             ins = ins + 1 if ins is not None else len(actions)
-            actions.insert(ins, {"type": "click", "x": x, "y": y, "rel": rel, "enabled": True})
+            actions.insert(ins, {"type": "click", "btn": target_btn, "x": x, "y": y, "rel": rel, "enabled": True})
             self.refresh_combo_actions_list(select_idx=ins)
             self.refresh_combo_list(select_idx=idx)
             self.sync_combo_actions_to_main_steps(combos[idx]["name"], actions)
-            self.set_status(f"已在組合加入點擊 ({x},{y})")
+            btn_cn = "右鍵" if target_btn == "right" else "左鍵"
+            self.set_status(f"已在組合加入{btn_cn}點擊 ({x},{y})")
 
-        self.capture_pos_hook(cb)
+        self.capture_pos_space(cb, btn=target_btn)
 
     def combo_add_manual_click(self):
         idx = self.get_selected_combo_idx()
@@ -1322,15 +1318,17 @@ class App(tk.Tk):
         except ValueError:
             return self.set_status("X 和 Y 必須輸入整數！")
 
+        target_btn = "right" if self.var_combo_btn.get() == "右鍵" else "left"
         actions = combos[idx].setdefault("actions", [])
         ins = self.get_selected_action_idx()
         ins = ins + 1 if ins is not None else len(actions)
         rel = self.var_use_rel.get()
-        actions.insert(ins, {"type": "click", "x": x, "y": y, "rel": rel, "enabled": True})
+        actions.insert(ins, {"type": "click", "btn": target_btn, "x": x, "y": y, "rel": rel, "enabled": True})
         self.refresh_combo_actions_list(select_idx=ins)
         self.refresh_combo_list(select_idx=idx)
         self.sync_combo_actions_to_main_steps(combos[idx]["name"], actions)
-        self.set_status(f"已手動在組合加入點擊: ({x}, {y})")
+        btn_cn = "右鍵" if target_btn == "right" else "左鍵"
+        self.set_status(f"已手動在組合加入{btn_cn}點擊: ({x}, {y})")
 
     def edit_selected_combo_action(self):
         c_idx = self.get_selected_combo_idx()
@@ -1437,7 +1435,7 @@ class App(tk.Tk):
             self.sync_combo_actions_to_main_steps(combos[c_idx]["name"], [])
             self.set_status("已清空組合所有動作")
 
-    # ======================= 主執行順序清單邏輯 =======================
+    # ======================= 自動循環清單（掛機流程）邏輯 =======================
     def get_main_insert_index(self):
         sel = self.step_listbox.curselection()
         return sel[0] + 1 if sel else len(steps)
@@ -1448,7 +1446,8 @@ class App(tk.Tk):
             stype = s["type"]
             if stype == "click":
                 prefix = "相對:" if s.get("rel") else "絕對:"
-                text = f"#{i+1:02d} [點擊] -> {prefix}({s['x']},{s['y']})"
+                btn_tag = "右鍵" if s.get("btn") == "right" else "左鍵"
+                text = f"#{i+1:02d} [{btn_tag}] -> {prefix}({s['x']},{s['y']})"
             elif stype == "key":
                 text = f"#{i+1:02d} [按鍵] -> [ {s['key'].upper()} ]"
             elif stype == "wait":
@@ -1497,11 +1496,15 @@ class App(tk.Tk):
 
     def add_main_click_step(self):
         ins = self.get_main_insert_index()
+        target_btn = "right" if self.var_step_btn.get() == "右鍵" else "left"
+        
         def cb(x, y, rel):
-            steps.insert(ins, {"type": "click", "x": x, "y": y, "rel": rel, "enabled": True})
+            steps.insert(ins, {"type": "click", "btn": target_btn, "x": x, "y": y, "rel": rel, "enabled": True})
             self.update_step_list(ins)
-            self.set_status(f"已插入點擊到主清單 #{ins+1}")
-        self.capture_pos_hook(cb)
+            btn_cn = "右鍵" if target_btn == "right" else "左鍵"
+            self.set_status(f"已成功新增{btn_cn}點擊位置到第 #{ins+1} 步")
+
+        self.capture_pos_space(cb, btn=target_btn)
 
     def add_main_manual_click(self):
         try:
@@ -1512,13 +1515,15 @@ class App(tk.Tk):
 
         ins = self.get_main_insert_index()
         rel = self.var_use_rel.get()
-        steps.insert(ins, {"type": "click", "x": x, "y": y, "rel": rel, "enabled": True})
+        target_btn = "right" if self.var_step_btn.get() == "右鍵" else "left"
+        steps.insert(ins, {"type": "click", "btn": target_btn, "x": x, "y": y, "rel": rel, "enabled": True})
         self.update_step_list(ins)
-        self.set_status(f"已手動插入點擊到主清單 #{ins+1}: ({x}, {y})")
+        btn_cn = "右鍵" if target_btn == "right" else "左鍵"
+        self.set_status(f"已手動插入{btn_cn}點擊到掛機流程 #{ins+1}: ({x}, {y})")
 
     def edit_selected_main_step(self):
         sel = self.step_listbox.curselection()
-        if not sel: return self.set_status("請先在主清單選擇步驟！")
+        if not sel: return self.set_status("請先在掛機流程選擇步驟！")
         idx = sel[0]
         s = steps[idx]
 
@@ -1532,7 +1537,7 @@ class App(tk.Tk):
         ins = self.get_main_insert_index()
         steps.insert(ins, {"type": "key", "key": key, "enabled": True})
         self.update_step_list(ins)
-        self.set_status(f"已插入按鍵到主清單 #{ins+1}: [{key.upper()}]")
+        self.set_status(f"已插入按鍵到掛機流程 #{ins+1}: [{key.upper()}]")
 
     def add_main_wait_step(self):
         try:
@@ -1542,7 +1547,7 @@ class App(tk.Tk):
         ins = self.get_main_insert_index()
         steps.insert(ins, {"type": "wait", "sec": sec, "enabled": True})
         self.update_step_list(ins)
-        self.set_status(f"已插入等待到主清單 #{ins+1}: {sec} 秒")
+        self.set_status(f"已插入等待到掛機流程 #{ins+1}: {sec} 秒")
 
     def move_main_step(self, delta):
         sel = self.step_listbox.curselection()
@@ -1567,11 +1572,11 @@ class App(tk.Tk):
             self.update_step_list(min(idx, len(steps) - 1) if steps else None)
 
     def clear_main_steps(self):
-        if not steps: return self.set_status("主執行清單本來就是空的")
-        if messagebox.askyesno("清空確認", "請問是否清空整個主執行順序清單？\n清空後未儲存的內容無法還原！", parent=self):
+        if not steps: return self.set_status("掛機流程本來就是空的")
+        if messagebox.askyesno("清空確認", "請問是否清空整個掛機流程？\n清空後未儲存的內容無法還原！", parent=self):
             steps.clear()
             self.update_step_list()
-            self.set_status("已清空主執行清單")
+            self.set_status("已清空掛機流程")
 
     # ======================= 單步執行輔助器 =======================
     def execute_single_action(self, act, desc):
@@ -1581,7 +1586,8 @@ class App(tk.Tk):
 
         atype = act.get("type")
         if atype == "click":
-            msg = execute_click(act["x"], act["y"], act.get("rel"), use_bg, off_x, off_y)
+            btn = act.get("btn", "left")
+            msg = execute_click(act["x"], act["y"], act.get("rel"), use_bg, off_x, off_y, btn=btn)
             self.set_status(f"{desc} {msg}")
             safe_sleep(0.12)
         elif atype == "key":
@@ -1635,7 +1641,8 @@ class App(tk.Tk):
 
             atype = act.get("type")
             if atype == "click":
-                msg = execute_click(act["x"], act["y"], act.get("rel"), use_bg, off_x, off_y)
+                btn = act.get("btn", "left")
+                msg = execute_click(act["x"], act["y"], act.get("rel"), use_bg, off_x, off_y, btn=btn)
                 self.set_status(f"第 {round_idx} 輪: {parent_desc} {msg}")
                 if not safe_sleep(0.12): return False
 
