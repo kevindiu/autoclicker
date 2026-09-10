@@ -255,9 +255,6 @@ def format_action_summary(act, index=None, with_checkbox_tag=False, current_vari
     """統一格式化動作或步驟的文字描述，採用 100% 跨平台相容的通用標籤與符號"""
     var_dict = current_variables if current_variables is not None else variables
     atype = act.get("type", "")
-    tag = ""
-    if with_checkbox_tag:
-        tag = "[✓] " if act.get("enabled", True) else "[✕] "
 
     idx_prefix = f"#{index+1:02d} " if index is not None else ""
     var_name = act.get("var_name")
@@ -298,155 +295,7 @@ def format_action_summary(act, index=None, with_checkbox_tag=False, current_vari
     else:
         body = f"[{atype}]"
 
-    return f"{tag}{idx_prefix}{body}"
-
-# ==============================================================================
-# 自訂組件：帶右側真實 Checkbox 的滾動清單 (CheckList)
-# ==============================================================================
-class CheckList(tk.Frame):
-    def __init__(self, parent, bg=UITheme.BG_DARK, select_bg=UITheme.ACCENT_BLUE, on_select=None, on_double_click=None, on_toggle=None):
-        super().__init__(parent, bg=bg)
-        self.bg = bg
-        self.select_bg = select_bg
-        self.on_select = on_select
-        self.on_double_click = on_double_click
-        self.on_toggle = on_toggle
-
-        self.canvas = tk.Canvas(self, bg=bg, bd=0, highlightthickness=0)
-        self.scrollbar = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        self.scrollable_frame = tk.Frame(self.canvas, bg=bg)
-
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-        )
-        self.canvas_window = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-        self.canvas.configure(yscrollcommand=self.scrollbar.set)
-
-        self.canvas.pack(side="left", fill="both", expand=True)
-        self.scrollbar.pack(side="right", fill="y")
-        self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfig(self.canvas_window, width=e.width))
-
-        self.bind_mousewheel(self)
-        self.bind_mousewheel(self.canvas)
-        self.bind_mousewheel(self.scrollable_frame)
-
-        self.rows = []
-        self.selected_idx = None
-
-    def bind_mousewheel(self, widget):
-        widget.bind("<MouseWheel>", self._on_mousewheel, add="+")
-        widget.bind("<Button-4>", lambda e: self.canvas.yview_scroll(-1, "units"), add="+")
-        widget.bind("<Button-5>", lambda e: self.canvas.yview_scroll(1, "units"), add="+")
-
-    def _on_mousewheel(self, event):
-        if event.delta:
-            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-    def set_items(self, items, select_idx=None):
-        for r in self.rows:
-            r['frame'].destroy()
-        self.rows.clear()
-
-        for i, (text, is_enabled) in enumerate(items):
-            rf = tk.Frame(self.scrollable_frame, bg=self.bg, pady=2, padx=4)
-            rf.pack(fill="x", expand=True)
-
-            fg_color = UITheme.TEXT_MAIN if is_enabled else UITheme.TEXT_DISABLED
-            lbl = tk.Label(rf, text=text, bg=self.bg, fg=fg_color, font=UITheme.FONT_NORMAL, anchor="w")
-            lbl.pack(side="left", fill="both", expand=True)
-
-            var = tk.BooleanVar(value=is_enabled)
-            chk = tk.Checkbutton(
-                rf,
-                variable=var,
-                bg=self.bg,
-                activebackground=self.bg,
-                selectcolor=UITheme.BG_PANEL,
-                highlightthickness=0,
-                bd=0,
-                cursor="hand2",
-                command=lambda idx=i, v=var: self._on_chk_toggle(idx, v)
-            )
-            chk.pack(side="right", padx=(2, 6))
-
-            for w in (rf, lbl):
-                w.bind("<Button-1>", lambda e, idx=i: self._select_row(idx))
-                w.bind("<Double-Button-1>", lambda e, idx=i: self._double_click_row(idx))
-                self.bind_mousewheel(w)
-            self.bind_mousewheel(chk)
-
-            self.rows.append({'frame': rf, 'label': lbl, 'chk': chk, 'var': var, 'enabled': is_enabled})
-
-        if select_idx is not None and 0 <= select_idx < len(self.rows):
-            self._select_row(select_idx, trigger_callback=False)
-        elif self.selected_idx is not None and self.selected_idx < len(self.rows):
-            self._select_row(self.selected_idx, trigger_callback=False)
-        else:
-            self.selected_idx = None
-
-    def _select_row(self, idx, trigger_callback=True):
-        if not (0 <= idx < len(self.rows)):
-            return
-        if self.selected_idx is not None and self.selected_idx < len(self.rows):
-            old = self.rows[self.selected_idx]
-            old['frame'].configure(bg=self.bg)
-            old['label'].configure(bg=self.bg)
-            old['chk'].configure(bg=self.bg, activebackground=self.bg)
-
-        self.selected_idx = idx
-        curr = self.rows[idx]
-        curr['frame'].configure(bg=self.select_bg)
-        curr['label'].configure(bg=self.select_bg)
-        curr['chk'].configure(bg=self.select_bg, activebackground=self.select_bg)
-
-        if trigger_callback and self.on_select:
-            self.on_select(idx)
-
-    def _double_click_row(self, idx):
-        self._select_row(idx)
-        if self.on_double_click:
-            self.on_double_click(idx)
-
-    def _on_chk_toggle(self, idx, var):
-        val = var.get()
-        self.rows[idx]['enabled'] = val
-        self.rows[idx]['label'].configure(fg=UITheme.TEXT_MAIN if val else UITheme.TEXT_DISABLED)
-        self._select_row(idx, trigger_callback=False)
-        if self.on_toggle:
-            self.on_toggle(idx, val)
-
-    def curselection(self):
-        return (self.selected_idx,) if self.selected_idx is not None else ()
-
-    def selection_set(self, idx):
-        self._select_row(idx, trigger_callback=False)
-
-    def selection_clear(self, first=None, last=None):
-        if self.selected_idx is not None and self.selected_idx < len(self.rows):
-            old = self.rows[self.selected_idx]
-            old['frame'].configure(bg=self.bg)
-            old['label'].configure(bg=self.bg)
-            old['chk'].configure(bg=self.bg, activebackground=self.bg)
-        self.selected_idx = None
-
-    def size(self):
-        return len(self.rows)
-
-    def see(self, idx):
-        if 0 <= idx < len(self.rows):
-            self.canvas.update_idletasks()
-            rf = self.rows[idx]['frame']
-            y1 = rf.winfo_y()
-            total_h = self.scrollable_frame.winfo_height()
-            if total_h > 0:
-                self.canvas.yview_moveto(max(0.0, (y1 - 20) / total_h))
-
-    def delete(self, first, last=None):
-        for r in self.rows:
-            r['frame'].destroy()
-        self.rows.clear()
-        self.selected_idx = None
+    return f"{idx_prefix}{body}"
 
 # ==============================================================================
 # 自訂組件：全深色模式變數表格 (VarTable)
@@ -713,6 +562,8 @@ class App(tk.Tk):
                 self.btn_toggle.config(text="▶ 開始循環執行", bg=UITheme.ACCENT_GREEN, activebackground=UITheme.ACCENT_GREEN_HOVER)
                 self.f_hot.pack_forget()
                 self.close_active_dlg()
+                if hasattr(self, "step_listbox") and self.step_listbox.winfo_exists():
+                    self.step_listbox.selection_clear(0, tk.END)
         self.run_on_ui_thread(_u)
 
     def run_in_test_thread(self, task_name, task_fn):
@@ -891,10 +742,17 @@ class App(tk.Tk):
             self.active_dlg.attributes("-topmost", self.var_active_dlg_topmost.get())
 
     def highlight_active_step(self, idx, sub_idx=None):
-        """在掛機進度監控彈窗中高亮當前執行中的步驟或 Combo 子步驟"""
-        if not self.active_dlg or not self.active_dlg.winfo_exists() or not self.active_lb:
-            return
+        """在主畫面清單與進度監控彈窗中同步高亮當前執行中的步驟並自動滾動跟隨"""
         def _hl():
+            if self.is_closing: return
+            # 1. 主畫面步驟清單實時高亮與滾動跟隨
+            if hasattr(self, "step_listbox") and self.step_listbox.winfo_exists():
+                if 0 <= idx < self.step_listbox.size():
+                    self.step_listbox.selection_clear(0, tk.END)
+                    self.step_listbox.selection_set(idx)
+                    self.step_listbox.see(idx)
+
+            # 2. 監控彈窗實時高亮與滾動跟隨
             if self.active_lb and self.active_dlg and self.active_dlg.winfo_exists():
                 line = self.active_step_line_map.get((idx, sub_idx))
                 if line is None and sub_idx is not None:
@@ -1171,22 +1029,31 @@ class App(tk.Tk):
         f_sub_box = tk.Frame(f_list_wrap, bg=UITheme.BG_DARK)
         f_sub_box.pack(fill="both", expand=True)
 
-        def on_sub_toggle(idx, val):
-            if 0 <= idx < len(working_actions):
-                working_actions[idx]["enabled"] = val
-
-        sub_list = CheckList(
+        sub_list = tk.Listbox(
             f_sub_box,
             bg=UITheme.BG_DARK,
-            select_bg=UITheme.ACCENT_BLUE,
-            on_double_click=lambda idx: do_edit_sub(),
-            on_toggle=on_sub_toggle
+            fg=UITheme.TEXT_MAIN,
+            selectbackground=UITheme.ACCENT_BLUE,
+            selectforeground="#fff",
+            bd=0,
+            highlightthickness=0,
+            font=UITheme.FONT_NORMAL,
+            exportselection=False
         )
-        sub_list.pack(fill="both", expand=True)
+        sub_list.pack(side="left", fill="both", expand=True)
+        sub_list.bind("<Double-Button-1>", lambda e: do_edit_sub())
+
+        sc_sub = tk.Scrollbar(f_sub_box, orient="vertical", command=sub_list.yview)
+        sc_sub.pack(side="right", fill="y")
+        sub_list.config(yscrollcommand=sc_sub.set)
 
         def refresh_sub_list(select_idx=None):
-            items = [(format_action_summary(act, index=i), act.get("enabled", True)) for i, act in enumerate(working_actions)]
-            sub_list.set_items(items, select_idx=select_idx)
+            sub_list.delete(0, tk.END)
+            for i, act in enumerate(working_actions):
+                sub_list.insert(tk.END, format_action_summary(act, index=i))
+            if select_idx is not None and 0 <= select_idx < len(working_actions):
+                sub_list.selection_set(select_idx)
+                sub_list.see(select_idx)
 
         # 右側控制按鈕列
         f_btns = tk.Frame(f_mid, bg=UITheme.BG_PANEL, padx=8)
@@ -1242,10 +1109,10 @@ class App(tk.Tk):
 
         tk.Button(f_btns, text="▲ 上移步驟", width=12, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=lambda: do_move_sub(-1)).pack(fill="x", pady=2)
         tk.Button(f_btns, text="▼ 下移步驟", width=12, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=lambda: do_move_sub(1)).pack(fill="x", pady=2)
+        tk.Button(f_btns, text="▶ 試跑動作", width=12, bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_test_sub).pack(fill="x", pady=2)
         tk.Button(f_btns, text="✎ 修改動作", width=12, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_edit_sub).pack(fill="x", pady=2)
         tk.Button(f_btns, text="⎘ 複製動作", width=12, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_dup_sub).pack(fill="x", pady=2)
-        tk.Button(f_btns, text="✕ 刪除動作", width=12, bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_del_sub).pack(fill="x", pady=2)
-        tk.Button(f_btns, text="▶ 試跑動作", width=12, bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_test_sub).pack(fill="x", pady=(2, 6))
+        tk.Button(f_btns, text="✕ 刪除動作", width=12, bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_del_sub).pack(fill="x", pady=(2, 6))
 
         # 底部按鈕列 (確認 / 取消)
         f_bot = tk.Frame(dialog, bg=UITheme.BG_PANEL, padx=12, pady=10)
@@ -1676,14 +1543,22 @@ class App(tk.Tk):
         f_cr_box = tk.Frame(f_cr, bg=UITheme.BG_DARK)
         f_cr_box.pack(fill="both", expand=True, pady=3)
 
-        self.combo_act_listbox = CheckList(
+        self.combo_act_listbox = tk.Listbox(
             f_cr_box,
             bg=UITheme.BG_DARK,
-            select_bg=UITheme.ACCENT_BLUE,
-            on_double_click=lambda idx: self.edit_selected_combo_action(),
-            on_toggle=self.on_combo_action_chk_toggle
+            fg=UITheme.TEXT_MAIN,
+            selectbackground=UITheme.ACCENT_BLUE,
+            selectforeground="#fff",
+            bd=0,
+            highlightthickness=0,
+            font=UITheme.FONT_NORMAL,
+            exportselection=False
         )
-        self.combo_act_listbox.pack(fill="both", expand=True)
+        self.combo_act_listbox.pack(side="left", fill="both", expand=True)
+        self.combo_act_listbox.bind("<Double-Button-1>", lambda e: self.edit_selected_combo_action())
+        sc_cr = tk.Scrollbar(f_cr_box, orient="vertical", command=self.combo_act_listbox.yview)
+        sc_cr.pack(side="right", fill="y")
+        self.combo_act_listbox.config(yscrollcommand=sc_cr.set)
 
         # 底部單層全功能管理工具列 (統一佈局順序：上移/下移/試跑/修改/複製/刪除/清空)
         cr_act_ctrl = tk.Frame(f_cr, bg=UITheme.BG_PANEL)
@@ -1735,14 +1610,22 @@ class App(tk.Tk):
         f_list_s = tk.Frame(f_seq, bg=UITheme.BG_DARK)
         f_list_s.pack(fill="both", expand=True, pady=4)
 
-        self.step_listbox = CheckList(
+        self.step_listbox = tk.Listbox(
             f_list_s,
             bg=UITheme.BG_DARK,
-            select_bg=UITheme.ACCENT_BLUE,
-            on_double_click=lambda idx: self.edit_selected_main_step(),
-            on_toggle=self.on_main_step_chk_toggle
+            fg=UITheme.TEXT_MAIN,
+            selectbackground=UITheme.ACCENT_BLUE,
+            selectforeground="#fff",
+            bd=0,
+            highlightthickness=0,
+            font=UITheme.FONT_NORMAL,
+            exportselection=False
         )
-        self.step_listbox.pack(fill="both", expand=True)
+        self.step_listbox.pack(side="left", fill="both", expand=True)
+        self.step_listbox.bind("<Double-Button-1>", lambda e: self.edit_selected_main_step())
+        sc_step = tk.Scrollbar(f_list_s, orient="vertical", command=self.step_listbox.yview)
+        sc_step.pack(side="right", fill="y")
+        self.step_listbox.config(yscrollcommand=sc_step.set)
 
         # 底部單層全功能管理工具列 (統一佈局順序：上移/下移/試跑/修改/複製/展開/刪除/清空)
         sr2 = tk.Frame(f_seq, bg=UITheme.BG_PANEL)
@@ -2385,23 +2268,16 @@ class App(tk.Tk):
         return sel[0] if sel else None
 
     def refresh_combo_actions_list(self, select_idx=None):
+        self.combo_act_listbox.delete(0, tk.END)
         idx = self.get_selected_combo_idx()
         if idx is None:
-            self.combo_act_listbox.delete(0, tk.END)
             return
         actions = combos[idx].get("actions", [])
-        items = [(format_action_summary(act, index=i), act.get("enabled", True)) for i, act in enumerate(actions)]
-        self.combo_act_listbox.set_items(items, select_idx=select_idx)
-
-    def on_combo_action_chk_toggle(self, idx, is_enabled):
-        c_idx = self.get_selected_combo_idx()
-        if c_idx is None: return
-        actions = combos[c_idx]["actions"]
-        if 0 <= idx < len(actions):
-            actions[idx]["enabled"] = is_enabled
-            self.sync_combo_actions_to_main_steps(combos[c_idx]["name"], actions)
-            state_str = "啟用" if is_enabled else "停用"
-            self.set_status(f"已將動作 #{idx+1} 切換為: {state_str}")
+        for i, act in enumerate(actions):
+            self.combo_act_listbox.insert(tk.END, format_action_summary(act, index=i))
+        if select_idx is not None and 0 <= select_idx < len(actions):
+            self.combo_act_listbox.selection_set(select_idx)
+            self.combo_act_listbox.see(select_idx)
 
     def sync_combo_actions_to_main_steps(self, combo_name, new_actions):
         sync_cnt = 0
@@ -2599,18 +2475,13 @@ class App(tk.Tk):
         sel = self.step_listbox.curselection()
         return sel[0] + 1 if sel else len(steps)
 
-    def build_main_display_list(self):
-        return [(format_action_summary(s, index=i), s.get("enabled", True)) for i, s in enumerate(steps)]
-
     def update_step_list(self, select_idx=None):
-        items = self.build_main_display_list()
-        self.step_listbox.set_items(items, select_idx=select_idx)
-
-    def on_main_step_chk_toggle(self, idx, is_enabled):
-        if 0 <= idx < len(steps):
-            steps[idx]["enabled"] = is_enabled
-            state_str = "啟用" if is_enabled else "停用"
-            self.set_status(f"已將步驟 #{idx+1} 切換為: {state_str}")
+        self.step_listbox.delete(0, tk.END)
+        for i, s in enumerate(steps):
+            self.step_listbox.insert(tk.END, format_action_summary(s, index=i))
+        if select_idx is not None and 0 <= select_idx < len(steps):
+            self.step_listbox.selection_set(select_idx)
+            self.step_listbox.see(select_idx)
 
     def test_run_selected_main_step(self):
         sel = self.step_listbox.curselection()
