@@ -91,7 +91,7 @@ if IS_WINDOWS:
     user32.ScreenToClient.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
     user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
     user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-    user32.FlashWindow.argtypes = [wintypes.HWND, ctypes.BOOL]
+    user32.FlashWindow.argtypes = [wintypes.HWND, wintypes.BOOL]
     user32.SetForegroundWindow.argtypes = [wintypes.HWND]
     user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
     user32.BringWindowToTop.argtypes = [wintypes.HWND]
@@ -1268,7 +1268,7 @@ class App(tk.Tk):
                 if t and WINDOW_TITLE not in t:
                     windows.append((hwnd, t))
             return True
-        user32.EnumWindows(ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_int, ctypes.c_int)(enum_proc), 0)
+        user32.EnumWindows(ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)(enum_proc), 0)
         return windows
 
     def refresh_window_dropdown(self):
