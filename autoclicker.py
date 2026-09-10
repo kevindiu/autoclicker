@@ -6,6 +6,7 @@ import copy
 import ctypes
 from ctypes import wintypes
 import threading
+import queue
 import pyautogui
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
@@ -58,6 +59,16 @@ class UITheme:
     CYAN_SUB = "#7dd3fc"         # 淺天藍副標
     ACCENT_CYAN = "#0284c7"      # 青藍 (展開)
     ACCENT_CYAN_HOVER = "#0369a1"
+
+    # ================= 統一清晰字體系統 (微軟正黑體 UI) =================
+    FONT_FAMILY = "Microsoft JhengHei UI" if sys.platform == "win32" else ("PingFang TC" if sys.platform == "darwin" else "Noto Sans CJK TC")
+    
+    FONT_SMALL = (FONT_FAMILY, 9)
+    FONT_SMALL_BOLD = (FONT_FAMILY, 9, "bold")
+    FONT_NORMAL = (FONT_FAMILY, 10)
+    FONT_NORMAL_BOLD = (FONT_FAMILY, 10, "bold")
+    FONT_TITLE = (FONT_FAMILY, 11, "bold")
+    FONT_BIG_BTN = (FONT_FAMILY, 12, "bold")
 
 # ==============================================================================
 # 全域資料狀態與執行緒同步物件
@@ -201,13 +212,20 @@ def post_bg_key(hwnd, key_str):
         return
     vk = VK_MAP.get(key_str.lower()) or (ord(key_str.upper()) if len(key_str) == 1 else None)
     if vk is not None:
+        scan_code = 0
+        try:
+            scan_code = user32.MapVirtualKeyW(vk, 0)
+        except Exception:
+            pass
+        lparam_down = to_lparam(1 | (scan_code << 16))
+        lparam_up = to_lparam(1 | (scan_code << 16) | 0xC0000000)
         with currently_held_keys_lock:
             currently_held_keys.add(("bg", hwnd, vk))
         try:
-            user32.PostMessageW(hwnd, 0x0100, vk, 0)
+            user32.PostMessageW(hwnd, 0x0100, vk, lparam_down)
             safe_sleep(0.06)
         finally:
-            user32.PostMessageW(hwnd, 0x0101, vk, to_lparam(0xC0000001))
+            user32.PostMessageW(hwnd, 0x0101, vk, lparam_up)
             with currently_held_keys_lock:
                 currently_held_keys.discard(("bg", hwnd, vk))
 
@@ -332,7 +350,7 @@ class CheckList(tk.Frame):
             rf.pack(fill="x", expand=True)
 
             fg_color = UITheme.TEXT_MAIN if is_enabled else UITheme.TEXT_DISABLED
-            lbl = tk.Label(rf, text=text, bg=self.bg, fg=fg_color, font=("Segoe UI", 9), anchor="w")
+            lbl = tk.Label(rf, text=text, bg=self.bg, fg=fg_color, font=UITheme.FONT_NORMAL, anchor="w")
             lbl.pack(side="left", fill="both", expand=True)
 
             var = tk.BooleanVar(value=is_enabled)
@@ -442,15 +460,15 @@ class VarTable(tk.Frame):
         # 標題欄
         self.hdr = tk.Frame(self, bg=UITheme.BG_PANEL, pady=3, padx=4)
         self.hdr.pack(fill="x")
-        tk.Label(self.hdr, text="變數名稱", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 8, "bold"), width=12, anchor="w").pack(side="left", padx=2)
-        tk.Label(self.hdr, text="種類", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 8, "bold"), width=9, anchor="center").pack(side="left", padx=2)
-        tk.Label(self.hdr, text="當前數值", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 8, "bold"), anchor="w").pack(side="left", fill="x", expand=True, padx=2)
+        tk.Label(self.hdr, text="變數名稱", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_SMALL_BOLD, width=12, anchor="w").pack(side="left", padx=2)
+        tk.Label(self.hdr, text="種類", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_SMALL_BOLD, width=9, anchor="center").pack(side="left", padx=2)
+        tk.Label(self.hdr, text="當前數值", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_SMALL_BOLD, anchor="w").pack(side="left", fill="x", expand=True, padx=2)
 
         # 內容滾動區
         f_box = tk.Frame(self, bg=bg)
         f_box.pack(fill="both", expand=True)
 
-        self.canvas = tk.Canvas(f_box, bg=bg, bd=0, highlightthickness=0, height=65)
+        self.canvas = tk.Canvas(f_box, bg=bg, bd=0, highlightthickness=0, height=75)
         self.scrollbar = tk.Scrollbar(f_box, orient="vertical", command=self.canvas.yview)
         self.body_frame = tk.Frame(self.canvas, bg=bg)
 
@@ -486,11 +504,11 @@ class VarTable(tk.Frame):
         rf = tk.Frame(self.body_frame, bg=self.bg, pady=2, padx=4)
         rf.pack(fill="x", expand=True)
 
-        l1 = tk.Label(rf, text=name, bg=self.bg, fg=UITheme.TEXT_MAIN, font=("Segoe UI", 9), width=12, anchor="w")
+        l1 = tk.Label(rf, text=name, bg=self.bg, fg=UITheme.TEXT_MAIN, font=UITheme.FONT_NORMAL, width=12, anchor="w")
         l1.pack(side="left", padx=2)
-        l2 = tk.Label(rf, text=t_disp, bg=self.bg, fg=UITheme.CYAN_SUB, font=("Segoe UI", 8), width=9, anchor="center")
+        l2 = tk.Label(rf, text=t_disp, bg=self.bg, fg=UITheme.CYAN_SUB, font=UITheme.FONT_SMALL_BOLD, width=9, anchor="center")
         l2.pack(side="left", padx=2)
-        l3 = tk.Label(rf, text=v_str, bg=self.bg, fg="#e5e7eb", font=("Segoe UI", 9), anchor="w")
+        l3 = tk.Label(rf, text=v_str, bg=self.bg, fg="#e5e7eb", font=UITheme.FONT_NORMAL, anchor="w")
         l3.pack(side="left", fill="x", expand=True, padx=2)
 
         for w in (rf, l1, l2, l3):
@@ -534,6 +552,15 @@ class App(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.apply_app_icon()
 
+        # 全域字體配置 (增強微軟正黑體 UI 顯示效果)
+        self.option_add("*Font", UITheme.FONT_NORMAL)
+        try:
+            style = ttk.Style()
+            style.configure("TCombobox", font=UITheme.FONT_NORMAL)
+            self.option_add("*TCombobox*Listbox.font", UITheme.FONT_NORMAL)
+        except Exception:
+            pass
+
         # 頂部全域設定變數
         self.var_profile_name = tk.StringVar()
         self.var_use_bg = tk.BooleanVar(value=True)
@@ -542,6 +569,22 @@ class App(tk.Tk):
         self.var_offset_x = tk.StringVar(value="0")
         self.var_offset_y = tk.StringVar(value="0")
         self.var_window = tk.StringVar(value="未偵測到視窗")
+
+        # 執行緒安全的快取設定 (避免子執行緒讀取 Tkinter Variable 引發 Tcl 鎖定或例外)
+        self.cached_use_bg = True
+        self.cached_use_rel = True
+        self.cached_offset_x = 0
+        self.cached_offset_y = 0
+
+        self.var_use_bg.trace_add("write", lambda *a: setattr(self, "cached_use_bg", bool(self.var_use_bg.get())))
+        self.var_use_rel.trace_add("write", lambda *a: setattr(self, "cached_use_rel", bool(self.var_use_rel.get())))
+        def _update_offset(*a):
+            try: self.cached_offset_x = int(self.var_offset_x.get() or 0)
+            except Exception: self.cached_offset_x = 0
+            try: self.cached_offset_y = int(self.var_offset_y.get() or 0)
+            except Exception: self.cached_offset_y = 0
+        self.var_offset_x.trace_add("write", _update_offset)
+        self.var_offset_y.trace_add("write", _update_offset)
 
         # 組合管理變數
         self.var_combo_name = tk.StringVar(value="新組合")
@@ -577,6 +620,11 @@ class App(tk.Tk):
         self.refresh_variables_table()
         self.track_mouse_live()
 
+        # 執行緒安全的 UI 通訊佇列
+        self.status_queue = queue.Queue()
+        self.ui_task_queue = queue.Queue()
+        self.poll_ui_queues()
+
     def apply_app_icon(self, target=None):
         """為指定視窗 (預設為主視窗) 套用應用程式圖示 (支援 Windows .ico 與通用 .png)"""
         win = target or self
@@ -604,10 +652,46 @@ class App(tk.Tk):
         """切換助手視窗置頂狀態"""
         self.attributes("-topmost", self.var_topmost.get())
 
+    def poll_ui_queues(self):
+        """定期由主執行緒消費背景執行緒發送的 UI 更新事件"""
+        if self.is_closing: return
+        try:
+            while True:
+                msg = self.status_queue.get_nowait()
+                if hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
+                    self.lbl_status.config(text=f"● 狀態: {msg}")
+        except (queue.Empty, Exception):
+            pass
+        try:
+            while True:
+                fn = self.ui_task_queue.get_nowait()
+                fn()
+        except (queue.Empty, Exception):
+            pass
+        if not self.is_closing:
+            self.after(50, self.poll_ui_queues)
+
     def set_status(self, msg):
         """執行緒安全地更新狀態列訊息"""
         if not self.is_closing:
-            self.after(0, lambda: self.lbl_status.config(text=f"● 狀態: {msg}"))
+            try:
+                if threading.current_thread() is threading.main_thread() and hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
+                    self.lbl_status.config(text=f"● 狀態: {msg}")
+                else:
+                    self.status_queue.put(msg)
+            except Exception:
+                pass
+
+    def run_on_ui_thread(self, fn):
+        """在主執行緒安全執行 UI 變更回調"""
+        if not self.is_closing:
+            try:
+                if threading.current_thread() is threading.main_thread():
+                    fn()
+                else:
+                    self.ui_task_queue.put(fn)
+            except Exception:
+                pass
 
     def set_running_ui(self, is_running):
         """執行緒安全地更新啟動/停止按鈕 UI 與熱更新欄位"""
@@ -620,22 +704,31 @@ class App(tk.Tk):
                 self.btn_toggle.config(text="▶ 開始循環執行 (F8)", bg=UITheme.ACCENT_GREEN, activebackground=UITheme.ACCENT_GREEN_HOVER)
                 self.f_hot.pack_forget()
                 self.close_active_dlg()
-        self.after(0, _u)
+        self.run_on_ui_thread(_u)
 
     def run_in_test_thread(self, task_name, task_fn):
         """統一的非同步試跑安全守衛與執行緒啟動器"""
         if running:
             return self.set_status("巨集正在循環執行中，請先停止再試跑！")
+        if is_testing:
+            return self.set_status("已有試跑任務正在執行中，請稍候！")
 
         def _worker():
             global is_testing
             is_testing = True
+            stop_event.clear()  # 關鍵修復：清除先前手動停止或循環殘留的中止信號
             try:
                 self.set_status(f"正在試跑 {task_name}...")
                 task_fn()
-                self.set_status(f"{task_name} 試跑完成！")
+                if stop_event.is_set():
+                    self.set_status(f"{task_name} 試跑已手動中止！")
+                else:
+                    self.set_status(f"{task_name} 試跑完成！")
+            except Exception as e:
+                self.set_status(f"{task_name} 試跑異常: {e}")
             finally:
                 is_testing = False
+                emergency_release_all()
 
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -718,7 +811,7 @@ class App(tk.Tk):
         banner.configure(bg=UITheme.ACCENT_BLUE)
 
         sw = self.winfo_screenwidth()
-        bw, bh = 760, 44
+        bw, bh = 780, 46
         bx = max(0, (sw - bw) // 2)
         by = 12
         banner.geometry(f"{bw}x{bh}+{bx}+{by}")
@@ -731,7 +824,7 @@ class App(tk.Tk):
             text=f"【設定{btn_cn}點擊】將滑鼠指住目標 -> 按 [SPACE 空白鍵] 確定！(按 ESC 取消)",
             bg="#0f172a",
             fg=UITheme.CYAN_TITLE,
-            font=("Segoe UI", 10, "bold")
+            font=UITheme.FONT_TITLE
         )
         lbl_hud.pack(fill="both", expand=True)
 
@@ -905,7 +998,7 @@ class App(tk.Tk):
             text="當前掛機進度監控",
             bg=UITheme.BG_PANEL,
             fg=UITheme.CYAN_TITLE,
-            font=("Segoe UI", 10, "bold")
+            font=UITheme.FONT_TITLE
         ).pack(side="left")
 
         chk_top = tk.Checkbutton(
@@ -917,7 +1010,7 @@ class App(tk.Tk):
             selectcolor=UITheme.BG_DARK,
             activebackground=UITheme.BG_PANEL,
             activeforeground=UITheme.TEXT_MAIN,
-            font=("Segoe UI", 9),
+            font=UITheme.FONT_NORMAL,
             command=self.toggle_active_dlg_topmost
         )
         chk_top.pack(side="right")
@@ -933,7 +1026,7 @@ class App(tk.Tk):
             selectforeground="#fff",
             bd=0,
             highlightthickness=0,
-            font=("Segoe UI", 9)
+            font=UITheme.FONT_NORMAL
         )
         self.active_lb.pack(side="left", fill="both", expand=True)
 
@@ -951,7 +1044,7 @@ class App(tk.Tk):
             text="即時套用修改（不用重開）",
             bg=UITheme.ACCENT_BLUE,
             fg="#ffffff",
-            font=("Segoe UI", 9, "bold"),
+            font=UITheme.FONT_NORMAL_BOLD,
             activebackground=UITheme.ACCENT_BLUE_HOVER,
             command=self.apply_hot_reload_from_popup
         ).pack(side="left", fill="x", expand=True, padx=(0, 4))
@@ -1030,7 +1123,7 @@ class App(tk.Tk):
             e_y = tk.Entry(f, textvariable=var_y, width=10, bg=UITheme.BG_INPUT, fg="#fff")
             e_y.grid(row=3, column=1, padx=6, pady=3, sticky="w")
 
-            btn_rec = tk.Button(f, text="重新瞄準目標 (按 Space 確定)", width=24, bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, font=("Segoe UI", 9, "bold"))
+            btn_rec = tk.Button(f, text="重新瞄準目標 (按 Space 確定)", width=24, bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, font=UITheme.FONT_NORMAL_BOLD)
             btn_rec.grid(row=4, column=0, columnspan=2, pady=(8, 2))
 
             def do_rec():
@@ -1205,92 +1298,98 @@ class App(tk.Tk):
         f_left.grid(row=0, column=0, padx=(10, 5), pady=10, sticky="nsew")
 
         # 1. 設定與視窗綁定 (精簡至 2 行，大幅節省縱向空間)
-        f_cfg = tk.LabelFrame(f_left, text=" 設定與視窗綁定 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 10, "bold"), padx=6, pady=4)
+        f_cfg = tk.LabelFrame(f_left, text=" 設定與視窗綁定 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=6, pady=4)
         f_cfg.pack(fill="x", pady=(0, 4))
 
         # 第 1 行: 設定檔管理 + 核心功能勾選 (背景掛機、相對坐標、視窗置頂)
         r1 = tk.Frame(f_cfg, bg=UITheme.BG_PANEL)
         r1.pack(fill="x", pady=(1, 2))
-        tk.Label(r1, text="設定檔:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=("Segoe UI", 9)).pack(side="left")
+        tk.Label(r1, text="設定檔:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left")
         self.cbo_profile = ttk.Combobox(r1, textvariable=self.var_profile_name, width=14, state="readonly")
         self.cbo_profile.pack(side="left", padx=(3, 3))
-        tk.Button(r1, text="載入", width=4, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), command=self.load_config).pack(side="left", padx=1)
-        tk.Button(r1, text="儲存", width=4, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), command=self.save_config).pack(side="left", padx=1)
-        tk.Button(r1, text="+ 新建", width=5, bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), command=self.create_new_profile).pack(side="left", padx=(1, 8))
+        tk.Button(r1, text="載入", width=4, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.load_config).pack(side="left", padx=1)
+        tk.Button(r1, text="儲存", width=4, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.save_config).pack(side="left", padx=1)
+        tk.Button(r1, text="+ 新建", width=5, bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.create_new_profile).pack(side="left", padx=(1, 8))
 
-        tk.Checkbutton(r1, text="背景掛機", variable=self.var_use_bg, bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, selectcolor=UITheme.BG_PANEL, activebackground=UITheme.BG_PANEL, font=("Segoe UI", 9)).pack(side="left", padx=2)
-        tk.Checkbutton(r1, text="相對坐標", variable=self.var_use_rel, bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, selectcolor=UITheme.BG_PANEL, activebackground=UITheme.BG_PANEL, font=("Segoe UI", 9)).pack(side="left", padx=2)
-        tk.Checkbutton(r1, text="視窗置頂", variable=self.var_topmost, command=self.toggle_topmost, bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, selectcolor=UITheme.BG_PANEL, activebackground=UITheme.BG_PANEL, font=("Segoe UI", 9)).pack(side="left", padx=2)
+        tk.Checkbutton(r1, text="背景掛機", variable=self.var_use_bg, bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, selectcolor=UITheme.BG_PANEL, activebackground=UITheme.BG_PANEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=2)
+        tk.Checkbutton(r1, text="相對坐標", variable=self.var_use_rel, bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, selectcolor=UITheme.BG_PANEL, activebackground=UITheme.BG_PANEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=2)
+        tk.Checkbutton(r1, text="視窗置頂", variable=self.var_topmost, command=self.toggle_topmost, bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, selectcolor=UITheme.BG_PANEL, activebackground=UITheme.BG_PANEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=2)
 
         # 第 2 行: 目標視窗綁定 + 重新整理/定位 + 偏差校正 X/Y
         r2 = tk.Frame(f_cfg, bg=UITheme.BG_PANEL)
         r2.pack(fill="x", pady=(2, 1))
-        tk.Label(r2, text="目標視窗:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=("Segoe UI", 9)).pack(side="left")
+        tk.Label(r2, text="目標視窗:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left")
         self.cbo_window = ttk.Combobox(r2, textvariable=self.var_window, width=16, state="readonly")
         self.cbo_window.pack(side="left", padx=(3, 3), fill="x", expand=True)
         self.cbo_window.bind("<<ComboboxSelected>>", self.on_window_select)
-        tk.Button(r2, text="↻ 重新整理", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), padx=4, command=self.refresh_window_dropdown).pack(side="left", padx=1)
-        tk.Button(r2, text="◎ 定位視窗", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), padx=4, command=self.locate_target_window).pack(side="left", padx=(1, 8))
+        tk.Button(r2, text="↻ 重新整理", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, padx=4, command=self.refresh_window_dropdown).pack(side="left", padx=1)
+        tk.Button(r2, text="◎ 定位視窗", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, padx=4, command=self.locate_target_window).pack(side="left", padx=(1, 8))
 
-        tk.Label(r2, text="偏差校正:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=("Segoe UI", 9)).pack(side="left")
-        tk.Label(r2, text="X:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=("Segoe UI", 9)).pack(side="left", padx=(3, 1))
-        tk.Entry(r2, textvariable=self.var_offset_x, width=3, bg=UITheme.BG_INPUT, fg="#ffffff", relief="flat", font=("Segoe UI", 9)).pack(side="left", padx=1)
-        tk.Label(r2, text="Y:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=("Segoe UI", 9)).pack(side="left", padx=(3, 1))
-        tk.Entry(r2, textvariable=self.var_offset_y, width=3, bg=UITheme.BG_INPUT, fg="#ffffff", relief="flat", font=("Segoe UI", 9)).pack(side="left", padx=1)
+        tk.Label(r2, text="偏差校正:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left")
+        tk.Label(r2, text="X:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_NORMAL).pack(side="left", padx=(3, 1))
+        tk.Entry(r2, textvariable=self.var_offset_x, width=3, bg=UITheme.BG_INPUT, fg="#ffffff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
+        tk.Label(r2, text="Y:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_NORMAL).pack(side="left", padx=(3, 1))
+        tk.Entry(r2, textvariable=self.var_offset_y, width=3, bg=UITheme.BG_INPUT, fg="#ffffff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
 
-        # 2. 常用變數庫 (表格一覽：名稱 / 種類 / 數值，雙擊可修改)
+        # 2. 常用變數庫 (表格一覽：名稱 / 種類 / 數值，雙擊可修改 | 右側操作按鈕)
         f_vars = tk.LabelFrame(
             f_left,
             text=" 常用變數庫 (雙擊任意行可修改) ",
             bg=UITheme.BG_PANEL,
             fg=UITheme.CYAN_TITLE,
-            font=("Segoe UI", 9, "bold"),
+            font=UITheme.FONT_TITLE,
             padx=6,
             pady=3
         )
         f_vars.pack(fill="x", pady=(0, 4))
 
-        self.tree_vars = VarTable(f_vars, on_double_click=self.edit_selected_variable)
-        self.tree_vars.pack(fill="x", pady=(0, 2))
+        f_vars_row = tk.Frame(f_vars, bg=UITheme.BG_PANEL)
+        f_vars_row.pack(fill="x", expand=True)
 
-        r_v_btns = tk.Frame(f_vars, bg=UITheme.BG_PANEL)
-        r_v_btns.pack(fill="x", pady=(1, 0))
+        self.tree_vars = VarTable(f_vars_row, on_double_click=self.edit_selected_variable)
+        self.tree_vars.pack(side="left", fill="both", expand=True, padx=(0, 6))
+
+        col_v_btns = tk.Frame(f_vars_row, bg=UITheme.BG_PANEL)
+        col_v_btns.pack(side="right", fill="y")
 
         tk.Button(
-            r_v_btns,
+            col_v_btns,
             text="+ 新增變數",
+            width=10,
             bg=UITheme.ACCENT_GREEN,
             fg="#fff",
             activebackground=UITheme.ACCENT_GREEN_HOVER,
-            font=("Segoe UI", 8, "bold"),
+            font=UITheme.FONT_SMALL_BOLD,
             relief="flat",
             command=self.add_variable_dialog
-        ).pack(side="left", padx=(0, 2), fill="x", expand=True)
+        ).pack(fill="x", expand=True, pady=(0, 2))
 
         tk.Button(
-            r_v_btns,
+            col_v_btns,
             text="✎ 修改變數",
+            width=10,
             bg=UITheme.ACCENT_BLUE,
             fg="#fff",
             activebackground=UITheme.ACCENT_BLUE_HOVER,
-            font=("Segoe UI", 8, "bold"),
+            font=UITheme.FONT_SMALL_BOLD,
             relief="flat",
             command=self.edit_selected_variable
-        ).pack(side="left", padx=2, fill="x", expand=True)
+        ).pack(fill="x", expand=True, pady=2)
 
         tk.Button(
-            r_v_btns,
+            col_v_btns,
             text="✕ 刪除變數",
+            width=10,
             bg=UITheme.ACCENT_RED,
             fg="#fff",
             activebackground=UITheme.ACCENT_RED_HOVER,
-            font=("Segoe UI", 8),
+            font=UITheme.FONT_SMALL_BOLD,
             relief="flat",
             command=self.delete_selected_variable
-        ).pack(side="left", padx=(2, 0), fill="x", expand=True)
+        ).pack(fill="x", expand=True, pady=(2, 0))
 
         # 3. 技能組合區塊
-        f_combo = tk.LabelFrame(f_left, text=" 技能組合庫 (右側真實 Checkbox: 啟用/停用 | 雙擊: 加入掛機流程) ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 10, "bold"), padx=6, pady=6)
+        f_combo = tk.LabelFrame(f_left, text=" 技能組合庫 (右側真實 Checkbox: 啟用/停用 | 雙擊: 加入掛機流程) ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=6, pady=6)
         f_combo.pack(fill="both", expand=True)
 
         f_combo_split = tk.Frame(f_combo, bg=UITheme.BG_PANEL)
@@ -1303,18 +1402,18 @@ class App(tk.Tk):
         f_cl = tk.Frame(f_combo_split, bg=UITheme.BG_PANEL, padx=4, pady=2)
         f_cl.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
 
-        tk.Label(f_cl, text="【組合清單 (雙擊加入)】", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=("Segoe UI", 9, "bold")).pack(anchor="w")
+        tk.Label(f_cl, text="【組合清單 (雙擊加入)】", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_NORMAL_BOLD).pack(anchor="w")
 
         cr_name = tk.Frame(f_cl, bg=UITheme.BG_PANEL)
         cr_name.pack(fill="x", pady=2)
-        tk.Entry(cr_name, textvariable=self.var_combo_name, width=10, bg=UITheme.BG_INPUT, fg="#fff").pack(side="left", fill="x", expand=True, padx=(0, 2))
-        tk.Button(cr_name, text="+ 新增", width=5, bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, command=self.add_new_combo).pack(side="left", padx=1)
-        tk.Button(cr_name, text="✎ 改名", width=5, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, command=self.rename_selected_combo).pack(side="left", padx=1)
-        tk.Button(cr_name, text="⎘ 複製", width=5, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, command=self.duplicate_selected_combo).pack(side="left", padx=1)
+        tk.Entry(cr_name, textvariable=self.var_combo_name, width=10, bg=UITheme.BG_INPUT, fg="#fff", font=UITheme.FONT_NORMAL).pack(side="left", fill="x", expand=True, padx=(0, 2))
+        tk.Button(cr_name, text="+ 新增", width=5, bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, font=UITheme.FONT_SMALL_BOLD, command=self.add_new_combo).pack(side="left", padx=1)
+        tk.Button(cr_name, text="✎ 改名", width=5, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, font=UITheme.FONT_SMALL_BOLD, command=self.rename_selected_combo).pack(side="left", padx=1)
+        tk.Button(cr_name, text="⎘ 複製", width=5, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, font=UITheme.FONT_SMALL_BOLD, command=self.duplicate_selected_combo).pack(side="left", padx=1)
 
         f_cl_box = tk.Frame(f_cl, bg=UITheme.BG_DARK)
         f_cl_box.pack(fill="both", expand=True, pady=4)
-        self.combo_listbox = tk.Listbox(f_cl_box, bg=UITheme.BG_DARK, fg=UITheme.TEXT_MAIN, selectbackground=UITheme.ACCENT_BLUE, selectforeground="#fff", bd=0, highlightthickness=0, font=("Segoe UI", 10), exportselection=False)
+        self.combo_listbox = tk.Listbox(f_cl_box, bg=UITheme.BG_DARK, fg=UITheme.TEXT_MAIN, selectbackground=UITheme.ACCENT_BLUE, selectforeground="#fff", bd=0, highlightthickness=0, font=UITheme.FONT_NORMAL, exportselection=False)
         self.combo_listbox.pack(side="left", fill="both", expand=True)
         self.combo_listbox.bind("<<ListboxSelect>>", self.on_combo_select)
         self.combo_listbox.bind("<Double-Button-1>", self.on_combo_double_click_add) # 雙擊加入掛機流程
@@ -1324,8 +1423,8 @@ class App(tk.Tk):
 
         cr_act = tk.Frame(f_cl, bg=UITheme.BG_PANEL)
         cr_act.pack(fill="x", pady=(2, 0))
-        tk.Button(cr_act, text="➔ 加入掛機流程", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, font=("Segoe UI", 9, "bold"), command=self.add_combo_to_main_steps).pack(side="left", fill="x", expand=True, padx=(0, 2))
-        tk.Button(cr_act, text="✕ 刪除組合", width=9, bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, command=self.delete_selected_combo).pack(side="right")
+        tk.Button(cr_act, text="➔ 加入掛機流程", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, font=UITheme.FONT_NORMAL_BOLD, command=self.add_combo_to_main_steps).pack(side="left", fill="x", expand=True, padx=(0, 2))
+        tk.Button(cr_act, text="✕ 刪除組合", width=9, bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, font=UITheme.FONT_SMALL_BOLD, command=self.delete_selected_combo).pack(side="right")
 
         # 2-B. 組合動作 (視覺層次優化：卡片式分組 + 雙層寬鬆工具列)
         f_cr = tk.Frame(f_combo_split, bg=UITheme.BG_PANEL, padx=6, pady=3, highlightbackground=UITheme.BORDER, highlightthickness=1)
@@ -1333,26 +1432,26 @@ class App(tk.Tk):
 
         f_cr_top = tk.Frame(f_cr, bg=UITheme.BG_PANEL)
         f_cr_top.pack(fill="x", pady=(0, 4))
-        self.lbl_combo_editing = tk.Label(f_cr_top, text="【組合動作: 未選取】", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_SUB, font=("Segoe UI", 9, "bold"))
+        self.lbl_combo_editing = tk.Label(f_cr_top, text="【組合動作: 未選取】", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_SUB, font=UITheme.FONT_NORMAL_BOLD)
         self.lbl_combo_editing.pack(side="left")
-        tk.Button(f_cr_top, text="▶ 試跑組合", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, font=("Segoe UI", 8, "bold"), relief="flat", padx=6, command=self.test_run_current_combo).pack(side="right")
+        tk.Button(f_cr_top, text="▶ 試跑組合", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, font=UITheme.FONT_SMALL_BOLD, relief="flat", padx=6, command=self.test_run_current_combo).pack(side="right")
 
         # 動作建立面板 (卡片分組)
-        f_action_card = tk.LabelFrame(f_cr, text=" 加入動作到所選組合 ", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=("Segoe UI", 8, "bold"), padx=5, pady=3)
+        f_action_card = tk.LabelFrame(f_cr, text=" 加入動作到所選組合 ", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL_BOLD, padx=5, pady=3)
         f_action_card.pack(fill="x", pady=(0, 4))
 
         # 1. 點擊動作行 (突出主要瞄準點擊)
         r_click = tk.Frame(f_action_card, bg=UITheme.BG_PANEL)
         r_click.pack(fill="x", pady=2)
         ttk.Combobox(r_click, textvariable=self.var_combo_btn, values=["左鍵", "右鍵"], width=4, state="readonly").pack(side="left", padx=(0, 3))
-        self.btn_combo_add_click = tk.Button(r_click, text="+ 瞄準點擊", bg=UITheme.ACCENT_GREEN, fg="#fff", font=("Segoe UI", 9, "bold"), activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", padx=6, command=self.combo_add_click_action)
+        self.btn_combo_add_click = tk.Button(r_click, text="+ 瞄準點擊", bg=UITheme.ACCENT_GREEN, fg="#fff", font=UITheme.FONT_NORMAL_BOLD, activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", padx=6, command=self.combo_add_click_action)
         self.btn_combo_add_click.pack(side="left", padx=1, fill="x", expand=True)
 
-        tk.Label(r_click, text="X:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=("Segoe UI", 8)).pack(side="left", padx=(3, 1))
-        tk.Entry(r_click, textvariable=self.var_combo_manual_x, width=4, bg=UITheme.BG_INPUT, fg="#fff", relief="flat").pack(side="left", padx=1)
-        tk.Label(r_click, text="Y:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=("Segoe UI", 8)).pack(side="left", padx=(1, 1))
-        tk.Entry(r_click, textvariable=self.var_combo_manual_y, width=4, bg=UITheme.BG_INPUT, fg="#fff", relief="flat").pack(side="left", padx=1)
-        tk.Button(r_click, text="+ 手動", width=5, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", command=self.combo_add_manual_click).pack(side="left", padx=(2, 0))
+        tk.Label(r_click, text="X:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(side="left", padx=(3, 1))
+        tk.Entry(r_click, textvariable=self.var_combo_manual_x, width=4, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
+        tk.Label(r_click, text="Y:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(side="left", padx=(1, 1))
+        tk.Entry(r_click, textvariable=self.var_combo_manual_y, width=4, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
+        tk.Button(r_click, text="+ 手動", width=5, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.combo_add_manual_click).pack(side="left", padx=(2, 0))
 
         # 2. 按鍵與等待行 (等寬對齊)
         r_fast = tk.Frame(f_action_card, bg=UITheme.BG_PANEL)
@@ -1360,26 +1459,26 @@ class App(tk.Tk):
 
         f_k = tk.Frame(r_fast, bg=UITheme.BG_PANEL)
         f_k.pack(side="left", fill="x", expand=True, padx=(0, 2))
-        tk.Entry(f_k, textvariable=self.var_combo_act_key, width=5, bg=UITheme.BG_INPUT, fg="#fff", relief="flat").pack(side="left", padx=(0, 2))
-        tk.Button(f_k, text="+ 加按鍵", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", padx=4, command=self.combo_add_key_action).pack(side="left", fill="x", expand=True)
+        tk.Entry(f_k, textvariable=self.var_combo_act_key, width=5, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 2))
+        tk.Button(f_k, text="+ 加按鍵", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", padx=4, font=UITheme.FONT_SMALL_BOLD, command=self.combo_add_key_action).pack(side="left", fill="x", expand=True)
 
         f_w = tk.Frame(r_fast, bg=UITheme.BG_PANEL)
         f_w.pack(side="left", fill="x", expand=True, padx=(2, 0))
-        tk.Entry(f_w, textvariable=self.var_combo_act_wait, width=4, bg=UITheme.BG_INPUT, fg="#fff", relief="flat").pack(side="left", padx=(0, 2))
-        tk.Button(f_w, text="+ 加停頓(s)", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", padx=4, command=self.combo_add_wait_action).pack(side="left", fill="x", expand=True)
+        tk.Entry(f_w, textvariable=self.var_combo_act_wait, width=4, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 2))
+        tk.Button(f_w, text="+ 加停頓(s)", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", padx=4, font=UITheme.FONT_SMALL_BOLD, command=self.combo_add_wait_action).pack(side="left", fill="x", expand=True)
 
         # 3. 呼叫組合行
         r_call = tk.Frame(f_action_card, bg=UITheme.BG_PANEL)
         r_call.pack(fill="x", pady=2)
-        tk.Label(r_call, text="呼叫組合:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=("Segoe UI", 8)).pack(side="left", padx=(0, 2))
+        tk.Label(r_call, text="呼叫組合:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_SMALL).pack(side="left", padx=(0, 2))
         self.cbo_call_combo = ttk.Combobox(r_call, textvariable=self.var_combo_to_call, width=12, state="readonly")
         self.cbo_call_combo.pack(side="left", padx=2, fill="x", expand=True)
-        tk.Button(r_call, text="↻ +呼叫", width=7, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), command=self.combo_add_call_action).pack(side="left", padx=(2, 0))
+        tk.Button(r_call, text="↻ +呼叫", width=7, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.combo_add_call_action).pack(side="left", padx=(2, 0))
 
         # 4. 引用變數行
         r_ref = tk.Frame(f_action_card, bg=UITheme.BG_PANEL)
         r_ref.pack(fill="x", pady=2)
-        tk.Label(r_ref, text="引用變數:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=("Segoe UI", 8)).pack(side="left", padx=(0, 2))
+        tk.Label(r_ref, text="引用變數:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_SMALL).pack(side="left", padx=(0, 2))
         self.cbo_combo_add_var = ttk.Combobox(r_ref, textvariable=self.var_combo_ref_var, width=14, state="readonly")
         self.cbo_combo_add_var.pack(side="left", padx=2, fill="x", expand=True)
         tk.Button(
@@ -1390,7 +1489,7 @@ class App(tk.Tk):
             fg="#fff",
             activebackground=UITheme.ACCENT_BLUE_HOVER,
             relief="flat",
-            font=("Segoe UI", 8, "bold"),
+            font=UITheme.FONT_SMALL_BOLD,
             command=self.combo_add_variable_action
         ).pack(side="left", padx=(2, 0))
 
@@ -1410,16 +1509,16 @@ class App(tk.Tk):
         # 底部雙層管理工具列 (避免按鈕擠在同一行造成文字裁切)
         cr_act_ctrl1 = tk.Frame(f_cr, bg=UITheme.BG_PANEL)
         cr_act_ctrl1.pack(fill="x", pady=(2, 1))
-        tk.Button(cr_act_ctrl1, text="▲ 上移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", command=lambda: self.move_combo_action(-1)).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl1, text="▼ 下移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", command=lambda: self.move_combo_action(1)).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl1, text="✎ 修改動作", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", command=self.edit_selected_combo_action).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl1, text="▶ 試跑動作", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), command=self.test_run_selected_combo_action).pack(side="left", padx=1, fill="x", expand=True)
+        tk.Button(cr_act_ctrl1, text="▲ 上移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: self.move_combo_action(-1)).pack(side="left", padx=1, fill="x", expand=True)
+        tk.Button(cr_act_ctrl1, text="▼ 下移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: self.move_combo_action(1)).pack(side="left", padx=1, fill="x", expand=True)
+        tk.Button(cr_act_ctrl1, text="✎ 修改動作", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.edit_selected_combo_action).pack(side="left", padx=1, fill="x", expand=True)
+        tk.Button(cr_act_ctrl1, text="▶ 試跑動作", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.test_run_selected_combo_action).pack(side="left", padx=1, fill="x", expand=True)
 
         cr_act_ctrl2 = tk.Frame(f_cr, bg=UITheme.BG_PANEL)
         cr_act_ctrl2.pack(fill="x", pady=(1, 1))
-        tk.Button(cr_act_ctrl2, text="⎘ 複製動作", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", command=self.duplicate_combo_action).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl2, text="✕ 刪除動作", bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", command=self.delete_combo_action).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl2, text="✕ 清空動作", bg=UITheme.ACCENT_RED_DARK, fg="#fff", activebackground=UITheme.ACCENT_RED_DARK_HOVER, relief="flat", command=self.clear_combo_actions).pack(side="left", padx=1, fill="x", expand=True)
+        tk.Button(cr_act_ctrl2, text="⎘ 複製動作", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.duplicate_combo_action).pack(side="left", padx=1, fill="x", expand=True)
+        tk.Button(cr_act_ctrl2, text="✕ 刪除動作", bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.delete_combo_action).pack(side="left", padx=1, fill="x", expand=True)
+        tk.Button(cr_act_ctrl2, text="✕ 清空動作", bg=UITheme.ACCENT_RED_DARK, fg="#fff", activebackground=UITheme.ACCENT_RED_DARK_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.clear_combo_actions).pack(side="left", padx=1, fill="x", expand=True)
 
     # ======================= 右欄佈局 =======================
     def build_right_panel(self):
@@ -1427,32 +1526,32 @@ class App(tk.Tk):
         f_right.grid(row=0, column=1, padx=(5, 10), pady=10, sticky="nsew")
 
         # 1. 單一動作新增
-        f_step = tk.LabelFrame(f_right, text=" 單一動作（單次點擊 / 單鍵） ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 10, "bold"), padx=6, pady=6)
+        f_step = tk.LabelFrame(f_right, text=" 單一動作（單次點擊 / 單鍵） ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=6, pady=6)
         f_step.pack(fill="x", pady=(0, 6))
 
         sr_click = tk.Frame(f_step, bg=UITheme.BG_PANEL)
         sr_click.pack(fill="x", pady=2)
         ttk.Combobox(sr_click, textvariable=self.var_step_btn, values=["左鍵", "右鍵"], width=4, state="readonly").pack(side="left", padx=(0, 2))
-        self.btn_step_click = tk.Button(sr_click, text="+ 瞄準目標新增點擊", width=18, bg=UITheme.ACCENT_GREEN, fg="#fff", font=("Segoe UI", 9, "bold"), activebackground=UITheme.ACCENT_GREEN_HOVER, command=self.add_main_click_step)
+        self.btn_step_click = tk.Button(sr_click, text="+ 瞄準目標新增點擊", width=18, bg=UITheme.ACCENT_GREEN, fg="#fff", font=UITheme.FONT_NORMAL_BOLD, activebackground=UITheme.ACCENT_GREEN_HOVER, command=self.add_main_click_step)
         self.btn_step_click.pack(side="left", padx=2)
-        tk.Label(sr_click, text="手動X:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=("Segoe UI", 8)).pack(side="left", padx=(4, 1))
-        tk.Entry(sr_click, textvariable=self.var_step_manual_x, width=4, bg=UITheme.BG_INPUT, fg="#fff").pack(side="left", padx=1)
-        tk.Label(sr_click, text="Y:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=("Segoe UI", 8)).pack(side="left", padx=1)
-        tk.Entry(sr_click, textvariable=self.var_step_manual_y, width=4, bg=UITheme.BG_INPUT, fg="#fff").pack(side="left", padx=1)
-        tk.Button(sr_click, text="+ 手動", width=6, bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, command=self.add_main_manual_click).pack(side="left", padx=2)
+        tk.Label(sr_click, text="手動X:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(side="left", padx=(4, 1))
+        tk.Entry(sr_click, textvariable=self.var_step_manual_x, width=4, bg=UITheme.BG_INPUT, fg="#fff", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
+        tk.Label(sr_click, text="Y:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(side="left", padx=1)
+        tk.Entry(sr_click, textvariable=self.var_step_manual_y, width=4, bg=UITheme.BG_INPUT, fg="#fff", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
+        tk.Button(sr_click, text="+ 手動", width=6, bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, font=UITheme.FONT_SMALL_BOLD, command=self.add_main_manual_click).pack(side="left", padx=2)
 
         sr = tk.Frame(f_step, bg=UITheme.BG_PANEL)
         sr.pack(fill="x", pady=2)
-        tk.Label(sr, text="按鍵:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL).pack(side="left")
-        tk.Entry(sr, textvariable=self.var_step_key, width=5, bg=UITheme.BG_INPUT, fg="#fff").pack(side="left", padx=3)
-        tk.Button(sr, text="+ 加按鍵", width=8, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, command=self.add_main_key_step).pack(side="left", padx=2)
+        tk.Label(sr, text="按鍵:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left")
+        tk.Entry(sr, textvariable=self.var_step_key, width=5, bg=UITheme.BG_INPUT, fg="#fff", font=UITheme.FONT_NORMAL).pack(side="left", padx=3)
+        tk.Button(sr, text="+ 加按鍵", width=8, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, font=UITheme.FONT_SMALL_BOLD, command=self.add_main_key_step).pack(side="left", padx=2)
 
-        tk.Label(sr, text="停頓:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL).pack(side="left", padx=(8, 0))
-        tk.Entry(sr, textvariable=self.var_step_wait, width=4, bg=UITheme.BG_INPUT, fg="#fff").pack(side="left", padx=3)
-        tk.Button(sr, text="+ 加停頓", width=8, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, command=self.add_main_wait_step).pack(side="left", padx=2)
+        tk.Label(sr, text="停頓:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(8, 0))
+        tk.Entry(sr, textvariable=self.var_step_wait, width=4, bg=UITheme.BG_INPUT, fg="#fff", font=UITheme.FONT_NORMAL).pack(side="left", padx=3)
+        tk.Button(sr, text="+ 加停頓", width=8, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, font=UITheme.FONT_SMALL_BOLD, command=self.add_main_wait_step).pack(side="left", padx=2)
 
         # 2. 自動循環清單（掛機流程）
-        f_seq = tk.LabelFrame(f_right, text=" 自動循環清單（掛機流程） ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 10, "bold"), padx=6, pady=6)
+        f_seq = tk.LabelFrame(f_right, text=" 自動循環清單（掛機流程） ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=6, pady=6)
         f_seq.pack(fill="both", expand=True)
 
         f_list_s = tk.Frame(f_seq, bg=UITheme.BG_DARK)
@@ -1469,14 +1568,14 @@ class App(tk.Tk):
 
         sr2 = tk.Frame(f_seq, bg=UITheme.BG_PANEL)
         sr2.pack(fill="x", pady=(2, 0))
-        tk.Button(sr2, text="▲ 上移", width=6, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, command=lambda: self.move_main_step(-1)).pack(side="left", padx=1)
-        tk.Button(sr2, text="▼ 下移", width=6, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, command=lambda: self.move_main_step(1)).pack(side="left", padx=1)
-        tk.Button(sr2, text="▶ 試跑", width=6, bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, command=self.test_run_selected_main_step).pack(side="left", padx=1)
-        tk.Button(sr2, text="⎘ 複製", width=6, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, command=self.duplicate_main_step).pack(side="left", padx=1)
-        tk.Button(sr2, text="✎ 修改", width=6, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, command=self.edit_selected_main_step).pack(side="left", padx=1)
-        tk.Button(sr2, text="[ 展開組合 ]", width=10, bg=UITheme.ACCENT_CYAN, fg="#fff", activebackground=UITheme.ACCENT_CYAN_HOVER, command=self.unpack_main_step_combo).pack(side="left", padx=1)
-        tk.Button(sr2, text="✕ 刪除", width=6, bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, command=self.delete_main_step).pack(side="left", padx=1)
-        tk.Button(sr2, text="✕ 清空", width=6, bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, command=self.clear_main_steps).pack(side="right", padx=1)
+        tk.Button(sr2, text="▲ 上移", width=6, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, font=UITheme.FONT_SMALL_BOLD, command=lambda: self.move_main_step(-1)).pack(side="left", padx=1)
+        tk.Button(sr2, text="▼ 下移", width=6, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, font=UITheme.FONT_SMALL_BOLD, command=lambda: self.move_main_step(1)).pack(side="left", padx=1)
+        tk.Button(sr2, text="▶ 試跑", width=6, bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, font=UITheme.FONT_SMALL_BOLD, command=self.test_run_selected_main_step).pack(side="left", padx=1)
+        tk.Button(sr2, text="⎘ 複製", width=6, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, font=UITheme.FONT_SMALL_BOLD, command=self.duplicate_main_step).pack(side="left", padx=1)
+        tk.Button(sr2, text="✎ 修改", width=6, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, font=UITheme.FONT_SMALL_BOLD, command=self.edit_selected_main_step).pack(side="left", padx=1)
+        tk.Button(sr2, text="[ 展開組合 ]", width=10, bg=UITheme.ACCENT_CYAN, fg="#fff", activebackground=UITheme.ACCENT_CYAN_HOVER, font=UITheme.FONT_SMALL_BOLD, command=self.unpack_main_step_combo).pack(side="left", padx=1)
+        tk.Button(sr2, text="✕ 刪除", width=6, bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, font=UITheme.FONT_SMALL_BOLD, command=self.delete_main_step).pack(side="left", padx=1)
+        tk.Button(sr2, text="✕ 清空", width=6, bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, font=UITheme.FONT_SMALL_BOLD, command=self.clear_main_steps).pack(side="right", padx=1)
 
         # 檢視彈窗啟動列
         self.f_hot = tk.Frame(f_right, bg=UITheme.BG_PANEL)
@@ -1485,7 +1584,7 @@ class App(tk.Tk):
             text="[ 檢視當前掛機進度監控 ]",
             bg=UITheme.ACCENT_BLUE,
             fg="#ffffff",
-            font=("Segoe UI", 9, "bold"),
+            font=UITheme.FONT_NORMAL_BOLD,
             activebackground=UITheme.ACCENT_BLUE_HOVER,
             command=self.view_active_steps
         )
@@ -1495,12 +1594,12 @@ class App(tk.Tk):
         bot = tk.Frame(f_right, bg=UITheme.BG_PANEL)
         bot.pack(fill="x", pady=(2, 0))
 
-        self.lbl_mouse_hud = tk.Label(bot, text="● 游標實時坐標: (0, 0)", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 9, "bold"))
+        self.lbl_mouse_hud = tk.Label(bot, text="● 游標實時坐標: (0, 0)", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_NORMAL_BOLD)
         self.lbl_mouse_hud.pack(fill="x")
 
-        self.lbl_status = tk.Label(bot, text="● 狀態: 已就緒", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MAIN, font=("Segoe UI", 9))
+        self.lbl_status = tk.Label(bot, text="● 狀態: 已就緒", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MAIN, font=UITheme.FONT_NORMAL)
         self.lbl_status.pack(fill="x", pady=(0, 3))
-        self.btn_toggle = tk.Button(bot, text="▶ 開始循環執行 (F8)", height=2, bg=UITheme.ACCENT_GREEN, fg="#ffffff", font=("Segoe UI", 11, "bold"), activebackground=UITheme.ACCENT_GREEN_HOVER, command=self.toggle_run)
+        self.btn_toggle = tk.Button(bot, text="▶ 開始循環執行 (F8)", height=2, bg=UITheme.ACCENT_GREEN, fg="#ffffff", font=UITheme.FONT_BIG_BTN, activebackground=UITheme.ACCENT_GREEN_HOVER, command=self.toggle_run)
         self.btn_toggle.pack(fill="x")
 
     def on_combo_double_click_add(self, event):
@@ -1702,7 +1801,7 @@ class App(tk.Tk):
         dialog.grab_set()
         self.apply_app_icon(dialog)
 
-        w, h = 360, 290
+        w, h = 380, 310
         self.update_idletasks()
         pos_x = self.winfo_x() + max(0, (self.winfo_width() - w) // 2)
         pos_y = self.winfo_y() + max(0, (self.winfo_height() - h) // 2)
@@ -1714,9 +1813,9 @@ class App(tk.Tk):
         # 變數名稱
         r_name = tk.Frame(f_main, bg=UITheme.BG_PANEL)
         r_name.pack(fill="x", pady=(0, 8))
-        tk.Label(r_name, text="變數名稱:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=("Segoe UI", 9, "bold"), width=8, anchor="e").pack(side="left", padx=(0, 8))
+        tk.Label(r_name, text="變數名稱:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL_BOLD, width=8, anchor="e").pack(side="left", padx=(0, 8))
         var_name = tk.StringVar(value=edit_name if is_edit else "")
-        e_name = tk.Entry(r_name, textvariable=var_name, bg=UITheme.BG_INPUT, fg="#fff", font=("Segoe UI", 9), relief="flat")
+        e_name = tk.Entry(r_name, textvariable=var_name, bg=UITheme.BG_INPUT, fg="#fff", font=UITheme.FONT_NORMAL, relief="flat")
         e_name.pack(side="left", fill="x", expand=True)
         if is_edit:
             e_name.config(state="disabled", fg=UITheme.TEXT_MUTED)
@@ -1724,14 +1823,14 @@ class App(tk.Tk):
         # 變數種類
         r_type = tk.Frame(f_main, bg=UITheme.BG_PANEL)
         r_type.pack(fill="x", pady=(0, 8))
-        tk.Label(r_type, text="變數種類:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=("Segoe UI", 9, "bold"), width=8, anchor="e").pack(side="left", padx=(0, 8))
+        tk.Label(r_type, text="變數種類:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL_BOLD, width=8, anchor="e").pack(side="left", padx=(0, 8))
         curr_type_disp = type_display_map.get(orig_type, "[坐標]")
         var_type = tk.StringVar(value=curr_type_disp)
-        cbo_type = ttk.Combobox(r_type, textvariable=var_type, values=["[坐標]", "[按鍵]", "[停頓]"], state="readonly" if not is_edit else "disabled", font=("Segoe UI", 9))
+        cbo_type = ttk.Combobox(r_type, textvariable=var_type, values=["[坐標]", "[按鍵]", "[停頓]"], state="readonly" if not is_edit else "disabled", font=UITheme.FONT_NORMAL)
         cbo_type.pack(side="left", fill="x", expand=True)
 
         # 數值動態容器
-        f_val_box = tk.LabelFrame(f_main, text=" 數值設定 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 9, "bold"), padx=10, pady=8)
+        f_val_box = tk.LabelFrame(f_main, text=" 數值設定 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=10, pady=8)
         f_val_box.pack(fill="both", expand=True, pady=(0, 10))
 
         if orig_type == "coord" and isinstance(orig_val, dict):
@@ -1776,12 +1875,12 @@ class App(tk.Tk):
                 r_coords = tk.Frame(f_val_box, bg=UITheme.BG_PANEL)
                 r_coords.pack(fill="x", pady=(2, 6))
 
-                tk.Label(r_coords, text="X:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=("Segoe UI", 9)).pack(side="left", padx=(0, 4))
-                e_x = tk.Entry(r_coords, textvariable=var_x, width=7, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=("Segoe UI", 9))
+                tk.Label(r_coords, text="X:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 4))
+                e_x = tk.Entry(r_coords, textvariable=var_x, width=7, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL)
                 e_x.pack(side="left", padx=(0, 12))
 
-                tk.Label(r_coords, text="Y:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=("Segoe UI", 9)).pack(side="left", padx=(0, 4))
-                e_y = tk.Entry(r_coords, textvariable=var_y, width=7, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=("Segoe UI", 9))
+                tk.Label(r_coords, text="Y:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 4))
+                e_y = tk.Entry(r_coords, textvariable=var_y, width=7, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL)
                 e_y.pack(side="left", padx=(0, 4))
 
                 btn_rec = tk.Button(
@@ -1790,7 +1889,7 @@ class App(tk.Tk):
                     bg=UITheme.ACCENT_GREEN,
                     fg="#fff",
                     activebackground=UITheme.ACCENT_GREEN_HOVER,
-                    font=("Segoe UI", 9, "bold"),
+                    font=UITheme.FONT_NORMAL_BOLD,
                     relief="flat",
                     command=start_space_capture
                 )
@@ -1799,18 +1898,18 @@ class App(tk.Tk):
             elif selected_type == "key":
                 r_k = tk.Frame(f_val_box, bg=UITheme.BG_PANEL)
                 r_k.pack(fill="x", pady=6)
-                tk.Label(r_k, text="按鍵名稱:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=("Segoe UI", 9)).pack(side="left", padx=(0, 8))
-                e_k = tk.Entry(r_k, textvariable=var_key, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=("Segoe UI", 9))
+                tk.Label(r_k, text="按鍵名稱:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 8))
+                e_k = tk.Entry(r_k, textvariable=var_key, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL)
                 e_k.pack(side="left", fill="x", expand=True)
-                tk.Label(f_val_box, text="(例: f1, 1, z, space, enter)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=("Segoe UI", 8)).pack(anchor="w")
+                tk.Label(f_val_box, text="(例: f1, 1, z, space, enter)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(anchor="w")
 
             elif selected_type == "wait":
                 r_w = tk.Frame(f_val_box, bg=UITheme.BG_PANEL)
                 r_w.pack(fill="x", pady=6)
-                tk.Label(r_w, text="停頓時間 (秒):", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=("Segoe UI", 9)).pack(side="left", padx=(0, 8))
-                e_w = tk.Entry(r_w, textvariable=var_wait, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=("Segoe UI", 9))
+                tk.Label(r_w, text="停頓時間 (秒):", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 8))
+                e_w = tk.Entry(r_w, textvariable=var_wait, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL)
                 e_w.pack(side="left", fill="x", expand=True)
-                tk.Label(f_val_box, text="(例: 0.5, 1.0, 2.5)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=("Segoe UI", 8)).pack(anchor="w")
+                tk.Label(f_val_box, text="(例: 0.5, 1.0, 2.5)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(anchor="w")
 
         cbo_type.bind("<<ComboboxSelected>>", lambda e: render_inputs())
         render_inputs()
@@ -1877,7 +1976,7 @@ class App(tk.Tk):
             bg=UITheme.ACCENT_BLUE,
             fg="#fff",
             activebackground=UITheme.ACCENT_BLUE_HOVER,
-            font=("Segoe UI", 9, "bold"),
+            font=UITheme.FONT_NORMAL_BOLD,
             relief="flat",
             padx=12,
             pady=4,
@@ -1890,7 +1989,7 @@ class App(tk.Tk):
             bg=UITheme.BTN_GRAY,
             fg="#fff",
             activebackground=UITheme.BTN_GRAY_HOVER,
-            font=("Segoe UI", 9),
+            font=UITheme.FONT_NORMAL,
             relief="flat",
             padx=12,
             pady=4,
@@ -2139,17 +2238,24 @@ class App(tk.Tk):
         if c_idx is None or a_idx is None:
             return self.set_status("請先選擇要試跑的組合動作！")
         act = combos[c_idx]["actions"][a_idx]
-        self.run_in_test_thread("所選組合動作", lambda: self.execute_single_action(act, "組合動作試跑"))
+        self.run_in_test_thread(f"組合動作 #{a_idx+1}", lambda: self.execute_single_action(act, f"組合動作#{a_idx+1}", force_enable=True))
 
     def test_run_current_combo(self):
         c_idx = self.get_selected_combo_idx()
         if c_idx is None:
             return self.set_status("請先選擇要試跑的組合！")
         c = combos[c_idx]
+        sub_actions = c.get("actions", [])
+        if not sub_actions:
+            return self.set_status(f"組合 [{c['name']}] 內無任何動作可試跑！")
+        enabled_count = sum(1 for a in sub_actions if a.get("enabled", True))
+        if enabled_count == 0:
+            return self.set_status(f"組合 [{c['name']}] 內動作皆為停用狀態！請先勾選動作")
 
         def _run():
-            for a_idx, act in enumerate(c.get("actions", [])):
+            for a_idx, act in enumerate(sub_actions):
                 if not act.get("enabled", True): continue
+                if stop_event.is_set(): break
                 self.execute_single_action(act, f"[{c['name']}#{a_idx+1}]")
 
         self.run_in_test_thread(f"組合 [{c['name']}]", _run)
@@ -2330,18 +2436,25 @@ class App(tk.Tk):
     def test_run_selected_main_step(self):
         sel = self.step_listbox.curselection()
         if not sel:
-            return self.set_status("請先選擇要試跑的主步驟！")
+            return self.set_status("請先在清單中選擇要試跑的主步驟！")
         idx = sel[0]
         s = steps[idx]
 
         def _run():
             if s.get("type") == "combo":
                 c_name = s.get("name", "組合")
-                for sub_idx, sub_act in enumerate(s.get("actions", [])):
+                sub_actions = s.get("actions", [])
+                if not sub_actions:
+                    return self.set_status(f"組合 [{c_name}] 內無任何動作！")
+                enabled_count = sum(1 for a in sub_actions if a.get("enabled", True))
+                if enabled_count == 0:
+                    return self.set_status(f"組合 [{c_name}] 內所有動作皆為停用狀態！請先勾選動作")
+                for sub_idx, sub_act in enumerate(sub_actions):
                     if not sub_act.get("enabled", True): continue
+                    if stop_event.is_set(): break
                     self.execute_single_action(sub_act, f"[{c_name}#{sub_idx+1}]")
             else:
-                self.execute_single_action(s, f"步驟#{idx+1}")
+                self.execute_single_action(s, f"步驟#{idx+1}", force_enable=True)
 
         self.run_in_test_thread(f"步驟 #{idx+1}", _run)
 
@@ -2425,9 +2538,9 @@ class App(tk.Tk):
         self._clear_list_items(steps, "請問是否清空整個掛機流程？\n清空後未儲存的內容無法還原！", self.update_step_list, "掛機流程")
 
     # ======================= 動作執行調度器 =======================
-    def dispatch_action(self, act, parent_desc, current_vars=None, current_combos=None, depth=0, visited_set=None, is_test=False, round_prefix=""):
+    def dispatch_action(self, act, parent_desc, current_vars=None, current_combos=None, depth=0, visited_set=None, is_test=False, round_prefix="", force_enable=False):
         if visited_set is None: visited_set = set()
-        if not act.get("enabled", True): return True
+        if not force_enable and not act.get("enabled", True): return True
         if not is_test:
             if not running or stop_event.is_set() or reload_requested: return False
             if current_vars is None: current_vars = {}
@@ -2439,12 +2552,17 @@ class App(tk.Tk):
             if current_combos is None:
                 with steps_lock: current_combos = copy.deepcopy(combos)
 
-        use_bg = self.var_use_bg.get() and IS_WINDOWS and (target_hwnd is not None)
-        try: off_x, off_y = int(self.var_offset_x.get() or 0), int(self.var_offset_y.get() or 0)
-        except Exception: off_x, off_y = 0, 0
+        use_bg = getattr(self, "cached_use_bg", True) and IS_WINDOWS and (target_hwnd is not None)
+        off_x = getattr(self, "cached_offset_x", 0)
+        off_y = getattr(self, "cached_offset_y", 0)
+
+        # 若在前台模式且有綁定目標視窗，自動將目標視窗置頂以確保能接收點擊與按鍵
+        if not use_bg and IS_WINDOWS and target_hwnd:
+            self.force_bring_window_to_front(target_hwnd)
 
         var_name = act.get("var_name")
         v_data = current_vars.get(var_name) if (current_vars and var_name) else None
+        force_tag = " (強制試跑)" if force_enable and not act.get("enabled", True) else ""
 
         atype = act.get("type")
         if atype == "click":
@@ -2456,7 +2574,7 @@ class App(tk.Tk):
             btn = act.get("btn", "left")
             msg = execute_click(x, y, act.get("rel"), use_bg, off_x, off_y, btn=btn)
             var_info = f"【{var_name}】" if var_name else ""
-            self.set_status(f"{round_prefix}{parent_desc} {var_info}{msg}")
+            self.set_status(f"{round_prefix}{parent_desc}{force_tag} {var_info}{msg}")
             if not safe_sleep(0.12): return False
 
         elif atype == "key":
@@ -2477,7 +2595,7 @@ class App(tk.Tk):
                     with currently_held_keys_lock:
                         currently_held_keys.discard(("fg", key))
             var_info = f"【{var_name}】" if var_name else ""
-            self.set_status(f"{round_prefix}{parent_desc} {var_info}按鍵 [{key.upper()}]")
+            self.set_status(f"{round_prefix}{parent_desc}{force_tag} {var_info}按鍵 [{key.upper()}]")
             if not safe_sleep(0.10): return False
 
         elif atype == "wait":
@@ -2486,7 +2604,7 @@ class App(tk.Tk):
                 try: sec = float(v_data.get("value", sec))
                 except Exception: pass
             var_info = f"【{var_name}】" if var_name else ""
-            self.set_status(f"{round_prefix}{parent_desc} {var_info}等待 {sec}s")
+            self.set_status(f"{round_prefix}{parent_desc}{force_tag} {var_info}等待 {sec}s")
             if not safe_sleep(sec): return False
 
         elif atype == "call_combo":
@@ -2514,8 +2632,8 @@ class App(tk.Tk):
 
         return True
 
-    def execute_single_action(self, act, desc):
-        self.dispatch_action(act, desc, is_test=True)
+    def execute_single_action(self, act, desc, force_enable=False):
+        self.dispatch_action(act, desc, is_test=True, force_enable=force_enable)
 
     # ======================= 主執行引擎 =======================
     def toggle_run(self):
