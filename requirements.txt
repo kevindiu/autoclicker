@@ -1,3 +1,2 @@
 pyinstaller
 pyautogui
-dearpygui
