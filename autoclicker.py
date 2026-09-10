@@ -442,8 +442,8 @@ class VarTable(tk.Frame):
         # 標題欄
         self.hdr = tk.Frame(self, bg=UITheme.BG_PANEL, pady=3, padx=4)
         self.hdr.pack(fill="x")
-        tk.Label(self.hdr, text="變數名稱", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 8, "bold"), width=13, anchor="w").pack(side="left", padx=2)
-        tk.Label(self.hdr, text="種類", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 8, "bold"), width=6, anchor="center").pack(side="left", padx=2)
+        tk.Label(self.hdr, text="變數名稱", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 8, "bold"), width=12, anchor="w").pack(side="left", padx=2)
+        tk.Label(self.hdr, text="種類", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 8, "bold"), width=9, anchor="center").pack(side="left", padx=2)
         tk.Label(self.hdr, text="當前數值", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 8, "bold"), anchor="w").pack(side="left", fill="x", expand=True, padx=2)
 
         # 內容滾動區
@@ -486,9 +486,9 @@ class VarTable(tk.Frame):
         rf = tk.Frame(self.body_frame, bg=self.bg, pady=2, padx=4)
         rf.pack(fill="x", expand=True)
 
-        l1 = tk.Label(rf, text=name, bg=self.bg, fg=UITheme.TEXT_MAIN, font=("Segoe UI", 9), width=13, anchor="w")
+        l1 = tk.Label(rf, text=name, bg=self.bg, fg=UITheme.TEXT_MAIN, font=("Segoe UI", 9), width=12, anchor="w")
         l1.pack(side="left", padx=2)
-        l2 = tk.Label(rf, text=t_disp, bg=self.bg, fg=UITheme.CYAN_SUB, font=("Segoe UI", 8), width=6, anchor="center")
+        l2 = tk.Label(rf, text=t_disp, bg=self.bg, fg=UITheme.CYAN_SUB, font=("Segoe UI", 8), width=9, anchor="center")
         l2.pack(side="left", padx=2)
         l3 = tk.Label(rf, text=v_str, bg=self.bg, fg="#e5e7eb", font=("Segoe UI", 9), anchor="w")
         l3.pack(side="left", fill="x", expand=True, padx=2)
