@@ -471,7 +471,7 @@ class VarTable(tk.Frame):
         f_box = tk.Frame(self, bg=bg)
         f_box.pack(fill="both", expand=True)
 
-        self.canvas = tk.Canvas(f_box, bg=bg, bd=0, highlightthickness=0, height=75)
+        self.canvas = tk.Canvas(f_box, bg=bg, bd=0, highlightthickness=0, height=60)
         self.scrollbar = tk.Scrollbar(f_box, orient="vertical", command=self.canvas.yview)
         self.body_frame = tk.Frame(self.canvas, bg=bg)
 
@@ -547,8 +547,9 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(WINDOW_TITLE)
-        self.geometry("1240x670")
-        self.resizable(False, False)
+        self.geometry("1280x720")
+        self.minsize(1200, 660)
+        self.resizable(True, True)
         self.configure(bg=UITheme.BG_DARK)
 
         self.is_closing = False
@@ -1076,11 +1077,203 @@ class App(tk.Tk):
         self.update_active_dlg_geometry(reset_position=True)
         self.active_dlg.deiconify()
 
+    def prompt_edit_combo_dialog(self, combo_step, step_idx=None):
+        """彈出完整的組合子動作管理視窗 (支援在組合內移位、刪除、複製、修改、試跑與展開)"""
+        dialog = tk.Toplevel(self)
+        combo_name = combo_step.get("name", "組合")
+        dialog.title(f"管理組合步驟: 【{combo_name}】")
+        dialog.configure(bg=UITheme.BG_PANEL)
+        dialog.resizable(True, True)
+        dialog.attributes("-topmost", True)
+        dialog.transient(self)
+        dialog.grab_set()
+        self.apply_app_icon(dialog)
+
+        w, h = 660, 520
+        self.update_idletasks()
+        pos_x = self.winfo_x() + max(0, (self.winfo_width() - w) // 2)
+        pos_y = self.winfo_y() + max(0, (self.winfo_height() - h) // 2)
+        dialog.geometry(f"{w}x{h}+{pos_x}+{pos_y}")
+        dialog.minsize(560, 420)
+
+        working_actions = copy.deepcopy(combo_step.get("actions", []))
+        modified = [False]
+
+        # 頂部控制欄 (標題、切換範本、展開按鈕)
+        f_top = tk.Frame(dialog, bg=UITheme.BG_PANEL, padx=12, pady=8)
+        f_top.pack(fill="x")
+
+        r1 = tk.Frame(f_top, bg=UITheme.BG_PANEL)
+        r1.pack(fill="x", pady=(0, 4))
+        lbl_title = tk.Label(r1, text=f"◆ 組合名稱: 【{combo_name}】", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE)
+        lbl_title.pack(side="left")
+
+        def do_unpack():
+            if not working_actions:
+                messagebox.showwarning("提示", "此組合內沒有任何子動作可展開！", parent=dialog)
+                return
+            if messagebox.askyesno("展開確認", f"確定要將組合 【{combo_name}】 的 {len(working_actions)} 個子動作直接展開為掛機流程中的獨立步驟嗎？\n\n展開後每一步均可直接在流程清單中自由移動、修改與刪除。", parent=dialog):
+                if step_idx is not None and 0 <= step_idx < len(steps):
+                    del steps[step_idx]
+                    for offset, act in enumerate(working_actions):
+                        steps.insert(step_idx + offset, copy.deepcopy(act))
+                    self.update_step_list(select_idx=step_idx)
+                    self.set_status(f"已將組合 [{combo_name}] 展開為 {len(working_actions)} 個獨立步驟")
+                modified[0] = True
+                dialog.destroy()
+
+        btn_unpack = tk.Button(
+            r1,
+            text="[ ➔ 展開為獨立步驟到掛機流程 ]",
+            bg=UITheme.ACCENT_CYAN,
+            fg="#fff",
+            activebackground=UITheme.ACCENT_CYAN_HOVER,
+            font=UITheme.FONT_SMALL_BOLD,
+            relief="flat",
+            padx=8,
+            pady=2,
+            command=do_unpack
+        )
+        btn_unpack.pack(side="right")
+
+        r2 = tk.Frame(f_top, bg=UITheme.BG_PANEL)
+        r2.pack(fill="x", pady=(4, 0))
+        tk.Label(r2, text="載入組合庫範本:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 4))
+        tpl_names = [c["name"] for c in combos]
+        var_tpl = tk.StringVar(value=combo_name if combo_name in tpl_names else (tpl_names[0] if tpl_names else ""))
+        cbo_tpl = ttk.Combobox(r2, textvariable=var_tpl, values=tpl_names, width=16, state="readonly")
+        cbo_tpl.pack(side="left", padx=2)
+
+        def do_load_tpl():
+            chosen = var_tpl.get().strip()
+            matched = next((c for c in combos if c["name"] == chosen), None)
+            if matched:
+                nonlocal combo_name
+                combo_name = matched["name"]
+                combo_step["name"] = combo_name
+                lbl_title.config(text=f"◆ 組合名稱: 【{combo_name}】")
+                working_actions.clear()
+                working_actions.extend(copy.deepcopy(matched.get("actions", [])))
+                refresh_sub_list(select_idx=0 if working_actions else None)
+                self.set_status(f"已載入範本 [{combo_name}] 的子動作清單")
+
+        tk.Button(r2, text="套用範本動作", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, font=UITheme.FONT_SMALL_BOLD, relief="flat", padx=6, command=do_load_tpl).pack(side="left", padx=4)
+
+        # 中間主工作區 (左邊子動作 CheckList，右邊垂直操作按鈕列)
+        f_mid = tk.Frame(dialog, bg=UITheme.BG_PANEL, padx=12, pady=4)
+        f_mid.pack(fill="both", expand=True)
+
+        f_list_wrap = tk.Frame(f_mid, bg=UITheme.BG_PANEL)
+        f_list_wrap.pack(side="left", fill="both", expand=True)
+
+        tk.Label(f_list_wrap, text="【子步驟清單】 (雙擊可修改)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL_BOLD, anchor="w").pack(fill="x", pady=(0, 3))
+
+        f_sub_box = tk.Frame(f_list_wrap, bg=UITheme.BG_DARK)
+        f_sub_box.pack(fill="both", expand=True)
+
+        def on_sub_toggle(idx, val):
+            if 0 <= idx < len(working_actions):
+                working_actions[idx]["enabled"] = val
+
+        sub_list = CheckList(
+            f_sub_box,
+            bg=UITheme.BG_DARK,
+            select_bg=UITheme.ACCENT_BLUE,
+            on_double_click=lambda idx: do_edit_sub(),
+            on_toggle=on_sub_toggle
+        )
+        sub_list.pack(fill="both", expand=True)
+
+        def refresh_sub_list(select_idx=None):
+            items = [(format_action_summary(act, index=i), act.get("enabled", True)) for i, act in enumerate(working_actions)]
+            sub_list.set_items(items, select_idx=select_idx)
+
+        # 右側控制按鈕列
+        f_btns = tk.Frame(f_mid, bg=UITheme.BG_PANEL, padx=8)
+        f_btns.pack(side="right", fill="y")
+
+        def get_sel_sub():
+            sel = sub_list.curselection()
+            return sel[0] if sel else None
+
+        def do_move_sub(delta):
+            idx = get_sel_sub()
+            if idx is None:
+                messagebox.showinfo("提示", "請先在清單中選取要移動的子步驟！", parent=dialog)
+                return
+            target = idx + delta
+            if 0 <= target < len(working_actions):
+                working_actions[idx], working_actions[target] = working_actions[target], working_actions[idx]
+                refresh_sub_list(select_idx=target)
+
+        def do_edit_sub():
+            idx = get_sel_sub()
+            if idx is None:
+                messagebox.showinfo("提示", "請先在清單中選取要修改的子步驟！", parent=dialog)
+                return
+            curr_act = working_actions[idx]
+            if self.prompt_edit_action(curr_act):
+                refresh_sub_list(select_idx=idx)
+
+        def do_dup_sub():
+            idx = get_sel_sub()
+            if idx is None:
+                messagebox.showinfo("提示", "請先在清單中選取要複製的子步驟！", parent=dialog)
+                return
+            working_actions.insert(idx + 1, copy.deepcopy(working_actions[idx]))
+            refresh_sub_list(select_idx=idx + 1)
+
+        def do_del_sub():
+            idx = get_sel_sub()
+            if idx is None:
+                messagebox.showinfo("提示", "請先在清單中選取要刪除的子步驟！", parent=dialog)
+                return
+            del working_actions[idx]
+            new_sel = min(idx, len(working_actions) - 1) if working_actions else None
+            refresh_sub_list(select_idx=new_sel)
+
+        def do_test_sub():
+            idx = get_sel_sub()
+            if idx is None:
+                messagebox.showinfo("提示", "請先在清單中選取要試跑的子步驟！", parent=dialog)
+                return
+            act = working_actions[idx]
+            self.run_in_test_thread(f"組合動作 #{idx+1}", lambda: self.execute_single_action(act, f"[{combo_name}#{idx+1}]", force_enable=True))
+
+        tk.Button(f_btns, text="▲ 上移步驟", width=12, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=lambda: do_move_sub(-1)).pack(fill="x", pady=2)
+        tk.Button(f_btns, text="▼ 下移步驟", width=12, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=lambda: do_move_sub(1)).pack(fill="x", pady=2)
+        tk.Button(f_btns, text="✎ 修改動作", width=12, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_edit_sub).pack(fill="x", pady=2)
+        tk.Button(f_btns, text="⎘ 複製動作", width=12, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_dup_sub).pack(fill="x", pady=2)
+        tk.Button(f_btns, text="✕ 刪除動作", width=12, bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_del_sub).pack(fill="x", pady=2)
+        tk.Button(f_btns, text="▶ 試跑動作", width=12, bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_test_sub).pack(fill="x", pady=(2, 6))
+
+        # 底部按鈕列 (確認 / 取消)
+        f_bot = tk.Frame(dialog, bg=UITheme.BG_PANEL, padx=12, pady=10)
+        f_bot.pack(fill="x")
+
+        def on_save():
+            combo_step["name"] = combo_name
+            combo_step["actions"] = working_actions
+            modified[0] = True
+            dialog.destroy()
+
+        tk.Button(f_bot, text="✓ 儲存並套用修改", width=16, bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", font=UITheme.FONT_NORMAL_BOLD, pady=5, command=on_save).pack(side="left", padx=(0, 6))
+        tk.Button(f_bot, text="✕ 取消", width=10, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_NORMAL, pady=5, command=dialog.destroy).pack(side="left")
+
+        refresh_sub_list(select_idx=0 if working_actions else None)
+
+        dialog.bind("<Escape>", lambda e: dialog.destroy())
+        self.wait_window(dialog)
+        return modified[0]
+
     # ======================= 全功能動作編輯彈窗 =======================
-    def prompt_edit_action(self, action, available_combos=None):
+    def prompt_edit_action(self, action, available_combos=None, step_idx=None):
         """彈出針對各動作型別的編輯對話框"""
         atype = action.get("type")
         if not atype: return False
+
+        if atype == "combo":
+            return self.prompt_edit_combo_dialog(action, step_idx=step_idx)
 
         dialog = tk.Toplevel(self)
         dialog.configure(bg=UITheme.BG_PANEL)
@@ -1275,25 +1468,6 @@ class App(tk.Tk):
                 modified[0] = True
                 dialog.destroy()
 
-        elif atype == "combo":
-            dialog.title("切換執行組合")
-            curr_c = action.get("name", "")
-            var_mc = tk.StringVar(value=curr_c)
-            combos_list = [c["name"] for c in combos]
-            tk.Label(f, text="切換組合:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL).grid(row=0, column=0, padx=6, pady=10, sticky="e")
-            cbo = ttk.Combobox(f, textvariable=var_mc, values=combos_list, width=14, state="readonly")
-            cbo.grid(row=0, column=1, padx=6, pady=10)
-            if curr_c in combos_list: cbo.set(curr_c)
-            elif combos_list: cbo.current(0)
-
-            def on_ok():
-                chosen = var_mc.get().strip()
-                match = next((c for c in combos if c["name"] == chosen), None)
-                if match:
-                    action["name"] = match["name"]
-                    action["actions"] = copy.deepcopy(match.get("actions", []))
-                    modified[0] = True
-                dialog.destroy()
 
         bf = tk.Frame(dialog, bg=UITheme.BG_PANEL)
         bf.pack(pady=4)
@@ -1348,7 +1522,7 @@ class App(tk.Tk):
         # 2. 常用變數庫 (表格一覽：名稱 / 種類 / 數值，雙擊可修改 | 右側操作按鈕)
         f_vars = tk.LabelFrame(
             f_left,
-            text=" 常用變數庫 (雙擊任意行可修改) ",
+            text=" 常用變數庫 ",
             bg=UITheme.BG_PANEL,
             fg=UITheme.CYAN_TITLE,
             font=UITheme.FONT_TITLE,
@@ -1403,20 +1577,20 @@ class App(tk.Tk):
         ).pack(fill="x", expand=True, pady=(2, 0))
 
         # 3. 技能組合區塊
-        f_combo = tk.LabelFrame(f_left, text=" 技能組合庫 (右側真實 Checkbox: 啟用/停用 | 雙擊: 加入掛機流程) ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=6, pady=6)
+        f_combo = tk.LabelFrame(f_left, text=" 技能組合庫 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=6, pady=6)
         f_combo.pack(fill="both", expand=True)
 
         f_combo_split = tk.Frame(f_combo, bg=UITheme.BG_PANEL)
         f_combo_split.pack(fill="both", expand=True)
-        f_combo_split.grid_columnconfigure(0, weight=4)
-        f_combo_split.grid_columnconfigure(1, weight=6)
+        f_combo_split.grid_columnconfigure(0, weight=3)
+        f_combo_split.grid_columnconfigure(1, weight=7)
         f_combo_split.grid_rowconfigure(0, weight=1)
 
         # 2-A. 組合清單 (支援雙擊加入掛機流程)
         f_cl = tk.Frame(f_combo_split, bg=UITheme.BG_PANEL, padx=4, pady=2)
         f_cl.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
 
-        tk.Label(f_cl, text="【組合清單 (雙擊加入)】", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_NORMAL_BOLD).pack(anchor="w")
+        tk.Label(f_cl, text="【組合清單】", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_NORMAL_BOLD).pack(anchor="w")
 
         cr_name = tk.Frame(f_cl, bg=UITheme.BG_PANEL)
         cr_name.pack(fill="x", pady=2)
@@ -1440,24 +1614,24 @@ class App(tk.Tk):
         tk.Button(cr_act, text="➔ 加入掛機流程", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, font=UITheme.FONT_NORMAL_BOLD, command=self.add_combo_to_main_steps).pack(side="left", fill="x", expand=True, padx=(0, 2))
         tk.Button(cr_act, text="✕ 刪除組合", width=9, bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, font=UITheme.FONT_SMALL_BOLD, command=self.delete_selected_combo).pack(side="right")
 
-        # 2-B. 組合動作 (視覺層次優化：卡片式分組 + 雙層寬鬆工具列)
-        f_cr = tk.Frame(f_combo_split, bg=UITheme.BG_PANEL, padx=6, pady=3, highlightbackground=UITheme.BORDER, highlightthickness=1)
+        # 2-B. 組合動作 (視覺層次優化：超緊湊卡片 + 超寬敞子動作清單)
+        f_cr = tk.Frame(f_combo_split, bg=UITheme.BG_PANEL, padx=6, pady=2, highlightbackground=UITheme.BORDER, highlightthickness=1)
         f_cr.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
 
         f_cr_top = tk.Frame(f_cr, bg=UITheme.BG_PANEL)
-        f_cr_top.pack(fill="x", pady=(0, 4))
+        f_cr_top.pack(fill="x", pady=(0, 2))
         self.lbl_combo_editing = tk.Label(f_cr_top, text="【組合動作: 未選取】", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_SUB, font=UITheme.FONT_NORMAL_BOLD)
         self.lbl_combo_editing.pack(side="left")
         tk.Button(f_cr_top, text="▶ 試跑組合", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, font=UITheme.FONT_SMALL_BOLD, relief="flat", padx=6, command=self.test_run_current_combo).pack(side="right")
 
-        # 動作建立面板 (卡片分組)
-        f_action_card = tk.LabelFrame(f_cr, text=" 加入動作到所選組合 ", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL_BOLD, padx=5, pady=3)
-        f_action_card.pack(fill="x", pady=(0, 4))
+        # 動作建立面板 (精簡排版，節省 40px+ 垂直高度)
+        f_action_card = tk.LabelFrame(f_cr, text=" 加入動作 ", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL_BOLD, padx=5, pady=2)
+        f_action_card.pack(fill="x", pady=(0, 2))
 
-        # 1. 點擊動作行 (突出主要瞄準點擊)
+        # 1. 點擊動作行 (突出主要瞄準點擊 + 手動坐標)
         r_click = tk.Frame(f_action_card, bg=UITheme.BG_PANEL)
-        r_click.pack(fill="x", pady=2)
-        ttk.Combobox(r_click, textvariable=self.var_combo_btn, values=["左鍵", "右鍵"], width=4, state="readonly").pack(side="left", padx=(0, 3))
+        r_click.pack(fill="x", pady=1)
+        ttk.Combobox(r_click, textvariable=self.var_combo_btn, values=["左鍵", "右鍵"], width=4, state="readonly").pack(side="left", padx=(0, 2))
         self.btn_combo_add_click = tk.Button(r_click, text="+ 瞄準點擊", bg=UITheme.ACCENT_GREEN, fg="#fff", font=UITheme.FONT_NORMAL_BOLD, activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", padx=6, command=self.combo_add_click_action)
         self.btn_combo_add_click.pack(side="left", padx=1, fill="x", expand=True)
 
@@ -1467,9 +1641,9 @@ class App(tk.Tk):
         tk.Entry(r_click, textvariable=self.var_combo_manual_y, width=4, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
         tk.Button(r_click, text="+ 手動", width=5, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.combo_add_manual_click).pack(side="left", padx=(2, 0))
 
-        # 2. 按鍵與等待行 (等寬對齊)
+        # 2. 按鍵與等待行
         r_fast = tk.Frame(f_action_card, bg=UITheme.BG_PANEL)
-        r_fast.pack(fill="x", pady=2)
+        r_fast.pack(fill="x", pady=1)
 
         f_k = tk.Frame(r_fast, bg=UITheme.BG_PANEL)
         f_k.pack(side="left", fill="x", expand=True, padx=(0, 2))
@@ -1481,33 +1655,23 @@ class App(tk.Tk):
         tk.Entry(f_w, textvariable=self.var_combo_act_wait, width=4, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 2))
         tk.Button(f_w, text="+ 加停頓(s)", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", padx=4, font=UITheme.FONT_SMALL_BOLD, command=self.combo_add_wait_action).pack(side="left", fill="x", expand=True)
 
-        # 3. 呼叫組合行
-        r_call = tk.Frame(f_action_card, bg=UITheme.BG_PANEL)
-        r_call.pack(fill="x", pady=2)
-        tk.Label(r_call, text="呼叫組合:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_SMALL).pack(side="left", padx=(0, 2))
-        self.cbo_call_combo = ttk.Combobox(r_call, textvariable=self.var_combo_to_call, width=12, state="readonly")
-        self.cbo_call_combo.pack(side="left", padx=2, fill="x", expand=True)
-        tk.Button(r_call, text="↻ +呼叫", width=7, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.combo_add_call_action).pack(side="left", padx=(2, 0))
+        # 3. 呼叫組合與引用變數 (雙拼一行，大幅節省縱向空間)
+        r_comb = tk.Frame(f_action_card, bg=UITheme.BG_PANEL)
+        r_comb.pack(fill="x", pady=1)
 
-        # 4. 引用變數行
-        r_ref = tk.Frame(f_action_card, bg=UITheme.BG_PANEL)
-        r_ref.pack(fill="x", pady=2)
-        tk.Label(r_ref, text="引用變數:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_SMALL).pack(side="left", padx=(0, 2))
-        self.cbo_combo_add_var = ttk.Combobox(r_ref, textvariable=self.var_combo_ref_var, width=14, state="readonly")
-        self.cbo_combo_add_var.pack(side="left", padx=2, fill="x", expand=True)
-        tk.Button(
-            r_ref,
-            text="➔ +引用變數",
-            width=11,
-            bg=UITheme.ACCENT_BLUE,
-            fg="#fff",
-            activebackground=UITheme.ACCENT_BLUE_HOVER,
-            relief="flat",
-            font=UITheme.FONT_SMALL_BOLD,
-            command=self.combo_add_variable_action
-        ).pack(side="left", padx=(2, 0))
+        f_call = tk.Frame(r_comb, bg=UITheme.BG_PANEL)
+        f_call.pack(side="left", fill="x", expand=True, padx=(0, 2))
+        self.cbo_call_combo = ttk.Combobox(f_call, textvariable=self.var_combo_to_call, width=10, state="readonly")
+        self.cbo_call_combo.pack(side="left", fill="x", expand=True, padx=(0, 1))
+        tk.Button(f_call, text="+ 呼叫", width=5, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.combo_add_call_action).pack(side="left")
 
-        # 動作清單
+        f_var = tk.Frame(r_comb, bg=UITheme.BG_PANEL)
+        f_var.pack(side="left", fill="x", expand=True, padx=(2, 0))
+        self.cbo_combo_add_var = ttk.Combobox(f_var, textvariable=self.var_combo_ref_var, width=10, state="readonly")
+        self.cbo_combo_add_var.pack(side="left", fill="x", expand=True, padx=(0, 1))
+        tk.Button(f_var, text="+ 引用變數", width=8, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.combo_add_variable_action).pack(side="left")
+
+        # 動作清單 (高度大幅釋放)
         f_cr_box = tk.Frame(f_cr, bg=UITheme.BG_DARK)
         f_cr_box.pack(fill="both", expand=True, pady=3)
 
@@ -1520,19 +1684,16 @@ class App(tk.Tk):
         )
         self.combo_act_listbox.pack(fill="both", expand=True)
 
-        # 底部雙層管理工具列 (避免按鈕擠在同一行造成文字裁切)
-        cr_act_ctrl1 = tk.Frame(f_cr, bg=UITheme.BG_PANEL)
-        cr_act_ctrl1.pack(fill="x", pady=(2, 1))
-        tk.Button(cr_act_ctrl1, text="▲ 上移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: self.move_combo_action(-1)).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl1, text="▼ 下移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: self.move_combo_action(1)).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl1, text="✎ 修改動作", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.edit_selected_combo_action).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl1, text="▶ 試跑動作", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.test_run_selected_combo_action).pack(side="left", padx=1, fill="x", expand=True)
-
-        cr_act_ctrl2 = tk.Frame(f_cr, bg=UITheme.BG_PANEL)
-        cr_act_ctrl2.pack(fill="x", pady=(1, 1))
-        tk.Button(cr_act_ctrl2, text="⎘ 複製動作", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.duplicate_combo_action).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl2, text="✕ 刪除動作", bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.delete_combo_action).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl2, text="✕ 清空動作", bg=UITheme.ACCENT_RED_DARK, fg="#fff", activebackground=UITheme.ACCENT_RED_DARK_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.clear_combo_actions).pack(side="left", padx=1, fill="x", expand=True)
+        # 底部單層全功能管理工具列 (單行 7 鍵對齊，省出 30px+ 縱向空間)
+        cr_act_ctrl = tk.Frame(f_cr, bg=UITheme.BG_PANEL)
+        cr_act_ctrl.pack(fill="x", pady=(2, 1))
+        tk.Button(cr_act_ctrl, text="▲ 上移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: self.move_combo_action(-1)).pack(side="left", padx=1, fill="x", expand=True)
+        tk.Button(cr_act_ctrl, text="▼ 下移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: self.move_combo_action(1)).pack(side="left", padx=1, fill="x", expand=True)
+        tk.Button(cr_act_ctrl, text="✎ 修改", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.edit_selected_combo_action).pack(side="left", padx=1, fill="x", expand=True)
+        tk.Button(cr_act_ctrl, text="⎘ 複製", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.duplicate_combo_action).pack(side="left", padx=1, fill="x", expand=True)
+        tk.Button(cr_act_ctrl, text="✕ 刪除", bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.delete_combo_action).pack(side="left", padx=1, fill="x", expand=True)
+        tk.Button(cr_act_ctrl, text="▶ 試跑", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.test_run_selected_combo_action).pack(side="left", padx=1, fill="x", expand=True)
+        tk.Button(cr_act_ctrl, text="✕ 清空", bg=UITheme.ACCENT_RED_DARK, fg="#fff", activebackground=UITheme.ACCENT_RED_DARK_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.clear_combo_actions).pack(side="left", padx=1, fill="x", expand=True)
 
     # ======================= 右欄佈局 =======================
     def build_right_panel(self):
@@ -1540,7 +1701,7 @@ class App(tk.Tk):
         f_right.grid(row=0, column=1, padx=(5, 10), pady=10, sticky="nsew")
 
         # 1. 單一動作新增
-        f_step = tk.LabelFrame(f_right, text=" 單一動作（單次點擊 / 單鍵） ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=6, pady=6)
+        f_step = tk.LabelFrame(f_right, text=" 單一動作 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=6, pady=6)
         f_step.pack(fill="x", pady=(0, 6))
 
         sr_click = tk.Frame(f_step, bg=UITheme.BG_PANEL)
@@ -1565,7 +1726,7 @@ class App(tk.Tk):
         tk.Button(sr, text="+ 加停頓", width=8, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, font=UITheme.FONT_SMALL_BOLD, command=self.add_main_wait_step).pack(side="left", padx=2)
 
         # 2. 自動循環清單（掛機流程）
-        f_seq = tk.LabelFrame(f_right, text=" 自動循環清單（掛機流程） ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=6, pady=6)
+        f_seq = tk.LabelFrame(f_right, text=" 掛機流程清單 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=6, pady=6)
         f_seq.pack(fill="both", expand=True)
 
         f_list_s = tk.Frame(f_seq, bg=UITheme.BG_DARK)
@@ -2498,7 +2659,7 @@ class App(tk.Tk):
         sel = self.step_listbox.curselection()
         if not sel: return self.set_status("請先在掛機流程選擇步驟！")
         idx = sel[0]
-        if self.prompt_edit_action(steps[idx]):
+        if self.prompt_edit_action(steps[idx], step_idx=idx):
             self.update_step_list(idx)
             self.set_status(f"已成功更新主步驟 #{idx+1}")
 
