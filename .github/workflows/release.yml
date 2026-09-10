@@ -37,12 +37,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Setup UPX (Windows)
-        if: runner.os == 'Windows'
-        uses: crazy-max/ghaction-upx@v4
-        with:
-          install-only: true
-
       - name: Build Windows Executable
         if: runner.os == 'Windows'
         run: |
@@ -50,9 +44,9 @@ jobs:
             "--onefile",
             "--noconsole",
             "--clean",
+            "--noupx",
             "--icon=app.ico",
             "--add-data=app.ico;.",
-            "--upx-exclude=vcruntime140.dll",
             "--exclude-module=PIL",
             "--exclude-module=Pillow",
             "--exclude-module=pymsgbox",
