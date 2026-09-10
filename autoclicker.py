@@ -121,6 +121,9 @@ if IS_WINDOWS:
     user32.SetWindowPos.argtypes = [wintypes.HWND, ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
     user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ctypes.c_size_t]
     user32.GetAsyncKeyState.argtypes = [ctypes.c_int]
+    WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+else:
+    WNDENUMPROC = None
 
 VK_MAP = {
     "space": 0x20, "enter": 0x0D, "return": 0x0D, "esc": 0x1B, "escape": 0x1B,
@@ -653,21 +656,26 @@ class App(tk.Tk):
         self.attributes("-topmost", self.var_topmost.get())
 
     def poll_ui_queues(self):
-        """定期由主執行緒消費背景執行緒發送的 UI 更新事件"""
+        """定期由主執行緒消費背景執行緒發送的 UI 更新事件 (批次摺疊更新，避免頻繁渲染)"""
         if self.is_closing: return
+        last_msg = None
         try:
             while True:
-                msg = self.status_queue.get_nowait()
-                if hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
-                    self.lbl_status.config(text=f"● 狀態: {msg}")
+                last_msg = self.status_queue.get_nowait()
         except (queue.Empty, Exception):
             pass
-        try:
-            while True:
+        if last_msg is not None and hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
+            self.lbl_status.config(text=f"● 狀態: {last_msg}")
+
+        while True:
+            try:
                 fn = self.ui_task_queue.get_nowait()
+            except (queue.Empty, Exception):
+                break
+            try:
                 fn()
-        except (queue.Empty, Exception):
-            pass
+            except Exception:
+                pass
         if not self.is_closing:
             self.after(50, self.poll_ui_queues)
 
@@ -733,20 +741,24 @@ class App(tk.Tk):
         threading.Thread(target=_worker, daemon=True).start()
 
     def track_mouse_live(self):
-        """實時監控游標坐標並更新 HUD"""
+        """實時監控游標坐標並更新 HUD (具備坐標變更感知，無移動不消耗重繪資源)"""
         if self.is_closing:
             return
         try:
             pos = pyautogui.position()
-            if IS_WINDOWS and target_hwnd and self.var_use_rel.get():
+            if IS_WINDOWS and target_hwnd and getattr(self, "cached_use_rel", True):
                 pt = POINT(int(pos.x), int(pos.y))
                 user32.ScreenToClient(target_hwnd, ctypes.byref(pt))
-                self.lbl_mouse_hud.config(text=f"游標實時坐標(相對): ({pt.x}, {pt.y})")
+                new_text = f"游標實時坐標(相對): ({pt.x}, {pt.y})"
             else:
-                self.lbl_mouse_hud.config(text=f"游標實時坐標(螢幕): ({pos.x}, {pos.y})")
+                new_text = f"游標實時坐標(螢幕): ({pos.x}, {pos.y})"
+            if new_text != getattr(self, "_last_mouse_hud_text", None):
+                self._last_mouse_hud_text = new_text
+                self.lbl_mouse_hud.config(text=new_text)
         except Exception:
             pass
-        self.after(150, self.track_mouse_live)
+        if not self.is_closing:
+            self.after(150, self.track_mouse_live)
 
     def force_bring_window_to_front(self, hwnd):
         """強制喚醒並將目標視窗置頂最前"""
@@ -879,6 +891,8 @@ class App(tk.Tk):
 
     def highlight_active_step(self, idx, sub_idx=None):
         """在掛機進度監控彈窗中高亮當前執行中的步驟或 Combo 子步驟"""
+        if not self.active_dlg or not self.active_dlg.winfo_exists() or not self.active_lb:
+            return
         def _hl():
             if self.active_lb and self.active_dlg and self.active_dlg.winfo_exists():
                 line = self.active_step_line_map.get((idx, sub_idx))
@@ -890,7 +904,7 @@ class App(tk.Tk):
                     self.active_lb.selection_clear(0, tk.END)
                     self.active_lb.selection_set(line)
                     self.active_lb.see(line)
-        self.after(0, _hl)
+        self.run_on_ui_thread(_hl)
 
     def refresh_active_dlg_items(self):
         """刷新進度監控彈窗的執行實例清單（支援展開 Combo 內部子動作）"""
@@ -1711,7 +1725,7 @@ class App(tk.Tk):
                 if t and WINDOW_TITLE not in t:
                     windows.append((hwnd, t))
             return True
-        user32.EnumWindows(ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)(enum_proc), 0)
+        user32.EnumWindows(WNDENUMPROC(enum_proc), 0)
         return windows
 
     def refresh_window_dropdown(self):
