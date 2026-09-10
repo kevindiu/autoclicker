@@ -36,7 +36,6 @@ class UITheme:
     TEXT_MAIN = "#f1f5f9"        # 主文字 (白色系)
     TEXT_MUTED = "#94a3b8"       # 次要/輔助文字 (灰色)
     TEXT_LABEL = "#cbd5e1"       # 標籤文字 (淡灰)
-    TEXT_DISABLED = "#64748b"    # 停用步驟文字 (暗灰)
     
     ACCENT_GREEN = "#16a34a"     # 翠綠 (啟動、新增、瞄準點擊)
     ACCENT_GREEN_HOVER = "#15803d"
@@ -141,7 +140,7 @@ def safe_sleep(seconds):
     while time.time() < end:
         if stop_event.is_set():
             return False
-        if not is_testing and (not running or reload_requested):
+        if not is_testing and not running:
             return False
         time.sleep(0.02)
     return True
@@ -546,12 +545,13 @@ class App(tk.Tk):
             except Exception:
                 pass
 
-    def set_running_ui(self, is_running):
+    def set_running_ui(self, is_running, is_test=False):
         """執行緒安全地更新啟動/停止按鈕 UI"""
         def _u():
             if self.is_closing: return
             if is_running:
-                self.btn_toggle.config(text="■ 停止運行", bg=UITheme.ACCENT_RED, activebackground=UITheme.ACCENT_RED_HOVER)
+                btn_text = "■ 停止試跑" if is_test else "■ 停止運行"
+                self.btn_toggle.config(text=btn_text, bg=UITheme.ACCENT_RED, activebackground=UITheme.ACCENT_RED_HOVER)
             else:
                 self.btn_toggle.config(text="▶ 開始循環執行", bg=UITheme.ACCENT_GREEN, activebackground=UITheme.ACCENT_GREEN_HOVER)
                 if hasattr(self, "step_listbox") and self.step_listbox.winfo_exists():
@@ -569,6 +569,7 @@ class App(tk.Tk):
             global is_testing
             is_testing = True
             stop_event.clear()  # 關鍵修復：清除先前手動停止或循環殘留的中止信號
+            self.set_running_ui(True, is_test=True)
             try:
                 self.set_status(f"正在試跑 {task_name}...")
                 task_fn()
@@ -581,6 +582,7 @@ class App(tk.Tk):
             finally:
                 is_testing = False
                 emergency_release_all()
+                self.set_running_ui(False)
 
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -609,6 +611,8 @@ class App(tk.Tk):
         if not IS_WINDOWS or not hwnd:
             return
         try:
+            if user32.GetForegroundWindow() == hwnd:
+                return  # 目標已在前台，不重複執行置頂與敲擊 Alt 鍵
             user32.ShowWindow(hwnd, 9)
             SWP_FLAGS = 0x0001 | 0x0002 | 0x0040
             user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_FLAGS)
@@ -781,6 +785,7 @@ class App(tk.Tk):
                         steps.insert(step_idx + offset, copy.deepcopy(act))
                     self.update_step_list(select_idx=step_idx)
                     self.set_status(f"已將組合 [{combo_name}] 展開為 {len(working_actions)} 個獨立步驟")
+                    self.trigger_hot_reload()
                 modified[0] = True
                 dialog.destroy()
 
@@ -821,7 +826,7 @@ class App(tk.Tk):
 
         tk.Button(r2, text="套用範本動作", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, font=UITheme.FONT_SMALL_BOLD, relief="flat", padx=6, command=do_load_tpl).pack(side="left", padx=4)
 
-        # 中間主工作區 (左邊子動作 CheckList，右邊垂直操作按鈕列)
+        # 中間主工作區 (左邊子步驟清單，右邊垂直操作按鈕列)
         f_mid = tk.Frame(dialog, bg=UITheme.BG_PANEL, padx=12, pady=4)
         f_mid.pack(fill="both", expand=True)
 
@@ -1484,6 +1489,8 @@ class App(tk.Tk):
             self.cbo_profile.current(0)
 
     def create_new_profile(self):
+        if running or is_testing:
+            return self.set_status("巨集正在執行或試跑中，請先停止再新建設定檔！")
         name = simpledialog.askstring("新建設定檔", "請輸入新設定檔名稱 (毋須輸入副檔名):", parent=self)
         if not name or not name.strip(): return
         name = name.strip()
@@ -1515,6 +1522,8 @@ class App(tk.Tk):
             self.set_status(f"儲存失敗: {e}")
 
     def load_config(self):
+        if running or is_testing:
+            return self.set_status("巨集正在執行或試跑中，請先停止再載入設定檔！")
         name = self.var_profile_name.get().strip()
         if not name: return
         fn = f"{name}{CONFIG_EXT}"
@@ -1798,13 +1807,7 @@ class App(tk.Tk):
                 return
 
             variables[name] = {"type": type_key, "value": val}
-
-            global active_variables, reload_requested
-            if running:
-                with steps_lock:
-                    active_variables = copy.deepcopy(variables)
-                    reload_requested = True
-
+            self.trigger_hot_reload()
             self.refresh_variables_table()
             self.refresh_combo_actions_list()
             self.update_step_list()
@@ -1864,13 +1867,7 @@ class App(tk.Tk):
         if not messagebox.askyesno("刪除變數", f"請問是否確定刪除變數「{var_name}」？\n若已有動作引用此變數，執行時將自動回退至固定值。", parent=self):
             return
         variables.pop(var_name, None)
-
-        global active_variables, reload_requested
-        if running:
-            with steps_lock:
-                active_variables = copy.deepcopy(variables)
-                reload_requested = True
-
+        self.trigger_hot_reload()
         self.refresh_variables_table()
         self.refresh_combo_actions_list()
         self.update_step_list()
@@ -1965,6 +1962,7 @@ class App(tk.Tk):
         combos.append({"name": name, "actions": []})
         self.refresh_combo_list(select_idx=len(combos)-1)
         self.set_status(f"已建立新組合: [{name}]")
+        self.trigger_hot_reload()
 
     def duplicate_selected_combo(self):
         idx = self.get_selected_combo_idx()
@@ -1980,6 +1978,7 @@ class App(tk.Tk):
         combos.insert(idx + 1, {"name": new_name, "actions": copy.deepcopy(orig.get("actions", []))})
         self.refresh_combo_list(select_idx=idx + 1)
         self.set_status(f"已複製組合 [{base_name}] 為 [{new_name}]")
+        self.trigger_hot_reload()
 
     def rename_selected_combo(self):
         idx = self.get_selected_combo_idx()
@@ -2007,6 +2006,7 @@ class App(tk.Tk):
         if sync_cnt > 0: self.update_step_list()
         self.refresh_combo_list(select_idx=idx)
         self.set_status(f"已將組合改名為 [{new_name}]，同步刷新了關聯步驟")
+        self.trigger_hot_reload()
 
     def delete_selected_combo(self):
         idx = self.get_selected_combo_idx()
@@ -2017,6 +2017,7 @@ class App(tk.Tk):
         self.refresh_combo_list(select_idx=new_sel)
         self.on_combo_select()
         self.set_status(f"已刪除組合 [{name}]")
+        self.trigger_hot_reload()
 
     def add_combo_to_main_steps(self):
         idx = self.get_selected_combo_idx()
@@ -2028,6 +2029,7 @@ class App(tk.Tk):
         steps.insert(ins, {"type": "combo", "name": c["name"], "actions": copy.deepcopy(c["actions"])})
         self.update_step_list(select_idx=ins)
         self.set_status(f"已將組合 [{c['name']}] 加入掛機流程 #{ins+1}")
+        self.trigger_hot_reload()
 
     # ======================= 組合動作邏輯 =======================
     def get_selected_action_idx(self):
@@ -2078,7 +2080,17 @@ class App(tk.Tk):
 
         self.run_in_test_thread(f"組合 [{c['name']}]", _run)
 
-    # ======================= 清單動作輔助函數 =======================
+    # ======================= 熱更新同步與清單動作輔助函數 =======================
+    def trigger_hot_reload(self):
+        """若巨集運行中，同步最新草稿至背景實例快照，並於下一輪自動生效"""
+        global active_steps, active_combos, active_variables, reload_requested
+        if running:
+            with steps_lock:
+                active_steps = copy.deepcopy(steps)
+                active_combos = copy.deepcopy(combos)
+                active_variables = copy.deepcopy(variables)
+                reload_requested = True
+
     def _move_list_item(self, lst, idx, delta, refresh_cb, item_name="項目"):
         if idx is None:
             return self.set_status(f"請先在清單點選要移動的{item_name}！")
@@ -2088,6 +2100,7 @@ class App(tk.Tk):
             refresh_cb(target)
             direction = "上移" if delta < 0 else "下移"
             self.set_status(f"已將{item_name} #{idx+1} {direction}至 #{target+1}")
+            self.trigger_hot_reload()
         else:
             self.set_status("已在清單最頂或最底，無法再移動！")
 
@@ -2096,6 +2109,7 @@ class App(tk.Tk):
         lst.insert(idx + 1, copy.deepcopy(lst[idx]))
         refresh_cb(idx + 1)
         self.set_status(f"已複製{item_name} #{idx+1}")
+        self.trigger_hot_reload()
 
     def _delete_list_item(self, lst, idx, refresh_cb, item_name="項目"):
         if idx is None or not (0 <= idx < len(lst)):
@@ -2104,6 +2118,7 @@ class App(tk.Tk):
         new_sel = min(idx, len(lst) - 1) if lst else None
         refresh_cb(new_sel)
         self.set_status(f"已刪除{item_name}")
+        self.trigger_hot_reload()
 
     def _clear_list_items(self, lst, confirm_msg, refresh_cb, status_msg):
         if not lst: return self.set_status(f"{status_msg}本來就是空的")
@@ -2111,6 +2126,7 @@ class App(tk.Tk):
             lst.clear()
             refresh_cb(None)
             self.set_status(f"已清空{status_msg}")
+            self.trigger_hot_reload()
 
     def _insert_action_to_target(self, action_dict, is_combo=False, success_msg=""):
         if is_combo:
@@ -2124,12 +2140,14 @@ class App(tk.Tk):
             self.refresh_combo_list(select_idx=idx)
             self.sync_combo_actions_to_main_steps(combos[idx]["name"], actions)
             if success_msg: self.set_status(success_msg)
+            self.trigger_hot_reload()
             return ins
         else:
             ins = self.get_main_insert_index()
             steps.insert(ins, action_dict)
             self.update_step_list(ins)
             if success_msg: self.set_status(success_msg)
+            self.trigger_hot_reload()
             return ins
 
     def add_click_action(self, is_combo=False):
@@ -2185,6 +2203,7 @@ class App(tk.Tk):
             self.refresh_combo_actions_list(select_idx=a_idx)
             self.sync_combo_actions_to_main_steps(combos[c_idx]["name"], combos[c_idx]["actions"])
             self.set_status(f"已成功更新組合動作 #{a_idx+1}")
+            self.trigger_hot_reload()
 
     def add_key_action(self, is_combo=False):
         if is_combo and self.get_selected_combo_idx() is None:
@@ -2306,6 +2325,7 @@ class App(tk.Tk):
         if self.prompt_edit_action(steps[idx], step_idx=idx):
             self.update_step_list(idx)
             self.set_status(f"已成功更新主步驟 #{idx+1}")
+            self.trigger_hot_reload()
 
     def move_main_step(self, delta):
         sel = self.step_listbox.curselection()
@@ -2333,6 +2353,7 @@ class App(tk.Tk):
             steps.insert(idx + offset, copy.deepcopy(act))
         self.update_step_list(select_idx=idx)
         self.set_status(f"已將組合 [{step.get('name', '')}] 展開為 {len(c_actions)} 個獨立步驟")
+        self.trigger_hot_reload()
 
     def delete_main_step(self):
         sel = self.step_listbox.curselection()
@@ -2346,7 +2367,7 @@ class App(tk.Tk):
     def dispatch_action(self, act, parent_desc, current_vars=None, current_combos=None, depth=0, visited_set=None, is_test=False, round_prefix=""):
         if visited_set is None: visited_set = set()
         if not is_test:
-            if not running or stop_event.is_set() or reload_requested: return False
+            if not running or stop_event.is_set(): return False
             if current_vars is None: current_vars = {}
             if current_combos is None: current_combos = []
         else:
@@ -2424,7 +2445,7 @@ class App(tk.Tk):
             if tgt_combo:
                 new_visited = visited_set | {tgt_name}
                 for sub_idx, sub_act in enumerate(tgt_combo.get("actions", [])):
-                    if not is_test and (not running or stop_event.is_set() or reload_requested): return False
+                    if not is_test and (not running or stop_event.is_set()): return False
                     if is_test and stop_event.is_set(): return False
                     sub_desc = f"{parent_desc}->[{tgt_name}#{sub_idx+1}]"
                     if not self.dispatch_action(sub_act, sub_desc, current_vars=current_vars, current_combos=current_combos, depth=depth + 1, visited_set=new_visited, is_test=is_test, round_prefix=round_prefix):
@@ -2439,13 +2460,15 @@ class App(tk.Tk):
 
     # ======================= 主執行引擎 =======================
     def toggle_run(self):
-        global running, active_steps, active_combos, active_variables, reload_requested
-        if running:
+        global running, is_testing, active_steps, active_combos, active_variables, reload_requested
+        if running or is_testing:
+            was_test = is_testing
             running = False
+            is_testing = False
             stop_event.set()
             emergency_release_all()
             self.set_running_ui(False)
-            self.set_status("已手動停止")
+            self.set_status("試跑已手動中止！" if was_test else "已手動停止")
         else:
             if not steps: return self.set_status("執行清單是空的，請先加入步驟！")
             with steps_lock:
@@ -2468,13 +2491,14 @@ class App(tk.Tk):
                     current_steps = copy.deepcopy(active_steps)
                     current_combos = copy.deepcopy(active_combos)
                     current_variables = copy.deepcopy(active_variables)
+                    was_reloaded = reload_requested
                     reload_requested = False
+
+                if was_reloaded:
+                    self.set_status(f"第 {round_idx} 輪: 已套用最新熱更新流程！")
 
                 for idx, step in enumerate(current_steps):
                     if not running or stop_event.is_set(): break
-                    if reload_requested:
-                        self.set_status("已檢測到熱更新，即時重新加載最新流程...")
-                        break
 
                     self.highlight_active_step(idx)
                     pfx = f"第 {round_idx} 輪: "
@@ -2483,7 +2507,7 @@ class App(tk.Tk):
                     if stype == "combo":
                         c_name = step.get("name", "組合")
                         for a_idx, act in enumerate(step.get("actions", [])):
-                            if not running or stop_event.is_set() or reload_requested: break
+                            if not running or stop_event.is_set(): break
                             self.highlight_active_step(idx, sub_idx=a_idx)
                             if not self.dispatch_action(act, f"[{c_name}#{a_idx+1}]", current_vars=current_variables, current_combos=current_combos, depth=0, visited_set={c_name}, is_test=False, round_prefix=pfx):
                                 break
@@ -2493,8 +2517,6 @@ class App(tk.Tk):
 
                 round_idx += 1
                 if not safe_sleep(0.05):
-                    if reload_requested:
-                        continue
                     break
         except Exception as e:
             self.set_status(f"異常中斷: {e}")
