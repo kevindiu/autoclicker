@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import time
 import copy
@@ -14,6 +15,13 @@ pyautogui.PAUSE = 0.0
 
 WINDOW_TITLE = "水滸歷險 巨集助手"
 CONFIG_EXT = ".shm"
+
+def resource_path(relative_path):
+    """獲取資源絕對路徑 (相容 PyInstaller 單一執行檔打包與原始碼執行)"""
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    base_dir = os.path.abspath(os.path.dirname(__file__)) if '__file__' in globals() else os.path.abspath(".")
+    return os.path.join(base_dir, relative_path)
 
 # ==============================================================================
 # UI 色彩與樣式主題配置 (保持原有配色一致性)
@@ -410,6 +418,7 @@ class App(tk.Tk):
 
         self.is_closing = False
         self.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.apply_app_icon()
 
         # 頂部全域設定變數
         self.var_profile_name = tk.StringVar()
@@ -450,6 +459,22 @@ class App(tk.Tk):
         self.refresh_window_dropdown()
         self.refresh_profiles()
         self.track_mouse_live()
+
+    def apply_app_icon(self, target=None):
+        """為指定視窗 (預設為主視窗) 套用應用程式圖示 (支援 Windows .ico 與通用 .png)"""
+        win = target or self
+        try:
+            ico_path = resource_path("app.ico")
+            png_path = resource_path("app.png")
+            if sys.platform == "win32" and os.path.exists(ico_path):
+                win.iconbitmap(ico_path)
+            elif os.path.exists(png_path):
+                img = tk.PhotoImage(file=png_path)
+                win.iconphoto(True, img)
+            elif os.path.exists(ico_path):
+                win.iconbitmap(ico_path)
+        except Exception:
+            pass
 
     def on_close(self):
         """主視窗關閉事件處理"""
@@ -760,6 +785,7 @@ class App(tk.Tk):
         self.active_dlg.transient(self)
         self.active_dlg.resizable(True, True)
         self.active_dlg.protocol("WM_DELETE_WINDOW", self.close_active_dlg)
+        self.apply_app_icon(self.active_dlg)
 
         # 頂部標題列與置頂 Checkbox
         f_top = tk.Frame(self.active_dlg, bg=UITheme.BG_PANEL)
@@ -846,6 +872,7 @@ class App(tk.Tk):
         dialog.attributes("-topmost", True)
         dialog.transient(self)
         dialog.grab_set()
+        self.apply_app_icon(dialog)
 
         w, h = 330, 225
         self.update_idletasks()
@@ -1984,5 +2011,11 @@ class App(tk.Tk):
             self.set_running_ui(False)
 
 if __name__ == "__main__":
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("sh.autoclicker.app.1.0")
+        except Exception:
+            pass
     app = App()
     app.mainloop()

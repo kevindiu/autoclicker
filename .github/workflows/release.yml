@@ -37,16 +37,74 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Setup UPX (Windows)
+        if: runner.os == 'Windows'
+        uses: crazy-max/ghaction-upx@v4
+        with:
+          install-only: true
+
       - name: Build Windows Executable
         if: runner.os == 'Windows'
         run: |
-          pyinstaller --onefile --noconsole --name auto-windows autoclicker.py
+          $params = @(
+            "--onefile",
+            "--noconsole",
+            "--clean",
+            "--icon=app.ico",
+            "--add-data=app.ico;.",
+            "--upx-exclude=vcruntime140.dll",
+            "--exclude-module=PIL",
+            "--exclude-module=Pillow",
+            "--exclude-module=pymsgbox",
+            "--exclude-module=pytweening",
+            "--exclude-module=mouseinfo",
+            "--exclude-module=sqlite3",
+            "--exclude-module=unittest",
+            "--exclude-module=email",
+            "--exclude-module=http",
+            "--exclude-module=xml",
+            "--exclude-module=xmlrpc",
+            "--exclude-module=pydoc",
+            "--exclude-module=doctest",
+            "--exclude-module=test",
+            "--exclude-module=tkinter.test",
+            "--exclude-module=asyncio",
+            "--exclude-module=concurrent",
+            "--exclude-module=multiprocessing",
+            "--exclude-module=lib2to3",
+            "--name=auto-windows",
+            "autoclicker.py"
+          )
+          pyinstaller @params
           Move-Item dist/auto-windows.exe ./
 
       - name: Build macOS Application Bundle
         if: runner.os == 'macOS'
         run: |
-          pyinstaller --onefile --windowed --name auto-macos autoclicker.py
+          pyinstaller --onefile --windowed --clean \
+            --icon=app.icns \
+            --add-data "app.ico:." \
+            --add-data "app.png:." \
+            --exclude-module PIL \
+            --exclude-module Pillow \
+            --exclude-module pymsgbox \
+            --exclude-module pytweening \
+            --exclude-module mouseinfo \
+            --exclude-module sqlite3 \
+            --exclude-module unittest \
+            --exclude-module email \
+            --exclude-module http \
+            --exclude-module xml \
+            --exclude-module xmlrpc \
+            --exclude-module pydoc \
+            --exclude-module doctest \
+            --exclude-module test \
+            --exclude-module tkinter.test \
+            --exclude-module asyncio \
+            --exclude-module concurrent \
+            --exclude-module multiprocessing \
+            --exclude-module lib2to3 \
+            --name auto-macos autoclicker.py
           cd dist
           zip -r ../auto-macos.zip auto-macos.app
 
