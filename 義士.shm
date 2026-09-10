@@ -1,0 +1,465 @@
+{
+  "combos": [
+    {
+      "name": "P1英MP",
+      "actions": [
+        {
+          "type": "click",
+          "x": 163,
+          "y": 212,
+          "rel": true
+        },
+        {
+          "type": "call_combo",
+          "target_name": "MP"
+        }
+      ]
+    },
+    {
+      "name": "P2英MP",
+      "actions": [
+        {
+          "type": "click",
+          "x": 162,
+          "y": 261,
+          "rel": true
+        },
+        {
+          "type": "call_combo",
+          "target_name": "MP"
+        }
+      ]
+    },
+    {
+      "name": "P3英MP",
+      "actions": [
+        {
+          "type": "click",
+          "x": 165,
+          "y": 307,
+          "rel": true
+        },
+        {
+          "type": "call_combo",
+          "target_name": "MP"
+        }
+      ]
+    },
+    {
+      "name": "P4英MP",
+      "actions": [
+        {
+          "type": "click",
+          "x": 162,
+          "y": 349,
+          "rel": true
+        },
+        {
+          "type": "call_combo",
+          "target_name": "MP"
+        }
+      ]
+    },
+    {
+      "name": "P5英MP",
+      "actions": [
+        {
+          "type": "click",
+          "x": 157,
+          "y": 388,
+          "rel": true
+        },
+        {
+          "type": "call_combo",
+          "target_name": "MP"
+        }
+      ]
+    },
+    {
+      "name": "P6英MP",
+      "actions": [
+        {
+          "type": "click",
+          "x": 159,
+          "y": 436,
+          "rel": true
+        },
+        {
+          "type": "call_combo",
+          "target_name": "MP"
+        }
+      ]
+    },
+    {
+      "name": "MP",
+      "actions": [
+        {
+          "type": "key",
+          "key": "f4"
+        },
+        {
+          "type": "wait",
+          "sec": 4.5
+        }
+      ]
+    },
+    {
+      "name": "P1人MP",
+      "actions": [
+        {
+          "type": "click",
+          "x": 97,
+          "y": 194,
+          "rel": true
+        },
+        {
+          "type": "call_combo",
+          "target_name": "MP"
+        }
+      ]
+    },
+    {
+      "name": "P2人MP",
+      "actions": [
+        {
+          "type": "click",
+          "x": 95,
+          "y": 242,
+          "rel": true
+        },
+        {
+          "type": "call_combo",
+          "target_name": "MP"
+        }
+      ]
+    },
+    {
+      "name": "P3人MP",
+      "actions": [
+        {
+          "type": "click",
+          "x": 88,
+          "y": 285,
+          "rel": true
+        },
+        {
+          "type": "call_combo",
+          "target_name": "MP"
+        }
+      ]
+    },
+    {
+      "name": "P4人MP",
+      "actions": [
+        {
+          "type": "click",
+          "x": 87,
+          "y": 332,
+          "rel": true
+        },
+        {
+          "type": "call_combo",
+          "target_name": "MP"
+        }
+      ]
+    },
+    {
+      "name": "P5人MP",
+      "actions": [
+        {
+          "type": "click",
+          "x": 79,
+          "y": 380,
+          "rel": true
+        },
+        {
+          "type": "call_combo",
+          "target_name": "MP"
+        }
+      ]
+    },
+    {
+      "name": "P6人MP",
+      "actions": [
+        {
+          "type": "click",
+          "x": 86,
+          "y": 418,
+          "rel": true
+        },
+        {
+          "type": "call_combo",
+          "target_name": "MP"
+        }
+      ]
+    },
+    {
+      "name": "SIT",
+      "actions": [
+        {
+          "type": "wait",
+          "sec": 0.5
+        },
+        {
+          "type": "key",
+          "key": "f1"
+        },
+        {
+          "type": "wait",
+          "sec": 4.5
+        }
+      ]
+    },
+    {
+      "name": "群回",
+      "actions": [
+        {
+          "type": "key",
+          "key": "f5"
+        },
+        {
+          "type": "wait",
+          "sec": 2.8
+        }
+      ]
+    },
+    {
+      "name": "地圖",
+      "actions": [
+        {
+          "type": "key",
+          "key": "tab"
+        },
+        {
+          "type": "wait",
+          "sec": 0.5
+        },
+        {
+          "type": "click",
+          "x": 1008,
+          "y": 677,
+          "rel": true
+        },
+        {
+          "type": "wait",
+          "sec": 0.5
+        },
+        {
+          "type": "key",
+          "key": "tab"
+        },
+        {
+          "type": "wait",
+          "sec": 1.0
+        }
+      ]
+    },
+    {
+      "name": "汁野",
+      "actions": [
+        {
+          "type": "key",
+          "key": "f2"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "type": "combo",
+      "name": "群回",
+      "actions": [
+        {
+          "type": "key",
+          "key": "f5"
+        },
+        {
+          "type": "wait",
+          "sec": 2.8
+        }
+      ]
+    },
+    {
+      "type": "combo",
+      "name": "P1英MP",
+      "actions": [
+        {
+          "type": "click",
+          "x": 163,
+          "y": 212,
+          "rel": true
+        },
+        {
+          "type": "call_combo",
+          "target_name": "MP"
+        }
+      ]
+    },
+    {
+      "type": "combo",
+      "name": "P3英MP",
+      "actions": [
+        {
+          "type": "click",
+          "x": 165,
+          "y": 307,
+          "rel": true
+        },
+        {
+          "type": "call_combo",
+          "target_name": "MP"
+        }
+      ]
+    },
+    {
+      "type": "combo",
+      "name": "汁野",
+      "actions": [
+        {
+          "type": "key",
+          "key": "f2"
+        }
+      ]
+    },
+    {
+      "type": "combo",
+      "name": "SIT",
+      "actions": [
+        {
+          "type": "wait",
+          "sec": 0.5
+        },
+        {
+          "type": "key",
+          "key": "f1"
+        },
+        {
+          "type": "wait",
+          "sec": 4.5
+        }
+      ]
+    },
+    {
+      "type": "combo",
+      "name": "地圖",
+      "actions": [
+        {
+          "type": "key",
+          "key": "tab"
+        },
+        {
+          "type": "wait",
+          "sec": 0.5
+        },
+        {
+          "type": "click",
+          "x": 1008,
+          "y": 677,
+          "rel": true
+        },
+        {
+          "type": "wait",
+          "sec": 0.5
+        },
+        {
+          "type": "key",
+          "key": "tab"
+        },
+        {
+          "type": "wait",
+          "sec": 1.0
+        }
+      ]
+    },
+    {
+      "type": "combo",
+      "name": "P6英MP",
+      "actions": [
+        {
+          "type": "click",
+          "x": 159,
+          "y": 436,
+          "rel": true
+        },
+        {
+          "type": "call_combo",
+          "target_name": "MP"
+        }
+      ]
+    },
+    {
+      "type": "combo",
+      "name": "群回",
+      "actions": [
+        {
+          "type": "key",
+          "key": "f5"
+        },
+        {
+          "type": "wait",
+          "sec": 2.8
+        }
+      ]
+    },
+    {
+      "type": "combo",
+      "name": "汁野",
+      "actions": [
+        {
+          "type": "key",
+          "key": "f2"
+        }
+      ]
+    },
+    {
+      "type": "combo",
+      "name": "SIT",
+      "actions": [
+        {
+          "type": "wait",
+          "sec": 0.5
+        },
+        {
+          "type": "key",
+          "key": "f1"
+        },
+        {
+          "type": "wait",
+          "sec": 4.5
+        }
+      ]
+    },
+    {
+      "type": "combo",
+      "name": "地圖",
+      "actions": [
+        {
+          "type": "key",
+          "key": "tab"
+        },
+        {
+          "type": "wait",
+          "sec": 0.5
+        },
+        {
+          "type": "click",
+          "x": 1008,
+          "y": 677,
+          "rel": true
+        },
+        {
+          "type": "wait",
+          "sec": 0.5
+        },
+        {
+          "type": "key",
+          "key": "tab"
+        },
+        {
+          "type": "wait",
+          "sec": 1.0
+        }
+      ]
+    }
+  ]
+}
