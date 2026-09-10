@@ -56,6 +56,8 @@ class UITheme:
     
     CYAN_TITLE = "#38bdf8"       # 天藍標題
     CYAN_SUB = "#7dd3fc"         # 淺天藍副標
+    ACCENT_CYAN = "#0284c7"      # 青藍 (展開)
+    ACCENT_CYAN_HOVER = "#0369a1"
 
 # ==============================================================================
 # 全域資料狀態與執行緒同步物件
@@ -114,8 +116,6 @@ VK_MAP = {
     "tab": 0x09, "shift": 0x10, "ctrl": 0x11, "alt": 0x12,
     "up": 0x26, "down": 0x28, "left": 0x25, "right": 0x27,
     **{f"f{i}": 0x6F + i for i in range(1, 13)},
-    **{str(i): 0x30 + i for i in range(10)},
-    **{chr(c): 0x41 + (c - ord('a')) for c in range(ord('a'), ord('z') + 1)}
 }
 
 # ==============================================================================
@@ -231,7 +231,7 @@ def execute_click(x, y, is_rel, use_bg, off_x, off_y, btn="left"):
         return f"前台{btn_cn} ({x},{y})"
 
 def format_action_summary(act, index=None, with_checkbox_tag=False, current_variables=None):
-    """統一格式化動作或步驟的文字描述，100% 保持原有顯示規則，並支援變數解析 (無 Emoji)"""
+    """統一格式化動作或步驟的文字描述，支援精選 Emoji 與變數解析"""
     var_dict = current_variables if current_variables is not None else variables
     atype = act.get("type", "")
     tag = ""
@@ -248,32 +248,32 @@ def format_action_summary(act, index=None, with_checkbox_tag=False, current_vari
             val = v_info.get("value") if isinstance(v_info.get("value"), dict) else v_info
             cx = val.get("x", act.get("x", 0))
             cy = val.get("y", act.get("y", 0))
-            body = f"[{btn_tag}] -> 變數:【{var_name}】({cx},{cy})"
+            body = f"🖱️ [{btn_tag}] -> 📍 變數:【{var_name}】({cx},{cy})"
         else:
             prefix = "相對:" if act.get("rel") else "絕對:"
-            body = f"[{btn_tag}] -> {prefix}({act.get('x', 0)},{act.get('y', 0)})"
+            body = f"🖱️ [{btn_tag}] -> {prefix}({act.get('x', 0)},{act.get('y', 0)})"
     elif atype == "key":
         if var_name:
             v_info = var_dict.get(var_name, {})
             val = v_info.get("value") if "value" in v_info else v_info.get("key", act.get("key", ""))
             k_str = str(val).upper()
-            body = f"[按鍵] -> 變數:【{var_name}】[ {k_str} ]"
+            body = f"⌨️ [按鍵] -> 🏷️ 變數:【{var_name}】[ {k_str} ]"
         else:
             key_str = str(act.get("key", "")).upper()
-            body = f"[按鍵] -> [ {key_str} ]"
+            body = f"⌨️ [按鍵] -> [ {key_str} ]"
     elif atype == "wait":
         if var_name:
             v_info = var_dict.get(var_name, {})
             val = v_info.get("value") if "value" in v_info else v_info.get("sec", act.get("sec", 0))
-            body = f"[停頓] -> 變數:【{var_name}】{val} 秒"
+            body = f"⏱️ [停頓] -> ⏳ 變數:【{var_name}】{val} 秒"
         else:
-            body = f"[停頓] -> {act.get('sec', 0)} 秒"
+            body = f"⏱️ [停頓] -> {act.get('sec', 0)} 秒"
     elif atype == "call_combo":
-        body = f"[呼叫] -> 組合:【{act.get('target_name', '')}】"
+        body = f"🔄 [呼叫] -> 📦 組合:【{act.get('target_name', '')}】"
     elif atype == "combo":
         c_name = act.get("name", "組合")
         act_cnt = len(act.get("actions", []))
-        body = f"[組合: {c_name}] ({act_cnt}個動作)"
+        body = f"📦 [組合: {c_name}] ({act_cnt}個動作)"
     else:
         body = f"[{atype}]"
 
@@ -428,6 +428,98 @@ class CheckList(tk.Frame):
         self.selected_idx = None
 
 # ==============================================================================
+# 自訂組件：全深色模式變數表格 (VarTable)
+# ==============================================================================
+class VarTable(tk.Frame):
+    def __init__(self, parent, bg=UITheme.BG_DARK, select_bg=UITheme.ACCENT_BLUE, on_double_click=None):
+        super().__init__(parent, bg=bg)
+        self.bg = bg
+        self.select_bg = select_bg
+        self.on_double_click = on_double_click
+        self.selected_name = None
+        self.rows = {}
+
+        # 標題欄
+        self.hdr = tk.Frame(self, bg=UITheme.BG_PANEL, pady=3, padx=4)
+        self.hdr.pack(fill="x")
+        tk.Label(self.hdr, text="變數名稱", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 8, "bold"), width=13, anchor="w").pack(side="left", padx=2)
+        tk.Label(self.hdr, text="種類", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 8, "bold"), width=6, anchor="center").pack(side="left", padx=2)
+        tk.Label(self.hdr, text="當前數值", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 8, "bold"), anchor="w").pack(side="left", fill="x", expand=True, padx=2)
+
+        # 內容滾動區
+        f_box = tk.Frame(self, bg=bg)
+        f_box.pack(fill="both", expand=True)
+
+        self.canvas = tk.Canvas(f_box, bg=bg, bd=0, highlightthickness=0, height=65)
+        self.scrollbar = tk.Scrollbar(f_box, orient="vertical", command=self.canvas.yview)
+        self.body_frame = tk.Frame(self.canvas, bg=bg)
+
+        self.body_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.body_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
+        self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfig(self.canvas_window, width=e.width))
+
+        self.bind_mousewheel(self)
+        self.bind_mousewheel(self.canvas)
+        self.bind_mousewheel(self.body_frame)
+
+    def bind_mousewheel(self, widget):
+        widget.bind("<MouseWheel>", lambda e: self.canvas.yview_scroll(int(-1 * (e.delta / 120)), "units") if e.delta else None, add="+")
+        widget.bind("<Button-4>", lambda e: self.canvas.yview_scroll(-1, "units"), add="+")
+        widget.bind("<Button-5>", lambda e: self.canvas.yview_scroll(1, "units"), add="+")
+
+    def get_children(self):
+        return list(self.rows.keys())
+
+    def delete(self, item):
+        if item in self.rows:
+            self.rows[item]['frame'].destroy()
+            del self.rows[item]
+            if self.selected_name == item:
+                self.selected_name = None
+
+    def insert(self, parent, index, iid=None, values=()):
+        name, t_disp, v_str = values
+        rf = tk.Frame(self.body_frame, bg=self.bg, pady=2, padx=4)
+        rf.pack(fill="x", expand=True)
+
+        l1 = tk.Label(rf, text=name, bg=self.bg, fg=UITheme.TEXT_MAIN, font=("Segoe UI", 9), width=13, anchor="w")
+        l1.pack(side="left", padx=2)
+        l2 = tk.Label(rf, text=t_disp, bg=self.bg, fg=UITheme.CYAN_SUB, font=("Segoe UI", 8), width=6, anchor="center")
+        l2.pack(side="left", padx=2)
+        l3 = tk.Label(rf, text=v_str, bg=self.bg, fg="#e5e7eb", font=("Segoe UI", 9), anchor="w")
+        l3.pack(side="left", fill="x", expand=True, padx=2)
+
+        for w in (rf, l1, l2, l3):
+            w.bind("<Button-1>", lambda e, n=iid: self._select(n))
+            w.bind("<Double-Button-1>", lambda e, n=iid: self._on_dbl(n))
+            self.bind_mousewheel(w)
+
+        self.rows[iid] = {'frame': rf, 'l1': l1, 'l2': l2, 'l3': l3}
+
+    def _select(self, name):
+        if self.selected_name in self.rows:
+            old = self.rows[self.selected_name]
+            for w in (old['frame'], old['l1'], old['l2'], old['l3']):
+                w.config(bg=self.bg)
+        self.selected_name = name
+        if name in self.rows:
+            curr = self.rows[name]
+            for w in (curr['frame'], curr['l1'], curr['l2'], curr['l3']):
+                w.config(bg=self.select_bg)
+
+    def _on_dbl(self, name):
+        self._select(name)
+        if self.on_double_click:
+            self.on_double_click()
+
+    def selection(self):
+        return (self.selected_name,) if self.selected_name else ()
+
+# ==============================================================================
 # 原生 Tkinter GUI 主應用程式
 # ==============================================================================
 class App(tk.Tk):
@@ -496,8 +588,6 @@ class App(tk.Tk):
             elif os.path.exists(png_path):
                 img = tk.PhotoImage(file=png_path)
                 win.iconphoto(True, img)
-            elif os.path.exists(ico_path):
-                win.iconbitmap(ico_path)
         except Exception:
             pass
 
@@ -517,17 +607,17 @@ class App(tk.Tk):
     def set_status(self, msg):
         """執行緒安全地更新狀態列訊息"""
         if not self.is_closing:
-            self.after(0, lambda: self.lbl_status.config(text=f"狀態: {msg}"))
+            self.after(0, lambda: self.lbl_status.config(text=f"💡 狀態: {msg}"))
 
     def set_running_ui(self, is_running):
         """執行緒安全地更新啟動/停止按鈕 UI 與熱更新欄位"""
         def _u():
             if self.is_closing: return
             if is_running:
-                self.btn_toggle.config(text="停止執行", bg=UITheme.ACCENT_RED, activebackground=UITheme.ACCENT_RED_HOVER)
+                self.btn_toggle.config(text="🛑 停止運行 (F9)", bg=UITheme.ACCENT_RED, activebackground=UITheme.ACCENT_RED_HOVER)
                 self.f_hot.pack(fill="x", pady=(6, 2))
             else:
-                self.btn_toggle.config(text="開始循環執行", bg=UITheme.ACCENT_GREEN, activebackground=UITheme.ACCENT_GREEN_HOVER)
+                self.btn_toggle.config(text="🚀 開始循環執行 (F8)", bg=UITheme.ACCENT_GREEN, activebackground=UITheme.ACCENT_GREEN_HOVER)
                 self.f_hot.pack_forget()
                 self.close_active_dlg()
         self.after(0, _u)
@@ -613,13 +703,6 @@ class App(tk.Tk):
     def capture_pos_space(self, on_finish, on_cancel=None, btn="left"):
         """無干擾 Hover 取點模式：頂部浮動 HUD，按 Space 確定，按 ESC 取消"""
         global target_hwnd
-        val = self.var_window.get()
-        if val and val.startswith("["):
-            try:
-                target_hwnd = int(val.split("]")[0].replace("[", ""))
-            except Exception:
-                pass
-
         if not target_hwnd:
             messagebox.showwarning("提示", "尚未綁定目標視窗，請先在上方選擇遊戲視窗！", parent=self)
             if on_cancel: on_cancel()
@@ -645,7 +728,7 @@ class App(tk.Tk):
 
         lbl_hud = tk.Label(
             inner_frame,
-            text=f"【設定{btn_cn}點擊】將滑鼠指住目標 ➜ 按 [SPACE 空白鍵] 確定！(按 ESC 取消)",
+            text=f"【設定{btn_cn}點擊】將滑鼠指住目標 -> 按 [SPACE 空白鍵] 確定！(按 ESC 取消)",
             bg="#0f172a",
             fg=UITheme.CYAN_TITLE,
             font=("Segoe UI", 10, "bold")
@@ -672,7 +755,7 @@ class App(tk.Tk):
                 coord_desc = f"({pos.x}, {pos.y})"
                 rx, ry, rel = pos.x, pos.y, False
 
-            lbl_hud.config(text=f"【設定{btn_cn}點擊】滑鼠指住目標 ➜ 按 [SPACE 空白鍵] 確定！(坐標: {coord_desc} | ESC 取消)")
+            lbl_hud.config(text=f"【設定{btn_cn}點擊】滑鼠指住目標 -> 按 [SPACE 空白鍵] 確定！(坐標: {coord_desc} | ESC 取消)")
 
             if IS_WINDOWS:
                 if user32.GetAsyncKeyState(0x20) & 0x8000:
@@ -734,7 +817,7 @@ class App(tk.Tk):
                 if s.get("type") == "combo":
                     for a_idx, sub_act in enumerate(s.get("actions", [])):
                         self.active_step_line_map[(i, a_idx)] = line_idx
-                        sub_text = f"   ↳ {format_action_summary(sub_act, index=a_idx, with_checkbox_tag=True)}"
+                        sub_text = f"   -> {format_action_summary(sub_act, index=a_idx, with_checkbox_tag=True)}"
                         self.active_lb.insert(tk.END, sub_text)
                         line_idx += 1
 
@@ -819,7 +902,7 @@ class App(tk.Tk):
 
         tk.Label(
             f_top,
-            text="⚡ 當前掛機進度監控",
+            text="當前掛機進度監控",
             bg=UITheme.BG_PANEL,
             fg=UITheme.CYAN_TITLE,
             font=("Segoe UI", 10, "bold")
@@ -1122,7 +1205,7 @@ class App(tk.Tk):
         f_left.grid(row=0, column=0, padx=(10, 5), pady=10, sticky="nsew")
 
         # 1. 設定與視窗綁定 (精簡至 2 行，大幅節省縱向空間)
-        f_cfg = tk.LabelFrame(f_left, text=" 設定與視窗綁定 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 10, "bold"), padx=6, pady=4)
+        f_cfg = tk.LabelFrame(f_left, text=" ⚙️ 設定與視窗綁定 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 10, "bold"), padx=6, pady=4)
         f_cfg.pack(fill="x", pady=(0, 4))
 
         # 第 1 行: 設定檔管理 + 核心功能勾選 (背景掛機、相對坐標、視窗置頂)
@@ -1131,9 +1214,9 @@ class App(tk.Tk):
         tk.Label(r1, text="設定檔:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=("Segoe UI", 9)).pack(side="left")
         self.cbo_profile = ttk.Combobox(r1, textvariable=self.var_profile_name, width=14, state="readonly")
         self.cbo_profile.pack(side="left", padx=(3, 3))
-        tk.Button(r1, text="載入", width=4, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), command=self.load_config).pack(side="left", padx=1)
-        tk.Button(r1, text="儲存", width=4, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), command=self.save_config).pack(side="left", padx=1)
-        tk.Button(r1, text="新建", width=4, bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), command=self.create_new_profile).pack(side="left", padx=(1, 8))
+        tk.Button(r1, text="📂 載入", width=5, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), command=self.load_config).pack(side="left", padx=1)
+        tk.Button(r1, text="💾 儲存", width=5, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), command=self.save_config).pack(side="left", padx=1)
+        tk.Button(r1, text="➕ 新建", width=5, bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), command=self.create_new_profile).pack(side="left", padx=(1, 8))
 
         tk.Checkbutton(r1, text="背景掛機", variable=self.var_use_bg, bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, selectcolor=UITheme.BG_PANEL, activebackground=UITheme.BG_PANEL, font=("Segoe UI", 9)).pack(side="left", padx=2)
         tk.Checkbutton(r1, text="相對坐標", variable=self.var_use_rel, bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, selectcolor=UITheme.BG_PANEL, activebackground=UITheme.BG_PANEL, font=("Segoe UI", 9)).pack(side="left", padx=2)
@@ -1146,8 +1229,8 @@ class App(tk.Tk):
         self.cbo_window = ttk.Combobox(r2, textvariable=self.var_window, width=16, state="readonly")
         self.cbo_window.pack(side="left", padx=(3, 3), fill="x", expand=True)
         self.cbo_window.bind("<<ComboboxSelected>>", self.on_window_select)
-        tk.Button(r2, text="重新整理", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), padx=4, command=self.refresh_window_dropdown).pack(side="left", padx=1)
-        tk.Button(r2, text="定位視窗", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), padx=4, command=self.locate_target_window).pack(side="left", padx=(1, 8))
+        tk.Button(r2, text="🔄 重新整理", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), padx=4, command=self.refresh_window_dropdown).pack(side="left", padx=1)
+        tk.Button(r2, text="🎯 定位視窗", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), padx=4, command=self.locate_target_window).pack(side="left", padx=(1, 8))
 
         tk.Label(r2, text="偏差校正:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=("Segoe UI", 9)).pack(side="left")
         tk.Label(r2, text="X:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=("Segoe UI", 9)).pack(side="left", padx=(3, 1))
@@ -1158,7 +1241,7 @@ class App(tk.Tk):
         # 2. 常用變數庫 (表格一覽：名稱 / 種類 / 數值，雙擊可修改)
         f_vars = tk.LabelFrame(
             f_left,
-            text=" 常用變數庫 (雙擊任意行可修改) ",
+            text=" 🏷️ 常用變數庫 (雙擊任意行可修改) ",
             bg=UITheme.BG_PANEL,
             fg=UITheme.CYAN_TITLE,
             font=("Segoe UI", 9, "bold"),
@@ -1167,63 +1250,15 @@ class App(tk.Tk):
         )
         f_vars.pack(fill="x", pady=(0, 4))
 
-        f_vars_tree = tk.Frame(f_vars, bg=UITheme.BG_DARK)
-        f_vars_tree.pack(fill="x", pady=(0, 2))
-
-        try:
-            self.style = ttk.Style()
-            self.style.configure(
-                "Vars.Treeview",
-                background=UITheme.BG_DARK,
-                foreground=UITheme.TEXT_MAIN,
-                fieldbackground=UITheme.BG_DARK,
-                font=("Segoe UI", 9),
-                rowheight=20
-            )
-            self.style.configure(
-                "Vars.Treeview.Heading",
-                background=UITheme.BG_PANEL,
-                foreground=UITheme.CYAN_TITLE,
-                font=("Segoe UI", 8, "bold")
-            )
-            self.style.map(
-                "Vars.Treeview",
-                background=[("selected", UITheme.ACCENT_BLUE)],
-                foreground=[("selected", "#ffffff")]
-            )
-        except Exception:
-            pass
-
-        self.tree_vars = ttk.Treeview(
-            f_vars_tree,
-            columns=("name", "type", "value"),
-            show="headings",
-            height=3,
-            selectmode="browse",
-            style="Vars.Treeview"
-        )
-        self.tree_vars.heading("name", text="變數名稱")
-        self.tree_vars.heading("type", text="種類")
-        self.tree_vars.heading("value", text="當前數值")
-
-        self.tree_vars.column("name", width=120, minwidth=80, anchor="w")
-        self.tree_vars.column("type", width=70, minwidth=60, anchor="center")
-        self.tree_vars.column("value", width=170, minwidth=110, anchor="w")
-
-        sc_vars = tk.Scrollbar(f_vars_tree, orient="vertical", command=self.tree_vars.yview)
-        self.tree_vars.configure(yscrollcommand=sc_vars.set)
-
-        self.tree_vars.pack(side="left", fill="x", expand=True)
-        sc_vars.pack(side="right", fill="y")
-
-        self.tree_vars.bind("<Double-1>", lambda e: self.edit_selected_variable())
+        self.tree_vars = VarTable(f_vars, on_double_click=self.edit_selected_variable)
+        self.tree_vars.pack(fill="x", pady=(0, 2))
 
         r_v_btns = tk.Frame(f_vars, bg=UITheme.BG_PANEL)
         r_v_btns.pack(fill="x", pady=(1, 0))
 
         tk.Button(
             r_v_btns,
-            text="新增變數",
+            text="➕ 新增變數",
             bg=UITheme.ACCENT_GREEN,
             fg="#fff",
             activebackground=UITheme.ACCENT_GREEN_HOVER,
@@ -1234,7 +1269,7 @@ class App(tk.Tk):
 
         tk.Button(
             r_v_btns,
-            text="修改變數",
+            text="✏️ 修改變數",
             bg=UITheme.ACCENT_BLUE,
             fg="#fff",
             activebackground=UITheme.ACCENT_BLUE_HOVER,
@@ -1245,7 +1280,7 @@ class App(tk.Tk):
 
         tk.Button(
             r_v_btns,
-            text="刪除變數",
+            text="🗑️ 刪除變數",
             bg=UITheme.ACCENT_RED,
             fg="#fff",
             activebackground=UITheme.ACCENT_RED_HOVER,
@@ -1255,7 +1290,7 @@ class App(tk.Tk):
         ).pack(side="left", padx=(2, 0), fill="x", expand=True)
 
         # 3. 技能組合區塊
-        f_combo = tk.LabelFrame(f_left, text=" 技能組合庫 (右側真實 Checkbox: 啟用/停用 | 雙擊: 加入掛機流程) ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 10, "bold"), padx=6, pady=6)
+        f_combo = tk.LabelFrame(f_left, text=" 📦 技能組合庫 (右側真實 Checkbox: 啟用/停用 | 雙擊: 加入掛機流程) ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 10, "bold"), padx=6, pady=6)
         f_combo.pack(fill="both", expand=True)
 
         f_combo_split = tk.Frame(f_combo, bg=UITheme.BG_PANEL)
@@ -1268,14 +1303,14 @@ class App(tk.Tk):
         f_cl = tk.Frame(f_combo_split, bg=UITheme.BG_PANEL, padx=4, pady=2)
         f_cl.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
 
-        tk.Label(f_cl, text="【組合清單 (雙擊加入)】", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=("Segoe UI", 9, "bold")).pack(anchor="w")
+        tk.Label(f_cl, text="【📋 組合清單 (雙擊加入)】", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=("Segoe UI", 9, "bold")).pack(anchor="w")
 
         cr_name = tk.Frame(f_cl, bg=UITheme.BG_PANEL)
         cr_name.pack(fill="x", pady=2)
         tk.Entry(cr_name, textvariable=self.var_combo_name, width=10, bg=UITheme.BG_INPUT, fg="#fff").pack(side="left", fill="x", expand=True, padx=(0, 2))
-        tk.Button(cr_name, text="新增", width=4, bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, command=self.add_new_combo).pack(side="left", padx=1)
-        tk.Button(cr_name, text="改名", width=4, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, command=self.rename_selected_combo).pack(side="left", padx=1)
-        tk.Button(cr_name, text="複製", width=4, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, command=self.duplicate_selected_combo).pack(side="left", padx=1)
+        tk.Button(cr_name, text="➕ 新增", width=5, bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, command=self.add_new_combo).pack(side="left", padx=1)
+        tk.Button(cr_name, text="✏️ 改名", width=5, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, command=self.rename_selected_combo).pack(side="left", padx=1)
+        tk.Button(cr_name, text="📋 複製", width=5, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, command=self.duplicate_selected_combo).pack(side="left", padx=1)
 
         f_cl_box = tk.Frame(f_cl, bg=UITheme.BG_DARK)
         f_cl_box.pack(fill="both", expand=True, pady=4)
@@ -1289,8 +1324,8 @@ class App(tk.Tk):
 
         cr_act = tk.Frame(f_cl, bg=UITheme.BG_PANEL)
         cr_act.pack(fill="x", pady=(2, 0))
-        tk.Button(cr_act, text="加入掛機流程 ->", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, font=("Segoe UI", 9, "bold"), command=self.add_combo_to_main_steps).pack(side="left", fill="x", expand=True, padx=(0, 2))
-        tk.Button(cr_act, text="刪除組合", width=8, bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, command=self.delete_selected_combo).pack(side="right")
+        tk.Button(cr_act, text="📥 加入掛機流程 ➔", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, font=("Segoe UI", 9, "bold"), command=self.add_combo_to_main_steps).pack(side="left", fill="x", expand=True, padx=(0, 2))
+        tk.Button(cr_act, text="🗑️ 刪除組合", width=9, bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, command=self.delete_selected_combo).pack(side="right")
 
         # 2-B. 組合動作 (視覺層次優化：卡片式分組 + 雙層寬鬆工具列)
         f_cr = tk.Frame(f_combo_split, bg=UITheme.BG_PANEL, padx=6, pady=3, highlightbackground=UITheme.BORDER, highlightthickness=1)
@@ -1298,26 +1333,26 @@ class App(tk.Tk):
 
         f_cr_top = tk.Frame(f_cr, bg=UITheme.BG_PANEL)
         f_cr_top.pack(fill="x", pady=(0, 4))
-        self.lbl_combo_editing = tk.Label(f_cr_top, text="【組合動作: 未選取】", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_SUB, font=("Segoe UI", 9, "bold"))
+        self.lbl_combo_editing = tk.Label(f_cr_top, text="【📝 組合動作: 未選取】", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_SUB, font=("Segoe UI", 9, "bold"))
         self.lbl_combo_editing.pack(side="left")
-        tk.Button(f_cr_top, text="▶ 試跑組合", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, font=("Segoe UI", 8, "bold"), relief="flat", padx=6, command=self.test_run_current_combo).pack(side="right")
+        tk.Button(f_cr_top, text="▶️ 試跑組合", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, font=("Segoe UI", 8, "bold"), relief="flat", padx=6, command=self.test_run_current_combo).pack(side="right")
 
         # 動作建立面板 (卡片分組)
-        f_action_card = tk.LabelFrame(f_cr, text=" 加入動作到所選組合 ", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=("Segoe UI", 8, "bold"), padx=5, pady=3)
+        f_action_card = tk.LabelFrame(f_cr, text=" ⚡ 加入動作到所選組合 ", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=("Segoe UI", 8, "bold"), padx=5, pady=3)
         f_action_card.pack(fill="x", pady=(0, 4))
 
         # 1. 點擊動作行 (突出主要瞄準點擊)
         r_click = tk.Frame(f_action_card, bg=UITheme.BG_PANEL)
         r_click.pack(fill="x", pady=2)
         ttk.Combobox(r_click, textvariable=self.var_combo_btn, values=["左鍵", "右鍵"], width=4, state="readonly").pack(side="left", padx=(0, 3))
-        self.btn_combo_add_click = tk.Button(r_click, text="瞄準點擊", bg=UITheme.ACCENT_GREEN, fg="#fff", font=("Segoe UI", 9, "bold"), activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", padx=6, command=self.combo_add_click_action)
+        self.btn_combo_add_click = tk.Button(r_click, text="🎯 瞄準點擊", bg=UITheme.ACCENT_GREEN, fg="#fff", font=("Segoe UI", 9, "bold"), activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", padx=6, command=self.combo_add_click_action)
         self.btn_combo_add_click.pack(side="left", padx=1, fill="x", expand=True)
 
         tk.Label(r_click, text="X:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=("Segoe UI", 8)).pack(side="left", padx=(3, 1))
         tk.Entry(r_click, textvariable=self.var_combo_manual_x, width=4, bg=UITheme.BG_INPUT, fg="#fff", relief="flat").pack(side="left", padx=1)
         tk.Label(r_click, text="Y:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=("Segoe UI", 8)).pack(side="left", padx=(1, 1))
         tk.Entry(r_click, textvariable=self.var_combo_manual_y, width=4, bg=UITheme.BG_INPUT, fg="#fff", relief="flat").pack(side="left", padx=1)
-        tk.Button(r_click, text="+手動", width=4, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", command=self.combo_add_manual_click).pack(side="left", padx=(2, 0))
+        tk.Button(r_click, text="➕手動", width=5, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", command=self.combo_add_manual_click).pack(side="left", padx=(2, 0))
 
         # 2. 按鍵與等待行 (等寬對齊)
         r_fast = tk.Frame(f_action_card, bg=UITheme.BG_PANEL)
@@ -1326,12 +1361,12 @@ class App(tk.Tk):
         f_k = tk.Frame(r_fast, bg=UITheme.BG_PANEL)
         f_k.pack(side="left", fill="x", expand=True, padx=(0, 2))
         tk.Entry(f_k, textvariable=self.var_combo_act_key, width=5, bg=UITheme.BG_INPUT, fg="#fff", relief="flat").pack(side="left", padx=(0, 2))
-        tk.Button(f_k, text="+加按鍵", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", padx=4, command=self.combo_add_key_action).pack(side="left", fill="x", expand=True)
+        tk.Button(f_k, text="⌨️ 加按鍵", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", padx=4, command=self.combo_add_key_action).pack(side="left", fill="x", expand=True)
 
         f_w = tk.Frame(r_fast, bg=UITheme.BG_PANEL)
         f_w.pack(side="left", fill="x", expand=True, padx=(2, 0))
         tk.Entry(f_w, textvariable=self.var_combo_act_wait, width=4, bg=UITheme.BG_INPUT, fg="#fff", relief="flat").pack(side="left", padx=(0, 2))
-        tk.Button(f_w, text="+加停頓(s)", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", padx=4, command=self.combo_add_wait_action).pack(side="left", fill="x", expand=True)
+        tk.Button(f_w, text="⏱️ 加停頓(s)", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", padx=4, command=self.combo_add_wait_action).pack(side="left", fill="x", expand=True)
 
         # 3. 呼叫組合行
         r_call = tk.Frame(f_action_card, bg=UITheme.BG_PANEL)
@@ -1339,9 +1374,9 @@ class App(tk.Tk):
         tk.Label(r_call, text="呼叫組合:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=("Segoe UI", 8)).pack(side="left", padx=(0, 2))
         self.cbo_call_combo = ttk.Combobox(r_call, textvariable=self.var_combo_to_call, width=12, state="readonly")
         self.cbo_call_combo.pack(side="left", padx=2, fill="x", expand=True)
-        tk.Button(r_call, text="+呼叫", width=6, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), command=self.combo_add_call_action).pack(side="left", padx=(2, 0))
+        tk.Button(r_call, text="🔄 +呼叫", width=7, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), command=self.combo_add_call_action).pack(side="left", padx=(2, 0))
 
-        # 4. 引用變數行 (無 Emoji)
+        # 4. 引用變數行
         r_ref = tk.Frame(f_action_card, bg=UITheme.BG_PANEL)
         r_ref.pack(fill="x", pady=2)
         tk.Label(r_ref, text="引用變數:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=("Segoe UI", 8)).pack(side="left", padx=(0, 2))
@@ -1349,8 +1384,8 @@ class App(tk.Tk):
         self.cbo_combo_add_var.pack(side="left", padx=2, fill="x", expand=True)
         tk.Button(
             r_ref,
-            text="+引用加入組合",
-            width=12,
+            text="🏷️ +引用變數",
+            width=11,
             bg=UITheme.ACCENT_BLUE,
             fg="#fff",
             activebackground=UITheme.ACCENT_BLUE_HOVER,
@@ -1375,16 +1410,16 @@ class App(tk.Tk):
         # 底部雙層管理工具列 (避免按鈕擠在同一行造成文字裁切)
         cr_act_ctrl1 = tk.Frame(f_cr, bg=UITheme.BG_PANEL)
         cr_act_ctrl1.pack(fill="x", pady=(2, 1))
-        tk.Button(cr_act_ctrl1, text="上移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", command=lambda: self.move_combo_action(-1)).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl1, text="下移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", command=lambda: self.move_combo_action(1)).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl1, text="修改動作", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", command=self.edit_selected_combo_action).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl1, text="▶ 試跑動作", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), command=self.test_run_selected_combo_action).pack(side="left", padx=1, fill="x", expand=True)
+        tk.Button(cr_act_ctrl1, text="⬆️ 上移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", command=lambda: self.move_combo_action(-1)).pack(side="left", padx=1, fill="x", expand=True)
+        tk.Button(cr_act_ctrl1, text="⬇️ 下移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", command=lambda: self.move_combo_action(1)).pack(side="left", padx=1, fill="x", expand=True)
+        tk.Button(cr_act_ctrl1, text="✏️ 修改", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", command=self.edit_selected_combo_action).pack(side="left", padx=1, fill="x", expand=True)
+        tk.Button(cr_act_ctrl1, text="▶️ 試跑", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=("Segoe UI", 8, "bold"), command=self.test_run_selected_combo_action).pack(side="left", padx=1, fill="x", expand=True)
 
         cr_act_ctrl2 = tk.Frame(f_cr, bg=UITheme.BG_PANEL)
         cr_act_ctrl2.pack(fill="x", pady=(1, 1))
-        tk.Button(cr_act_ctrl2, text="複製動作", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", command=self.duplicate_combo_action).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl2, text="刪除動作", bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", command=self.delete_combo_action).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl2, text="清空動作", bg=UITheme.ACCENT_RED_DARK, fg="#fff", activebackground=UITheme.ACCENT_RED_DARK_HOVER, relief="flat", command=self.clear_combo_actions).pack(side="left", padx=1, fill="x", expand=True)
+        tk.Button(cr_act_ctrl2, text="📋 複製", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", command=self.duplicate_combo_action).pack(side="left", padx=1, fill="x", expand=True)
+        tk.Button(cr_act_ctrl2, text="🗑️ 刪除", bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", command=self.delete_combo_action).pack(side="left", padx=1, fill="x", expand=True)
+        tk.Button(cr_act_ctrl2, text="🧹 清空", bg=UITheme.ACCENT_RED_DARK, fg="#fff", activebackground=UITheme.ACCENT_RED_DARK_HOVER, relief="flat", command=self.clear_combo_actions).pack(side="left", padx=1, fill="x", expand=True)
 
     # ======================= 右欄佈局 =======================
     def build_right_panel(self):
@@ -1392,29 +1427,29 @@ class App(tk.Tk):
         f_right.grid(row=0, column=1, padx=(5, 10), pady=10, sticky="nsew")
 
         # 1. 單一動作新增
-        f_step = tk.LabelFrame(f_right, text=" 單一動作（單次點擊 / 單鍵） ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 10, "bold"), padx=6, pady=6)
+        f_step = tk.LabelFrame(f_right, text=" ⚡ 單一動作（單次點擊 / 單鍵） ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 10, "bold"), padx=6, pady=6)
         f_step.pack(fill="x", pady=(0, 6))
 
         sr_click = tk.Frame(f_step, bg=UITheme.BG_PANEL)
         sr_click.pack(fill="x", pady=2)
         ttk.Combobox(sr_click, textvariable=self.var_step_btn, values=["左鍵", "右鍵"], width=4, state="readonly").pack(side="left", padx=(0, 2))
-        self.btn_step_click = tk.Button(sr_click, text="瞄準目標新增點擊", width=16, bg=UITheme.ACCENT_GREEN, fg="#fff", font=("Segoe UI", 9, "bold"), activebackground=UITheme.ACCENT_GREEN_HOVER, command=self.add_main_click_step)
+        self.btn_step_click = tk.Button(sr_click, text="🎯 瞄準目標新增點擊", width=18, bg=UITheme.ACCENT_GREEN, fg="#fff", font=("Segoe UI", 9, "bold"), activebackground=UITheme.ACCENT_GREEN_HOVER, command=self.add_main_click_step)
         self.btn_step_click.pack(side="left", padx=2)
         tk.Label(sr_click, text="手動X:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=("Segoe UI", 8)).pack(side="left", padx=(4, 1))
         tk.Entry(sr_click, textvariable=self.var_step_manual_x, width=4, bg=UITheme.BG_INPUT, fg="#fff").pack(side="left", padx=1)
         tk.Label(sr_click, text="Y:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=("Segoe UI", 8)).pack(side="left", padx=1)
         tk.Entry(sr_click, textvariable=self.var_step_manual_y, width=4, bg=UITheme.BG_INPUT, fg="#fff").pack(side="left", padx=1)
-        tk.Button(sr_click, text="+手動", width=5, bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, command=self.add_main_manual_click).pack(side="left", padx=2)
+        tk.Button(sr_click, text="➕手動", width=6, bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, command=self.add_main_manual_click).pack(side="left", padx=2)
 
         sr = tk.Frame(f_step, bg=UITheme.BG_PANEL)
         sr.pack(fill="x", pady=2)
         tk.Label(sr, text="按鍵:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL).pack(side="left")
         tk.Entry(sr, textvariable=self.var_step_key, width=5, bg=UITheme.BG_INPUT, fg="#fff").pack(side="left", padx=3)
-        tk.Button(sr, text="加按鍵", width=7, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, command=self.add_main_key_step).pack(side="left", padx=2)
+        tk.Button(sr, text="⌨️ 加按鍵", width=8, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, command=self.add_main_key_step).pack(side="left", padx=2)
 
         tk.Label(sr, text="停頓:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL).pack(side="left", padx=(8, 0))
         tk.Entry(sr, textvariable=self.var_step_wait, width=4, bg=UITheme.BG_INPUT, fg="#fff").pack(side="left", padx=3)
-        tk.Button(sr, text="加停頓", width=7, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, command=self.add_main_wait_step).pack(side="left", padx=2)
+        tk.Button(sr, text="⏱️ 加停頓", width=8, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, command=self.add_main_wait_step).pack(side="left", padx=2)
 
         # 2. 自動循環清單（掛機流程）
         f_seq = tk.LabelFrame(f_right, text=" 自動循環清單（掛機流程） ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 10, "bold"), padx=6, pady=6)
@@ -1434,19 +1469,20 @@ class App(tk.Tk):
 
         sr2 = tk.Frame(f_seq, bg=UITheme.BG_PANEL)
         sr2.pack(fill="x", pady=(2, 0))
-        tk.Button(sr2, text="上移", width=5, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, command=lambda: self.move_main_step(-1)).pack(side="left", padx=1)
-        tk.Button(sr2, text="下移", width=5, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, command=lambda: self.move_main_step(1)).pack(side="left", padx=1)
-        tk.Button(sr2, text="▶ 試跑單步", width=8, bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, command=self.test_run_selected_main_step).pack(side="left", padx=1)
-        tk.Button(sr2, text="複製", width=4, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, command=self.duplicate_main_step).pack(side="left", padx=1)
-        tk.Button(sr2, text="修改動作", width=8, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, command=self.edit_selected_main_step).pack(side="left", padx=1)
-        tk.Button(sr2, text="刪除", width=5, bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, command=self.delete_main_step).pack(side="left", padx=1)
-        tk.Button(sr2, text="清空", width=5, bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, command=self.clear_main_steps).pack(side="right", padx=1)
+        tk.Button(sr2, text="⬆️ 上移", width=6, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, command=lambda: self.move_main_step(-1)).pack(side="left", padx=1)
+        tk.Button(sr2, text="⬇️ 下移", width=6, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, command=lambda: self.move_main_step(1)).pack(side="left", padx=1)
+        tk.Button(sr2, text="▶️ 試跑", width=6, bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, command=self.test_run_selected_main_step).pack(side="left", padx=1)
+        tk.Button(sr2, text="📋 複製", width=6, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, command=self.duplicate_main_step).pack(side="left", padx=1)
+        tk.Button(sr2, text="✏️ 修改", width=6, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, command=self.edit_selected_main_step).pack(side="left", padx=1)
+        tk.Button(sr2, text="📦 展開組合", width=9, bg=UITheme.ACCENT_CYAN, fg="#fff", activebackground=UITheme.ACCENT_CYAN_HOVER, command=self.unpack_main_step_combo).pack(side="left", padx=1)
+        tk.Button(sr2, text="🗑️ 刪除", width=6, bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, command=self.delete_main_step).pack(side="left", padx=1)
+        tk.Button(sr2, text="🧹 清空", width=6, bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, command=self.clear_main_steps).pack(side="right", padx=1)
 
         # 檢視彈窗啟動列
         self.f_hot = tk.Frame(f_right, bg=UITheme.BG_PANEL)
         self.btn_view_active = tk.Button(
             self.f_hot,
-            text="檢視當前掛機進度監控",
+            text="📊 檢視當前掛機進度監控",
             bg=UITheme.ACCENT_BLUE,
             fg="#ffffff",
             font=("Segoe UI", 9, "bold"),
@@ -1459,12 +1495,12 @@ class App(tk.Tk):
         bot = tk.Frame(f_right, bg=UITheme.BG_PANEL)
         bot.pack(fill="x", pady=(2, 0))
 
-        self.lbl_mouse_hud = tk.Label(bot, text="游標實時坐標: (0, 0)", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 9, "bold"))
+        self.lbl_mouse_hud = tk.Label(bot, text="🖱️ 游標實時坐標: (0, 0)", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 9, "bold"))
         self.lbl_mouse_hud.pack(fill="x")
 
-        self.lbl_status = tk.Label(bot, text="狀態: 已就緒", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MAIN, font=("Segoe UI", 9))
+        self.lbl_status = tk.Label(bot, text="💡 狀態: 已就緒", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MAIN, font=("Segoe UI", 9))
         self.lbl_status.pack(fill="x", pady=(0, 3))
-        self.btn_toggle = tk.Button(bot, text="開始循環執行", height=2, bg=UITheme.ACCENT_GREEN, fg="#ffffff", font=("Segoe UI", 11, "bold"), activebackground=UITheme.ACCENT_GREEN_HOVER, command=self.toggle_run)
+        self.btn_toggle = tk.Button(bot, text="🚀 開始循環執行 (F8)", height=2, bg=UITheme.ACCENT_GREEN, fg="#ffffff", font=("Segoe UI", 11, "bold"), activebackground=UITheme.ACCENT_GREEN_HOVER, command=self.toggle_run)
         self.btn_toggle.pack(fill="x")
 
     def on_combo_double_click_add(self, event):
@@ -1547,18 +1583,6 @@ class App(tk.Tk):
             with open(fn, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
-            for c in data.get("combos", []):
-                for act in c.get("actions", []):
-                    if act.get("type") == "click" and "btn" not in act:
-                        act["btn"] = "left"
-            for s in data.get("steps", []):
-                if s.get("type") == "click" and "btn" not in s:
-                    s["btn"] = "left"
-                if s.get("type") == "combo":
-                    for act in s.get("actions", []):
-                        if act.get("type") == "click" and "btn" not in act:
-                            act["btn"] = "left"
-
             variables.clear()
             variables.update(data.get("variables", {}))
             self.refresh_variables_table()
@@ -1627,7 +1651,7 @@ class App(tk.Tk):
         for item in self.tree_vars.get_children():
             self.tree_vars.delete(item)
 
-        type_display = {"coord": "坐標", "key": "按鍵", "wait": "停頓"}
+        type_display = {"coord": "📍 坐標", "key": "⌨️ 按鍵", "wait": "⏱️ 停頓"}
 
         for name, data in variables.items():
             t_key = data.get("type", "coord")
@@ -1666,8 +1690,8 @@ class App(tk.Tk):
         orig_type = orig_data.get("type", "coord")
         orig_val = orig_data.get("value", {})
 
-        type_display_map = {"coord": "坐標", "key": "按鍵", "wait": "停頓"}
-        type_key_map = {"坐標": "coord", "按鍵": "key", "停頓": "wait"}
+        type_display_map = {"coord": "📍 坐標", "key": "⌨️ 按鍵", "wait": "⏱️ 停頓"}
+        type_key_map = {"📍 坐標": "coord", "⌨️ 按鍵": "key", "⏱️ 停頓": "wait", "坐標": "coord", "按鍵": "key", "停頓": "wait"}
 
         dialog = tk.Toplevel(self)
         dialog.title(title)
@@ -1701,9 +1725,9 @@ class App(tk.Tk):
         r_type = tk.Frame(f_main, bg=UITheme.BG_PANEL)
         r_type.pack(fill="x", pady=(0, 8))
         tk.Label(r_type, text="變數種類:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=("Segoe UI", 9, "bold"), width=8, anchor="e").pack(side="left", padx=(0, 8))
-        curr_type_disp = type_display_map.get(orig_type, "坐標")
+        curr_type_disp = type_display_map.get(orig_type, "📍 坐標")
         var_type = tk.StringVar(value=curr_type_disp)
-        cbo_type = ttk.Combobox(r_type, textvariable=var_type, values=["坐標", "按鍵", "停頓"], state="readonly" if not is_edit else "disabled", font=("Segoe UI", 9))
+        cbo_type = ttk.Combobox(r_type, textvariable=var_type, values=["📍 坐標", "⌨️ 按鍵", "⏱️ 停頓"], state="readonly" if not is_edit else "disabled", font=("Segoe UI", 9))
         cbo_type.pack(side="left", fill="x", expand=True)
 
         # 數值動態容器
@@ -1746,8 +1770,9 @@ class App(tk.Tk):
             for child in f_val_box.winfo_children():
                 child.destroy()
 
-            selected_type = var_type.get()
-            if selected_type == "坐標":
+            selected_type_disp = var_type.get()
+            selected_type = type_key_map.get(selected_type_disp, "coord")
+            if selected_type == "coord":
                 r_coords = tk.Frame(f_val_box, bg=UITheme.BG_PANEL)
                 r_coords.pack(fill="x", pady=(2, 6))
 
@@ -1761,7 +1786,7 @@ class App(tk.Tk):
 
                 btn_rec = tk.Button(
                     f_val_box,
-                    text="瞄準取點 (Space)",
+                    text="🎯 瞄準取點 (Space)",
                     bg=UITheme.ACCENT_GREEN,
                     fg="#fff",
                     activebackground=UITheme.ACCENT_GREEN_HOVER,
@@ -1771,7 +1796,7 @@ class App(tk.Tk):
                 )
                 btn_rec.pack(fill="x", pady=(2, 2))
 
-            elif selected_type == "按鍵":
+            elif selected_type == "key":
                 r_k = tk.Frame(f_val_box, bg=UITheme.BG_PANEL)
                 r_k.pack(fill="x", pady=6)
                 tk.Label(r_k, text="按鍵名稱:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=("Segoe UI", 9)).pack(side="left", padx=(0, 8))
@@ -1779,7 +1804,7 @@ class App(tk.Tk):
                 e_k.pack(side="left", fill="x", expand=True)
                 tk.Label(f_val_box, text="(例: f1, 1, z, space, enter)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=("Segoe UI", 8)).pack(anchor="w")
 
-            elif selected_type == "停頓":
+            elif selected_type == "wait":
                 r_w = tk.Frame(f_val_box, bg=UITheme.BG_PANEL)
                 r_w.pack(fill="x", pady=6)
                 tk.Label(r_w, text="停頓時間 (秒):", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=("Segoe UI", 9)).pack(side="left", padx=(0, 8))
@@ -1848,7 +1873,7 @@ class App(tk.Tk):
 
         tk.Button(
             r_btns,
-            text="確定儲存",
+            text="💾 確定儲存",
             bg=UITheme.ACCENT_BLUE,
             fg="#fff",
             activebackground=UITheme.ACCENT_BLUE_HOVER,
@@ -1861,7 +1886,7 @@ class App(tk.Tk):
 
         tk.Button(
             r_btns,
-            text="取消",
+            text="❌ 取消",
             bg=UITheme.BTN_GRAY,
             fg="#fff",
             activebackground=UITheme.BTN_GRAY_HOVER,
@@ -1997,13 +2022,13 @@ class App(tk.Tk):
     def on_combo_select(self, event=None):
         idx = self.get_selected_combo_idx()
         if idx is None:
-            self.lbl_combo_editing.config(text="【組合動作: 未選取】")
+            self.lbl_combo_editing.config(text="【📝 組合動作: 未選取】")
             self.combo_act_listbox.delete(0, tk.END)
             self.refresh_call_combo_dropdown()
             return
         c = combos[idx]
         self.var_combo_name.set(c["name"])
-        self.lbl_combo_editing.config(text=f"【編輯: {c['name']}】")
+        self.lbl_combo_editing.config(text=f"【📝 編輯: {c['name']}】")
         self.refresh_combo_actions_list()
         self.refresh_call_combo_dropdown()
 
@@ -2129,27 +2154,73 @@ class App(tk.Tk):
 
         self.run_in_test_thread(f"組合 [{c['name']}]", _run)
 
+    # ======================= 清單動作輔助函數 =======================
+    def _move_list_item(self, lst, idx, delta, refresh_cb, item_name="項目"):
+        if idx is None:
+            return self.set_status(f"請先在清單點選要移動的{item_name}！")
+        target = idx + delta
+        if 0 <= target < len(lst):
+            lst[idx], lst[target] = lst[target], lst[idx]
+            refresh_cb(target)
+            direction = "上移" if delta < 0 else "下移"
+            self.set_status(f"已將{item_name} #{idx+1} {direction}至 #{target+1}")
+        else:
+            self.set_status("已在清單最頂或最底，無法再移動！")
+
+    def _duplicate_list_item(self, lst, idx, refresh_cb, item_name="項目"):
+        if idx is None: return self.set_status(f"請先在清單點選要複製的{item_name}！")
+        lst.insert(idx + 1, copy.deepcopy(lst[idx]))
+        refresh_cb(idx + 1)
+        self.set_status(f"已複製{item_name} #{idx+1}")
+
+    def _delete_list_item(self, lst, idx, refresh_cb, item_name="項目"):
+        if idx is None or not (0 <= idx < len(lst)):
+            return self.set_status(f"請先在清單點選要刪除的{item_name}！")
+        del lst[idx]
+        new_sel = min(idx, len(lst) - 1) if lst else None
+        refresh_cb(new_sel)
+        self.set_status(f"已刪除{item_name}")
+
+    def _clear_list_items(self, lst, confirm_msg, refresh_cb, status_msg):
+        if not lst: return self.set_status(f"{status_msg}本來就是空的")
+        if messagebox.askyesno("清空確認", confirm_msg, parent=self):
+            lst.clear()
+            refresh_cb(None)
+            self.set_status(f"已清空{status_msg}")
+
+    def _insert_action_to_target(self, action_dict, is_combo=False, success_msg=""):
+        if is_combo:
+            idx = self.get_selected_combo_idx()
+            if idx is None: return self.set_status("請先選取一個組合！")
+            actions = combos[idx].setdefault("actions", [])
+            sel = self.get_selected_action_idx()
+            ins = sel + 1 if sel is not None else len(actions)
+            actions.insert(ins, action_dict)
+            self.refresh_combo_actions_list(select_idx=ins)
+            self.refresh_combo_list(select_idx=idx)
+            self.sync_combo_actions_to_main_steps(combos[idx]["name"], actions)
+            if success_msg: self.set_status(success_msg)
+            return ins
+        else:
+            ins = self.get_main_insert_index()
+            steps.insert(ins, action_dict)
+            self.update_step_list(ins)
+            if success_msg: self.set_status(success_msg)
+            return ins
+
     def combo_add_click_action(self):
         idx = self.get_selected_combo_idx()
         if idx is None: return self.set_status("請先選取一個組合！")
         target_btn = "right" if self.var_combo_btn.get() == "右鍵" else "left"
+        btn_cn = "右鍵" if target_btn == "right" else "左鍵"
 
         def cb(x, y, rel):
-            actions = combos[idx].setdefault("actions", [])
-            ins = self.get_selected_action_idx()
-            ins = ins + 1 if ins is not None else len(actions)
-            actions.insert(ins, {"type": "click", "btn": target_btn, "x": x, "y": y, "rel": rel, "enabled": True})
-            self.refresh_combo_actions_list(select_idx=ins)
-            self.refresh_combo_list(select_idx=idx)
-            self.sync_combo_actions_to_main_steps(combos[idx]["name"], actions)
-            btn_cn = "右鍵" if target_btn == "right" else "左鍵"
-            self.set_status(f"已在組合加入{btn_cn}點擊 ({x},{y})")
+            self._insert_action_to_target({"type": "click", "btn": target_btn, "x": x, "y": y, "rel": rel, "enabled": True}, is_combo=True, success_msg=f"已在組合加入{btn_cn}點擊 ({x},{y})")
 
         self.capture_pos_space(cb, btn=target_btn)
 
     def combo_add_manual_click(self):
-        idx = self.get_selected_combo_idx()
-        if idx is None: return self.set_status("請先選取一個組合！")
+        if self.get_selected_combo_idx() is None: return self.set_status("請先選取一個組合！")
         try:
             x = int(self.var_combo_manual_x.get().strip())
             y = int(self.var_combo_manual_y.get().strip())
@@ -2157,16 +2228,8 @@ class App(tk.Tk):
             return self.set_status("X 和 Y 必須輸入整數！")
 
         target_btn = "right" if self.var_combo_btn.get() == "右鍵" else "left"
-        actions = combos[idx].setdefault("actions", [])
-        ins = self.get_selected_action_idx()
-        ins = ins + 1 if ins is not None else len(actions)
-        rel = self.var_use_rel.get()
-        actions.insert(ins, {"type": "click", "btn": target_btn, "x": x, "y": y, "rel": rel, "enabled": True})
-        self.refresh_combo_actions_list(select_idx=ins)
-        self.refresh_combo_list(select_idx=idx)
-        self.sync_combo_actions_to_main_steps(combos[idx]["name"], actions)
         btn_cn = "右鍵" if target_btn == "right" else "左鍵"
-        self.set_status(f"已手動在組合加入{btn_cn}點擊: ({x}, {y})")
+        self._insert_action_to_target({"type": "click", "btn": target_btn, "x": x, "y": y, "rel": self.var_use_rel.get(), "enabled": True}, is_combo=True, success_msg=f"已手動在組合加入{btn_cn}點擊: ({x}, {y})")
 
     def edit_selected_combo_action(self):
         c_idx = self.get_selected_combo_idx()
@@ -2183,34 +2246,18 @@ class App(tk.Tk):
             self.set_status(f"已成功更新組合動作 #{a_idx+1}")
 
     def combo_add_key_action(self):
-        idx = self.get_selected_combo_idx()
-        if idx is None: return self.set_status("請先選取一個組合！")
+        if self.get_selected_combo_idx() is None: return self.set_status("請先選取一個組合！")
         key = self.var_combo_act_key.get().strip().lower()
         if not key: return
-        actions = combos[idx].setdefault("actions", [])
-        ins = self.get_selected_action_idx()
-        ins = ins + 1 if ins is not None else len(actions)
-        actions.insert(ins, {"type": "key", "key": key, "enabled": True})
-        self.refresh_combo_actions_list(select_idx=ins)
-        self.refresh_combo_list(select_idx=idx)
-        self.sync_combo_actions_to_main_steps(combos[idx]["name"], actions)
-        self.set_status(f"已在組合加入按鍵 [{key.upper()}]")
+        self._insert_action_to_target({"type": "key", "key": key, "enabled": True}, is_combo=True, success_msg=f"已在組合加入按鍵 [{key.upper()}]")
 
     def combo_add_wait_action(self):
-        idx = self.get_selected_combo_idx()
-        if idx is None: return self.set_status("請先選取一個組合！")
+        if self.get_selected_combo_idx() is None: return self.set_status("請先選取一個組合！")
         try:
             sec = float(self.var_combo_act_wait.get())
             if sec <= 0: raise ValueError
         except ValueError: return self.set_status("停頓秒數必須大於0！")
-        actions = combos[idx].setdefault("actions", [])
-        ins = self.get_selected_action_idx()
-        ins = ins + 1 if ins is not None else len(actions)
-        actions.insert(ins, {"type": "wait", "sec": sec, "enabled": True})
-        self.refresh_combo_actions_list(select_idx=ins)
-        self.refresh_combo_list(select_idx=idx)
-        self.sync_combo_actions_to_main_steps(combos[idx]["name"], actions)
-        self.set_status(f"已在組合加入停頓 {sec} 秒")
+        self._insert_action_to_target({"type": "wait", "sec": sec, "enabled": True}, is_combo=True, success_msg=f"已在組合加入停頓 {sec} 秒")
 
     def combo_add_call_action(self):
         idx = self.get_selected_combo_idx()
@@ -2218,60 +2265,49 @@ class App(tk.Tk):
         target_name = self.var_combo_to_call.get().strip()
         if not target_name: return self.set_status("請先在下拉選單選擇要呼叫的組合！")
         if target_name == combos[idx]["name"]: return self.set_status("不能在組合內呼叫自己！")
-
-        actions = combos[idx].setdefault("actions", [])
-        ins = self.get_selected_action_idx()
-        ins = ins + 1 if ins is not None else len(actions)
-        actions.insert(ins, {"type": "call_combo", "target_name": target_name, "enabled": True})
-        self.refresh_combo_actions_list(select_idx=ins)
-        self.refresh_combo_list(select_idx=idx)
-        self.sync_combo_actions_to_main_steps(combos[idx]["name"], actions)
-        self.set_status(f"已在組合加入呼叫: [{target_name}]")
+        self._insert_action_to_target({"type": "call_combo", "target_name": target_name, "enabled": True}, is_combo=True, success_msg=f"已在組合加入呼叫: [{target_name}]")
 
     def move_combo_action(self, delta):
         c_idx = self.get_selected_combo_idx()
+        if c_idx is None: return self.set_status("請先在左邊清單選取一個組合！")
         a_idx = self.get_selected_action_idx()
-        if c_idx is None or a_idx is None: return
         actions = combos[c_idx]["actions"]
-        target = a_idx + delta
-        if 0 <= target < len(actions):
-            actions[a_idx], actions[target] = actions[target], actions[a_idx]
+        def _refresh(target):
             self.refresh_combo_actions_list(select_idx=target)
             self.sync_combo_actions_to_main_steps(combos[c_idx]["name"], actions)
+        self._move_list_item(actions, a_idx, delta, _refresh, item_name="組合動作")
 
     def duplicate_combo_action(self):
         c_idx = self.get_selected_combo_idx()
+        if c_idx is None: return self.set_status("請先在左邊清單選取一個組合！")
         a_idx = self.get_selected_action_idx()
-        if c_idx is None or a_idx is None: return
         actions = combos[c_idx]["actions"]
-        actions.insert(a_idx + 1, copy.deepcopy(actions[a_idx]))
-        self.refresh_combo_actions_list(select_idx=a_idx + 1)
-        self.refresh_combo_list(select_idx=c_idx)
-        self.sync_combo_actions_to_main_steps(combos[c_idx]["name"], actions)
-        self.set_status(f"已複製組合動作 #{a_idx+1}")
+        def _refresh(target):
+            self.refresh_combo_actions_list(select_idx=target)
+            self.refresh_combo_list(select_idx=c_idx)
+            self.sync_combo_actions_to_main_steps(combos[c_idx]["name"], actions)
+        self._duplicate_list_item(actions, a_idx, _refresh, item_name="組合動作")
 
     def delete_combo_action(self):
         c_idx = self.get_selected_combo_idx()
+        if c_idx is None: return self.set_status("請先在左邊清單選取一個組合！")
         a_idx = self.get_selected_action_idx()
-        if c_idx is None or a_idx is None: return
         actions = combos[c_idx]["actions"]
-        del actions[a_idx]
-        new_sel = min(a_idx, len(actions) - 1) if actions else None
-        self.refresh_combo_actions_list(select_idx=new_sel)
-        self.refresh_combo_list(select_idx=c_idx)
-        self.sync_combo_actions_to_main_steps(combos[c_idx]["name"], actions)
-        self.set_status("已刪除組合動作")
+        def _refresh(target):
+            self.refresh_combo_actions_list(select_idx=target)
+            self.refresh_combo_list(select_idx=c_idx)
+            self.sync_combo_actions_to_main_steps(combos[c_idx]["name"], actions)
+        self._delete_list_item(actions, a_idx, _refresh, item_name="組合動作")
 
     def clear_combo_actions(self):
         c_idx = self.get_selected_combo_idx()
         if c_idx is None: return
-        if not combos[c_idx].get("actions"): return
-        if messagebox.askyesno("清空確認", f"請問是否清空組合 [{combos[c_idx]['name']}] 的所有動作？", parent=self):
-            combos[c_idx]["actions"].clear()
+        actions = combos[c_idx].get("actions", [])
+        def _refresh(_):
             self.refresh_combo_actions_list()
             self.refresh_combo_list(select_idx=c_idx)
             self.sync_combo_actions_to_main_steps(combos[c_idx]["name"], [])
-            self.set_status("已清空組合所有動作")
+        self._clear_list_items(actions, f"請問是否清空組合 [{combos[c_idx]['name']}] 的所有動作？", _refresh, "組合所有動作")
 
     # ======================= 自動循環清單（掛機流程）邏輯 =======================
     def get_main_insert_index(self):
@@ -2310,14 +2346,12 @@ class App(tk.Tk):
         self.run_in_test_thread(f"步驟 #{idx+1}", _run)
 
     def add_main_click_step(self):
-        ins = self.get_main_insert_index()
         target_btn = "right" if self.var_step_btn.get() == "右鍵" else "left"
+        btn_cn = "右鍵" if target_btn == "right" else "左鍵"
 
         def cb(x, y, rel):
-            steps.insert(ins, {"type": "click", "btn": target_btn, "x": x, "y": y, "rel": rel, "enabled": True})
-            self.update_step_list(ins)
-            btn_cn = "右鍵" if target_btn == "right" else "左鍵"
-            self.set_status(f"已成功新增{btn_cn}點擊位置到第 #{ins+1} 步")
+            ins = self.get_main_insert_index()
+            self._insert_action_to_target({"type": "click", "btn": target_btn, "x": x, "y": y, "rel": rel, "enabled": True}, is_combo=False, success_msg=f"已成功新增{btn_cn}點擊位置到第 #{ins+1} 步")
 
         self.capture_pos_space(cb, btn=target_btn)
 
@@ -2329,20 +2363,15 @@ class App(tk.Tk):
             return self.set_status("X 和 Y 必須輸入整數！")
 
         ins = self.get_main_insert_index()
-        rel = self.var_use_rel.get()
         target_btn = "right" if self.var_step_btn.get() == "右鍵" else "left"
-        steps.insert(ins, {"type": "click", "btn": target_btn, "x": x, "y": y, "rel": rel, "enabled": True})
-        self.update_step_list(ins)
         btn_cn = "右鍵" if target_btn == "right" else "左鍵"
-        self.set_status(f"已手動插入{btn_cn}點擊到掛機流程 #{ins+1}: ({x}, {y})")
+        self._insert_action_to_target({"type": "click", "btn": target_btn, "x": x, "y": y, "rel": self.var_use_rel.get(), "enabled": True}, is_combo=False, success_msg=f"已手動插入{btn_cn}點擊到掛機流程 #{ins+1}: ({x}, {y})")
 
     def edit_selected_main_step(self):
         sel = self.step_listbox.curselection()
         if not sel: return self.set_status("請先在掛機流程選擇步驟！")
         idx = sel[0]
-        s = steps[idx]
-
-        if self.prompt_edit_action(s):
+        if self.prompt_edit_action(steps[idx]):
             self.update_step_list(idx)
             self.set_status(f"已成功更新主步驟 #{idx+1}")
 
@@ -2350,9 +2379,7 @@ class App(tk.Tk):
         key = self.var_step_key.get().strip().lower()
         if not key: return
         ins = self.get_main_insert_index()
-        steps.insert(ins, {"type": "key", "key": key, "enabled": True})
-        self.update_step_list(ins)
-        self.set_status(f"已插入按鍵到掛機流程 #{ins+1}: [{key.upper()}]")
+        self._insert_action_to_target({"type": "key", "key": key, "enabled": True}, is_combo=False, success_msg=f"已插入按鍵到掛機流程 #{ins+1}: [{key.upper()}]")
 
     def add_main_wait_step(self):
         try:
@@ -2360,62 +2387,78 @@ class App(tk.Tk):
             if sec <= 0: raise ValueError
         except ValueError: return
         ins = self.get_main_insert_index()
-        steps.insert(ins, {"type": "wait", "sec": sec, "enabled": True})
-        self.update_step_list(ins)
-        self.set_status(f"已插入等待到掛機流程 #{ins+1}: {sec} 秒")
+        self._insert_action_to_target({"type": "wait", "sec": sec, "enabled": True}, is_combo=False, success_msg=f"已插入等待到掛機流程 #{ins+1}: {sec} 秒")
 
     def move_main_step(self, delta):
         sel = self.step_listbox.curselection()
-        if sel and 0 <= sel[0] + delta < len(steps):
-            idx = sel[0]
-            steps[idx], steps[idx + delta] = steps[idx + delta], steps[idx]
-            self.update_step_list(idx + delta)
+        idx = sel[0] if sel else None
+        self._move_list_item(steps, idx, delta, self.update_step_list, item_name="主步驟")
 
     def duplicate_main_step(self):
         sel = self.step_listbox.curselection()
-        if not sel: return self.set_status("請先在清單點選要複製的步驟！")
+        idx = sel[0] if sel else None
+        self._duplicate_list_item(steps, idx, self.update_step_list, item_name="主步驟")
+
+    def unpack_main_step_combo(self):
+        sel = self.step_listbox.curselection()
+        if not sel:
+            return self.set_status("請先在掛機流程選擇要展開的組合步驟！")
         idx = sel[0]
-        steps.insert(idx + 1, copy.deepcopy(steps[idx]))
-        self.update_step_list(idx + 1)
-        self.set_status(f"已複製主步驟 #{idx+1}")
+        step = steps[idx]
+        if step.get("type") != "combo":
+            return self.set_status("所選步驟不是組合，無法展開！")
+        c_actions = step.get("actions", [])
+        if not c_actions:
+            return self.set_status("此組合內沒有任何動作！")
+        del steps[idx]
+        for offset, act in enumerate(c_actions):
+            steps.insert(idx + offset, copy.deepcopy(act))
+        self.update_step_list(select_idx=idx)
+        self.set_status(f"已將組合 [{step.get('name', '')}] 展開為 {len(c_actions)} 個獨立步驟")
 
     def delete_main_step(self):
         sel = self.step_listbox.curselection()
-        if sel:
-            idx = sel[0]
-            del steps[idx]
-            self.update_step_list(min(idx, len(steps) - 1) if steps else None)
+        idx = sel[0] if sel else None
+        self._delete_list_item(steps, idx, self.update_step_list, item_name="主步驟")
 
     def clear_main_steps(self):
-        if not steps: return self.set_status("掛機流程本來就是空的")
-        if messagebox.askyesno("清空確認", "請問是否清空整個掛機流程？\n清空後未儲存的內容無法還原！", parent=self):
-            steps.clear()
-            self.update_step_list()
-            self.set_status("已清空掛機流程")
+        self._clear_list_items(steps, "請問是否清空整個掛機流程？\n清空後未儲存的內容無法還原！", self.update_step_list, "掛機流程")
 
-    # ======================= 單步執行輔助器 =======================
-    def execute_single_action(self, act, desc):
+    # ======================= 動作執行調度器 =======================
+    def dispatch_action(self, act, parent_desc, current_vars=None, current_combos=None, depth=0, visited_set=None, is_test=False, round_prefix=""):
+        if visited_set is None: visited_set = set()
+        if not act.get("enabled", True): return True
+        if not is_test:
+            if not running or stop_event.is_set() or reload_requested: return False
+            if current_vars is None: current_vars = {}
+            if current_combos is None: current_combos = []
+        else:
+            if stop_event.is_set(): return False
+            if current_vars is None:
+                with steps_lock: current_vars = copy.deepcopy(variables)
+            if current_combos is None:
+                with steps_lock: current_combos = copy.deepcopy(combos)
+
         use_bg = self.var_use_bg.get() and IS_WINDOWS and (target_hwnd is not None)
         try: off_x, off_y = int(self.var_offset_x.get() or 0), int(self.var_offset_y.get() or 0)
         except Exception: off_x, off_y = 0, 0
 
         var_name = act.get("var_name")
-        v_data = variables.get(var_name) if var_name else None
+        v_data = current_vars.get(var_name) if (current_vars and var_name) else None
 
         atype = act.get("type")
         if atype == "click":
-            x = act["x"]
-            y = act["y"]
+            x, y = act["x"], act["y"]
             if v_data and v_data.get("type") == "coord":
                 val = v_data.get("value", {})
                 if isinstance(val, dict):
-                    x = val.get("x", x)
-                    y = val.get("y", y)
+                    x, y = val.get("x", x), val.get("y", y)
             btn = act.get("btn", "left")
             msg = execute_click(x, y, act.get("rel"), use_bg, off_x, off_y, btn=btn)
             var_info = f"【{var_name}】" if var_name else ""
-            self.set_status(f"{desc} {var_info}{msg}")
-            safe_sleep(0.12)
+            self.set_status(f"{round_prefix}{parent_desc} {var_info}{msg}")
+            if not safe_sleep(0.12): return False
+
         elif atype == "key":
             key = act["key"]
             if v_data and v_data.get("type") == "key":
@@ -2427,31 +2470,52 @@ class App(tk.Tk):
                     currently_held_keys.add(("fg", key))
                 try:
                     pyautogui.keyDown(key)
-                    safe_sleep(0.06)
+                    if not safe_sleep(0.06): return False
                 finally:
                     try: pyautogui.keyUp(key)
                     except Exception: pass
                     with currently_held_keys_lock:
                         currently_held_keys.discard(("fg", key))
             var_info = f"【{var_name}】" if var_name else ""
-            self.set_status(f"{desc} {var_info}按鍵 [{key.upper()}]")
-            safe_sleep(0.10)
+            self.set_status(f"{round_prefix}{parent_desc} {var_info}按鍵 [{key.upper()}]")
+            if not safe_sleep(0.10): return False
+
         elif atype == "wait":
             sec = float(act.get("sec", 0.5))
             if v_data and v_data.get("type") == "wait":
                 try: sec = float(v_data.get("value", sec))
                 except Exception: pass
             var_info = f"【{var_name}】" if var_name else ""
-            self.set_status(f"{desc} {var_info}等待 {sec}s")
-            safe_sleep(sec)
+            self.set_status(f"{round_prefix}{parent_desc} {var_info}等待 {sec}s")
+            if not safe_sleep(sec): return False
+
         elif atype == "call_combo":
             tgt_name = act.get("target_name")
-            with steps_lock:
-                tgt_combo = copy.deepcopy(next((c for c in combos if c["name"] == tgt_name), None))
+            if not tgt_name: return True
+            if depth >= 10:
+                self.set_status(f"{round_prefix}呼叫 [{tgt_name}] 超過深度上限")
+                return True
+            if tgt_name in visited_set:
+                self.set_status(f"{round_prefix}循環呼叫 [{tgt_name}]，自動跳過")
+                return True
+
+            tgt_combo = next((c for c in current_combos if c["name"] == tgt_name), None)
             if tgt_combo:
+                new_visited = visited_set | {tgt_name}
                 for sub_idx, sub_act in enumerate(tgt_combo.get("actions", [])):
+                    if not is_test and (not running or stop_event.is_set() or reload_requested): return False
+                    if is_test and stop_event.is_set(): return False
                     if not sub_act.get("enabled", True): continue
-                    self.execute_single_action(sub_act, f"{desc}->[{tgt_name}#{sub_idx+1}]")
+                    sub_desc = f"{parent_desc}->[{tgt_name}#{sub_idx+1}]"
+                    if not self.dispatch_action(sub_act, sub_desc, current_vars=current_vars, current_combos=current_combos, depth=depth + 1, visited_set=new_visited, is_test=is_test, round_prefix=round_prefix):
+                        return False
+            else:
+                self.set_status(f"{round_prefix}找不到被呼叫的組合 [{tgt_name}]")
+
+        return True
+
+    def execute_single_action(self, act, desc):
+        self.dispatch_action(act, desc, is_test=True)
 
     # ======================= 主執行引擎 =======================
     def toggle_run(self):
@@ -2478,90 +2542,6 @@ class App(tk.Tk):
     def macro_worker_loop(self):
         global running, reload_requested
         round_idx = 1
-
-        def run_action(act, parent_desc, depth=0, visited_set=None, current_combos=None, current_variables=None):
-            if visited_set is None: visited_set = set()
-            if current_combos is None: current_combos = []
-            if current_variables is None: current_variables = {}
-            if not running or stop_event.is_set() or reload_requested: return False
-            if not act.get("enabled", True): return True
-
-            use_bg = self.var_use_bg.get() and IS_WINDOWS and (target_hwnd is not None)
-            try: off_x, off_y = int(self.var_offset_x.get() or 0), int(self.var_offset_y.get() or 0)
-            except Exception: off_x, off_y = 0, 0
-
-            var_name = act.get("var_name")
-            v_data = current_variables.get(var_name) if (current_variables and var_name) else None
-
-            atype = act.get("type")
-            if atype == "click":
-                x = act["x"]
-                y = act["y"]
-                if v_data and v_data.get("type") == "coord":
-                    val = v_data.get("value", {})
-                    if isinstance(val, dict):
-                        x = val.get("x", x)
-                        y = val.get("y", y)
-                btn = act.get("btn", "left")
-                msg = execute_click(x, y, act.get("rel"), use_bg, off_x, off_y, btn=btn)
-                var_info = f"【{var_name}】" if var_name else ""
-                self.set_status(f"第 {round_idx} 輪: {parent_desc} {var_info}{msg}")
-                if not safe_sleep(0.12): return False
-
-            elif atype == "key":
-                key = act["key"]
-                if v_data and v_data.get("type") == "key":
-                    key = str(v_data.get("value", key))
-                if use_bg:
-                    post_bg_key(target_hwnd, key)
-                else:
-                    with currently_held_keys_lock:
-                        currently_held_keys.add(("fg", key))
-                    try:
-                        pyautogui.keyDown(key)
-                        if not safe_sleep(0.06): return False
-                    finally:
-                        try: pyautogui.keyUp(key)
-                        except Exception: pass
-                        with currently_held_keys_lock:
-                            currently_held_keys.discard(("fg", key))
-                var_info = f"【{var_name}】" if var_name else ""
-                self.set_status(f"第 {round_idx} 輪: {parent_desc} {var_info}按鍵 [{key.upper()}]")
-                if not safe_sleep(0.10): return False
-
-            elif atype == "wait":
-                sec = float(act.get("sec", 0.5))
-                if v_data and v_data.get("type") == "wait":
-                    try: sec = float(v_data.get("value", sec))
-                    except Exception: pass
-                var_info = f"【{var_name}】" if var_name else ""
-                self.set_status(f"第 {round_idx} 輪: {parent_desc} {var_info}等待 {sec}s")
-                if not safe_sleep(sec): return False
-
-            elif atype == "call_combo":
-                tgt_name = act.get("target_name")
-                if not tgt_name: return True
-                if depth >= 10:
-                    self.set_status(f"第 {round_idx} 輪: 呼叫 [{tgt_name}] 超過深度上限")
-                    return True
-                if tgt_name in visited_set:
-                    self.set_status(f"第 {round_idx} 輪: 循環呼叫 [{tgt_name}]，自動跳過")
-                    return True
-
-                tgt_combo = next((c for c in current_combos if c["name"] == tgt_name), None)
-                if tgt_combo:
-                    new_visited = visited_set | {tgt_name}
-                    for sub_idx, sub_act in enumerate(tgt_combo.get("actions", [])):
-                        if not running or stop_event.is_set() or reload_requested: return False
-                        if not sub_act.get("enabled", True): continue
-                        sub_desc = f"{parent_desc}->[{tgt_name}#{sub_idx+1}]"
-                        if not run_action(sub_act, sub_desc, depth + 1, new_visited, current_combos=current_combos, current_variables=current_variables):
-                            return False
-                else:
-                    self.set_status(f"第 {round_idx} 輪: 找不到被呼叫的組合 [{tgt_name}]")
-
-            return True
-
         try:
             while running and not stop_event.is_set():
                 with steps_lock:
@@ -2579,20 +2559,19 @@ class App(tk.Tk):
                     if not step.get("enabled", True): continue
 
                     self.highlight_active_step(idx)
+                    pfx = f"第 {round_idx} 輪: "
 
                     stype = step["type"]
                     if stype == "combo":
                         c_name = step.get("name", "組合")
-                        c_actions = step.get("actions", [])
-                        for a_idx, act in enumerate(c_actions):
+                        for a_idx, act in enumerate(step.get("actions", [])):
                             if not running or stop_event.is_set() or reload_requested: break
                             if not act.get("enabled", True): continue
                             self.highlight_active_step(idx, sub_idx=a_idx)
-                            act_desc = f"[{c_name}#{a_idx+1}]"
-                            if not run_action(act, act_desc, depth=0, visited_set={c_name}, current_combos=current_combos, current_variables=current_variables):
+                            if not self.dispatch_action(act, f"[{c_name}#{a_idx+1}]", current_vars=current_variables, current_combos=current_combos, depth=0, visited_set={c_name}, is_test=False, round_prefix=pfx):
                                 break
                     else:
-                        if not run_action(step, f"步驟#{idx+1}", depth=0, visited_set=set(), current_combos=current_combos, current_variables=current_variables):
+                        if not self.dispatch_action(step, f"步驟#{idx+1}", current_vars=current_variables, current_combos=current_combos, depth=0, visited_set=set(), is_test=False, round_prefix=pfx):
                             break
 
                 round_idx += 1
@@ -2610,7 +2589,6 @@ class App(tk.Tk):
 if __name__ == "__main__":
     if sys.platform == "win32":
         try:
-            import ctypes
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("sh.autoclicker.app.1.0")
         except Exception:
             pass
