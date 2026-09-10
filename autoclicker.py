@@ -438,6 +438,8 @@ class App(tk.Tk):
 
         self.active_dlg = None
         self.active_lb = None
+        self.var_active_dlg_topmost = tk.BooleanVar(value=True)
+        self.active_step_line_map = {}
 
         self.grid_columnconfigure(0, weight=6)
         self.grid_columnconfigure(1, weight=5)
@@ -644,25 +646,74 @@ class App(tk.Tk):
         self.after(150, poll_keys)
 
     # ======================= 彈窗內部高亮與熱更新邏輯 =======================
-    def highlight_active_step(self, idx):
-        """在掛機進度監控彈窗中高亮當前執行中的步驟"""
+    def toggle_active_dlg_topmost(self):
+        """切換掛機進度監控視窗的置頂狀態"""
+        if self.active_dlg and self.active_dlg.winfo_exists():
+            self.active_dlg.attributes("-topmost", self.var_active_dlg_topmost.get())
+
+    def highlight_active_step(self, idx, sub_idx=None):
+        """在掛機進度監控彈窗中高亮當前執行中的步驟或 Combo 子步驟"""
         def _hl():
             if self.active_lb and self.active_dlg and self.active_dlg.winfo_exists():
-                self.active_lb.selection_clear(0, tk.END)
-                if 0 <= idx < self.active_lb.size():
-                    self.active_lb.selection_set(idx)
-                    self.active_lb.see(idx)
+                line = self.active_step_line_map.get((idx, sub_idx))
+                if line is None and sub_idx is not None:
+                    line = self.active_step_line_map.get((idx, None))
+                if line is None and sub_idx is None:
+                    line = idx
+                if line is not None and 0 <= line < self.active_lb.size():
+                    self.active_lb.selection_clear(0, tk.END)
+                    self.active_lb.selection_set(line)
+                    self.active_lb.see(line)
         self.after(0, _hl)
 
     def refresh_active_dlg_items(self):
-        """刷新進度監控彈窗的執行實例清單"""
+        """刷新進度監控彈窗的執行實例清單（支援展開 Combo 內部子動作）"""
         if not self.active_lb or not self.active_dlg or not self.active_dlg.winfo_exists():
             return
         self.active_lb.delete(0, tk.END)
+        self.active_step_line_map.clear()
+        line_idx = 0
+
         with steps_lock:
             for i, s in enumerate(active_steps):
+                self.active_step_line_map[(i, None)] = line_idx
                 text = format_action_summary(s, index=i, with_checkbox_tag=True)
                 self.active_lb.insert(tk.END, text)
+                line_idx += 1
+
+                if s.get("type") == "combo":
+                    for a_idx, sub_act in enumerate(s.get("actions", [])):
+                        self.active_step_line_map[(i, a_idx)] = line_idx
+                        sub_text = f"   ↳ {format_action_summary(sub_act, index=a_idx, with_checkbox_tag=True)}"
+                        self.active_lb.insert(tk.END, sub_text)
+                        line_idx += 1
+
+    def update_active_dlg_geometry(self, reset_position=False):
+        """根據清單內容行數動態設定/調整監控視窗尺寸，並居中或保留位置"""
+        if not self.active_dlg or not self.active_dlg.winfo_exists() or not self.active_lb:
+            return
+
+        total_lines = self.active_lb.size()
+        # 頂部標題列與按鈕區約 120px，每行清單約佔 22px
+        target_h = max(240, min(650, 120 + total_lines * 22))
+        target_w = 460
+
+        self.update_idletasks()
+
+        if reset_position:
+            parent_x = self.winfo_x()
+            parent_y = self.winfo_y()
+            parent_w = self.winfo_width()
+            parent_h = self.winfo_height()
+            pos_x = parent_x + max(0, (parent_w - target_w) // 2)
+            pos_y = parent_y + max(0, (parent_h - target_h) // 2)
+            self.active_dlg.geometry(f"{target_w}x{target_h}+{pos_x}+{pos_y}")
+        else:
+            cur_x = self.active_dlg.winfo_x()
+            cur_y = self.active_dlg.winfo_y()
+            self.active_dlg.geometry(f"{target_w}x{target_h}+{cur_x}+{cur_y}")
+
+        self.active_dlg.minsize(380, 220)
 
     def apply_hot_reload_from_popup(self):
         """即時套用修改 (Hot-Reload)：在運行中即時同步草稿到背景運行實例"""
@@ -678,14 +729,16 @@ class App(tk.Tk):
             reload_requested = True
 
         self.refresh_active_dlg_items()
+        self.update_active_dlg_geometry(reset_position=False)
         self.set_status("已套用最新清單！背景將於當前動作結束後自動切換")
 
     def close_active_dlg(self):
-        """關閉進度監控彈窗"""
+        """關閉進度監控彈窗並清理狀態"""
         if self.active_dlg and self.active_dlg.winfo_exists():
             self.active_dlg.destroy()
         self.active_dlg = None
         self.active_lb = None
+        self.active_step_line_map.clear()
 
     def view_active_steps(self):
         """開啟或聚焦掛機進度監控彈窗"""
@@ -693,25 +746,46 @@ class App(tk.Tk):
             return
 
         if self.active_dlg and self.active_dlg.winfo_exists():
+            self.active_dlg.deiconify()
             self.active_dlg.lift()
             self.refresh_active_dlg_items()
+            self.update_active_dlg_geometry(reset_position=False)
             return
 
         self.active_dlg = tk.Toplevel(self)
+        self.active_dlg.withdraw()  # 先隱藏，避免初次計算尺寸時閃爍
         self.active_dlg.title("當前掛機進度監控")
         self.active_dlg.configure(bg=UITheme.BG_PANEL)
-        self.active_dlg.attributes("-topmost", True)
+        self.active_dlg.attributes("-topmost", self.var_active_dlg_topmost.get())
         self.active_dlg.transient(self)
-
-        w, h = 420, 420
-        self.update_idletasks()
-        pos_x = self.winfo_x() + max(0, (self.winfo_width() - w) // 2)
-        pos_y = self.winfo_y() + max(0, (self.winfo_height() - h) // 2)
-        self.active_dlg.geometry(f"{w}x{h}+{pos_x}+{pos_y}")
-
+        self.active_dlg.resizable(True, True)
         self.active_dlg.protocol("WM_DELETE_WINDOW", self.close_active_dlg)
 
-        tk.Label(self.active_dlg, text="當前掛機進度監控", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=("Segoe UI", 10, "bold")).pack(pady=(8, 4))
+        # 頂部標題列與置頂 Checkbox
+        f_top = tk.Frame(self.active_dlg, bg=UITheme.BG_PANEL)
+        f_top.pack(fill="x", padx=10, pady=(8, 4))
+
+        tk.Label(
+            f_top,
+            text="⚡ 當前掛機進度監控",
+            bg=UITheme.BG_PANEL,
+            fg=UITheme.CYAN_TITLE,
+            font=("Segoe UI", 10, "bold")
+        ).pack(side="left")
+
+        chk_top = tk.Checkbutton(
+            f_top,
+            text="視窗置頂",
+            variable=self.var_active_dlg_topmost,
+            bg=UITheme.BG_PANEL,
+            fg=UITheme.TEXT_MAIN,
+            selectcolor=UITheme.BG_DARK,
+            activebackground=UITheme.BG_PANEL,
+            activeforeground=UITheme.TEXT_MAIN,
+            font=("Segoe UI", 9),
+            command=self.toggle_active_dlg_topmost
+        )
+        chk_top.pack(side="right")
 
         f_box = tk.Frame(self.active_dlg, bg=UITheme.BG_DARK)
         f_box.pack(fill="both", expand=True, padx=10, pady=4)
@@ -747,7 +821,18 @@ class App(tk.Tk):
             command=self.apply_hot_reload_from_popup
         ).pack(side="left", fill="x", expand=True, padx=(0, 4))
 
-        tk.Button(f_ctrl, text="關閉視窗", width=8, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, command=self.close_active_dlg).pack(side="right")
+        tk.Button(
+            f_ctrl,
+            text="關閉視窗",
+            width=8,
+            bg=UITheme.BTN_GRAY,
+            fg="#fff",
+            activebackground=UITheme.BTN_GRAY_HOVER,
+            command=self.close_active_dlg
+        ).pack(side="right")
+
+        self.update_active_dlg_geometry(reset_position=True)
+        self.active_dlg.deiconify()
 
     # ======================= 全功能動作編輯彈窗 =======================
     def prompt_edit_action(self, action, available_combos=None):
@@ -1878,6 +1963,7 @@ class App(tk.Tk):
                         for a_idx, act in enumerate(c_actions):
                             if not running or stop_event.is_set() or reload_requested: break
                             if not act.get("enabled", True): continue
+                            self.highlight_active_step(idx, sub_idx=a_idx)
                             act_desc = f"[{c_name}#{a_idx+1}]"
                             if not run_action(act, act_desc, depth=0, visited_set={c_name}, current_combos=current_combos):
                                 break
