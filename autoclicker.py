@@ -111,16 +111,39 @@ if IS_WINDOWS:
 
     user32 = ctypes.windll.user32
     user32.ScreenToClient.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
+    user32.ScreenToClient.restype = wintypes.BOOL
     user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
+    user32.ClientToScreen.restype = wintypes.BOOL
     user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    user32.PostMessageW.restype = wintypes.BOOL
     user32.FlashWindow.argtypes = [wintypes.HWND, wintypes.BOOL]
+    user32.FlashWindow.restype = wintypes.BOOL
     user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+    user32.SetForegroundWindow.restype = wintypes.BOOL
+    user32.GetForegroundWindow.argtypes = []
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    user32.FindWindowW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
+    user32.FindWindowW.restype = wintypes.HWND
     user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.ShowWindow.restype = wintypes.BOOL
     user32.BringWindowToTop.argtypes = [wintypes.HWND]
+    user32.BringWindowToTop.restype = wintypes.BOOL
     user32.SetWindowPos.argtypes = [wintypes.HWND, ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
+    user32.SetWindowPos.restype = wintypes.BOOL
     user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ctypes.c_size_t]
     user32.GetAsyncKeyState.argtypes = [ctypes.c_int]
+    user32.GetAsyncKeyState.restype = ctypes.c_short
+    user32.IsWindowVisible.argtypes = [wintypes.HWND]
+    user32.IsWindowVisible.restype = wintypes.BOOL
+    user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+    user32.GetWindowTextLengthW.restype = ctypes.c_int
+    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetWindowTextW.restype = ctypes.c_int
+    user32.MapVirtualKeyW.argtypes = [wintypes.UINT, wintypes.UINT]
+    user32.MapVirtualKeyW.restype = wintypes.UINT
     WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    user32.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
+    user32.EnumWindows.restype = wintypes.BOOL
 else:
     WNDENUMPROC = None
 
@@ -1538,41 +1561,57 @@ class App(tk.Tk):
         if not is_tracking:
             # 進入編輯模式：停止游標追蹤，解鎖編輯按鈕，記錄草稿基準
             self.steps_snapshot_when_untracked = copy.deepcopy(steps)
+            self.combos_snapshot_when_untracked = copy.deepcopy(combos)
+            self.variables_snapshot_when_untracked = copy.deepcopy(variables)
             self.list_was_edited = False
             self.update_step_lock_ui()
-            self.set_status("已暫停游標追蹤，進入編輯模式（可自由修改步驟）")
+            self.set_status("已暫停游標追蹤，進入編輯模式（可自由修改步驟與組合）")
         else:
             # 準備由編輯模式切回追蹤模式
-            has_changed = getattr(self, "list_was_edited", False) or (steps != getattr(self, "steps_snapshot_when_untracked", None))
+            has_changed = (
+                getattr(self, "list_was_edited", False)
+                or (steps != getattr(self, "steps_snapshot_when_untracked", None))
+                or (combos != getattr(self, "combos_snapshot_when_untracked", None))
+                or (variables != getattr(self, "variables_snapshot_when_untracked", None))
+            )
             if has_changed:
                 ans = messagebox.askyesnocancel(
                     "套用新流程確認",
-                    "檢測到掛機流程已被修改，是否確定儲存？\n\n"
+                    "檢測到掛機流程、組合或變數已被修改，是否確定儲存？\n\n"
                     "・點選【是 (Yes)】：儲存修改，將於下一輪開始執行新流程並恢復游標追蹤\n"
-                    "・點選【否 (No)】：放棄本次修改，還原當前運行中之流程並恢復追蹤\n"
+                    "・點選【否 (No)】：放棄本次修改，還原當前運行中之流程與資料並恢復追蹤\n"
                     "・點選【取消 (Cancel)】：保留修改，繼續停留在編輯模式",
                     parent=self
                 )
                 if ans is True:
                     # 使用者選擇 SAVE！提交熱更新，標記 pending_track_resync，於下一輪生效恢復追蹤
                     with steps_lock:
-                        global active_steps, reload_requested
+                        global active_steps, active_combos, active_variables, reload_requested
                         active_steps = copy.deepcopy(steps)
+                        active_combos = copy.deepcopy(combos)
+                        active_variables = copy.deepcopy(variables)
                         reload_requested = True
                     self.pending_track_resync = True
                     self.list_was_edited = False
                     self.update_step_lock_ui()
                     self.set_status("已確認儲存新流程！當前輪次完成後，將於下一輪套用並恢復游標追蹤")
                 elif ans is False:
-                    # 使用者選擇 唔SAVE -> 放棄修改，還原為當前運行的流程快照
+                    # 使用者選擇 唔SAVE -> 放棄修改，還原為當前運行的流程與資料快照
                     with steps_lock:
                         steps.clear()
                         steps.extend(copy.deepcopy(active_steps))
+                        combos.clear()
+                        combos.extend(copy.deepcopy(active_combos))
+                        variables.clear()
+                        variables.update(copy.deepcopy(active_variables))
                     self.update_step_list()
+                    self.refresh_combo_list()
+                    self.refresh_combo_actions_list()
+                    self.refresh_variables_table()
                     self.list_was_edited = False
                     self.pending_track_resync = False
                     self.update_step_lock_ui()
-                    self.set_status("已放棄修改，已還原原流程並恢復追蹤")
+                    self.set_status("已放棄修改，已還原原流程與資料並恢復追蹤")
                 else:
                     # 使用者取消 -> 保持未勾選狀態，繼續留在編輯模式
                     self.var_track_exec.set(False)
@@ -1686,7 +1725,8 @@ class App(tk.Tk):
                 if t and WINDOW_TITLE not in t:
                     windows.append((hwnd, t))
             return True
-        user32.EnumWindows(WNDENUMPROC(enum_proc), 0)
+        cb = WNDENUMPROC(enum_proc)
+        user32.EnumWindows(cb, 0)
         return windows
 
     def refresh_window_dropdown(self):
