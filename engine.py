@@ -46,7 +46,12 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
         force_bring_window_to_front(state.target_hwnd)
 
     var_name = act.get("var_name")
-    v_data = current_vars.get(var_name) if (current_vars and var_name) else None
+    v_data = None
+    if var_name:
+        with state.steps_lock:
+            v_data = state.active_variables.get(var_name)
+        if not v_data and current_vars:
+            v_data = current_vars.get(var_name)
 
     atype = act.get("type")
     if atype == "click":
@@ -114,12 +119,14 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
         tgt_combo = next((c for c in current_combos if c["name"] == tgt_name), None)
         if tgt_combo:
             new_visited = visited_set | {tgt_name}
-            for sub_idx, sub_act in enumerate(tgt_combo.get("actions", [])):
+            sub_actions = tgt_combo.get("actions", [])
+            sub_total = len(sub_actions)
+            for sub_idx, sub_act in enumerate(sub_actions):
                 if not is_test and (not state.running or state.stop_event.is_set()):
                     return False
                 if is_test and state.stop_event.is_set():
                     return False
-                sub_desc = f"{parent_desc}->[{tgt_name}#{sub_idx+1}]"
+                sub_desc = f"{parent_desc}->[{tgt_name}#{sub_idx+1}/{sub_total}]"
                 if not dispatch_action(
                     app,
                     sub_act,
@@ -153,10 +160,13 @@ def macro_worker_loop(app):
                 was_reloaded = state.reload_requested
                 state.reload_requested = False
 
+            if not current_steps:
+                app.set_status("掛機流程清單為空，巨集已自動停止！")
+                state.running = False
+                break
+
             if was_reloaded:
-                app.pending_track_resync = False
-                app.list_was_edited = False
-                app.set_status(f"第 {round_idx} 輪: 已套用最新熱更新流程並恢復追蹤！")
+                app.set_status(f"第 {round_idx} 輪: 已自動套用最新流程！")
 
             for idx, step in enumerate(current_steps):
                 if not state.running or state.stop_event.is_set():
@@ -168,14 +178,16 @@ def macro_worker_loop(app):
                 stype = step["type"]
                 if stype == "combo":
                     c_name = step.get("name", "組合")
-                    for a_idx, act in enumerate(step.get("actions", [])):
+                    sub_actions = step.get("actions", [])
+                    sub_total = len(sub_actions)
+                    for a_idx, act in enumerate(sub_actions):
                         if not state.running or state.stop_event.is_set():
                             break
                         app.highlight_active_step(idx, sub_idx=a_idx)
                         if not dispatch_action(
                             app,
                             act,
-                            f"[{c_name}#{a_idx+1}]",
+                            f"[{c_name}#{a_idx+1}/{sub_total}]",
                             current_vars=current_variables,
                             current_combos=current_combos,
                             depth=0,

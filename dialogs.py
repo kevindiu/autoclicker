@@ -79,6 +79,9 @@ def prompt_variable_dialog(app, edit_name=None):
     var_wait = tk.StringVar(value=init_wait)
 
     def start_space_capture():
+        if state.running:
+            app.set_status("巨集正在循環執行中，為免干擾滑鼠瞄準，請先停止運行再取點！")
+            return
         dialog.grab_release()
         dialog.withdraw()
         target_btn = "right" if var_btn.get() == "右鍵" else "left"
@@ -329,7 +332,7 @@ def prompt_edit_combo_dialog(app, combo_step, step_idx=None):
     f_list_wrap = tk.Frame(f_mid, bg=UITheme.BG_PANEL)
     f_list_wrap.pack(side="left", fill="both", expand=True)
 
-    tk.Label(f_list_wrap, text="【子步驟清單】 (雙擊可修改)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL_BOLD, anchor="w").pack(fill="x", pady=(0, 3))
+    tk.Label(f_list_wrap, text="【子動作清單】 (雙擊可修改)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL_BOLD, anchor="w").pack(fill="x", pady=(0, 3))
 
     f_sub_box = tk.Frame(f_list_wrap, bg=UITheme.BG_DARK)
     f_sub_box.pack(fill="both", expand=True)
@@ -414,7 +417,7 @@ def prompt_edit_combo_dialog(app, combo_step, step_idx=None):
 
     tk.Button(f_btns, text="▲ 上移", width=12, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=lambda: do_move_sub(-1)).pack(fill="x", pady=2)
     tk.Button(f_btns, text="▼ 下移", width=12, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=lambda: do_move_sub(1)).pack(fill="x", pady=2)
-    tk.Button(f_btns, text="▶ 試跑", width=12, bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_test_sub).pack(fill="x", pady=2)
+    tk.Button(f_btns, text="▶ 試跑動作", width=12, bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_test_sub).pack(fill="x", pady=2)
     tk.Button(f_btns, text="✎ 修改", width=12, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_edit_sub).pack(fill="x", pady=2)
     tk.Button(f_btns, text="⎘ 複製", width=12, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_dup_sub).pack(fill="x", pady=2)
     tk.Button(f_btns, text="✕ 刪除", width=12, bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_del_sub).pack(fill="x", pady=(2, 6))
@@ -505,10 +508,13 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
         e_y = tk.Entry(f, textvariable=var_y, width=10, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL)
         e_y.grid(row=3, column=1, padx=6, pady=3, sticky="w")
 
-        btn_rec = tk.Button(f, text="重新瞄準目標 (按 Space 確定)", width=24, bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, font=UITheme.FONT_NORMAL_BOLD)
+        btn_rec = tk.Button(f, text="◎ 重新瞄準取點 (Space)", width=24, bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, font=UITheme.FONT_NORMAL_BOLD)
         btn_rec.grid(row=4, column=0, columnspan=2, pady=(8, 2))
 
         def do_rec():
+            if state.running:
+                app.set_status("巨集正在循環執行中，為免干擾滑鼠瞄準，請先停止運行再取點！")
+                return
             dialog.grab_release()
             dialog.withdraw()
 
@@ -645,7 +651,7 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
 
     bf = tk.Frame(dialog, bg=UITheme.BG_PANEL, padx=16, pady=10)
     bf.pack(fill="x")
-    tk.Button(bf, text="✓ 確定", width=8, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_NORMAL_BOLD, command=on_ok).pack(side="right", padx=(4, 0))
+    tk.Button(bf, text="✓ 確定儲存", width=10, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_NORMAL_BOLD, command=on_ok).pack(side="right", padx=(4, 0))
     tk.Button(bf, text="✕ 取消", width=8, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_NORMAL, command=dialog.destroy).pack(side="right")
 
     dialog.bind("<Return>", lambda e: on_ok())
