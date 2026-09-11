@@ -676,7 +676,6 @@ class App(tk.Tk):
 
     def locate_target_window(self):
         """定位並閃爍目標遊戲視窗"""
-        global target_hwnd
         if not IS_WINDOWS or not target_hwnd:
             return self.set_status("未綁定有效視窗，無法定位！")
 
@@ -692,7 +691,6 @@ class App(tk.Tk):
     # ======================= 取點防重入機制 + 頂部提示 =======================
     def capture_pos_space(self, on_finish, on_cancel=None, btn="left"):
         """無干擾 Hover 取點模式：頂部浮動 HUD，按 Space 確定，按 ESC 取消"""
-        global target_hwnd
         if not target_hwnd:
             messagebox.showwarning("提示", "尚未綁定目標視窗，請先在上方選擇遊戲視窗！", parent=self)
             if on_cancel: on_cancel()
@@ -1259,7 +1257,7 @@ class App(tk.Tk):
         col_v_btns = tk.Frame(f_vars_row, bg=UITheme.BG_PANEL)
         col_v_btns.pack(side="right", fill="y")
 
-        self.btn_var_add_main = tk.Button(
+        btn_var_add_main = tk.Button(
             col_v_btns,
             text="➔ 加入掛機流程",
             width=11,
@@ -1270,7 +1268,7 @@ class App(tk.Tk):
             relief="flat",
             command=self.add_variable_to_main_steps
         )
-        self.btn_var_add_main.pack(fill="x", expand=True, pady=(0, 1))
+        btn_var_add_main.pack(fill="x", expand=True, pady=(0, 1))
 
         tk.Button(
             col_v_btns,
@@ -1365,8 +1363,8 @@ class App(tk.Tk):
         r_click = tk.Frame(f_action_card, bg=UITheme.BG_PANEL)
         r_click.pack(fill="x", pady=1)
         ttk.Combobox(r_click, textvariable=self.var_combo_btn, values=["左鍵", "右鍵"], width=4, state="readonly").pack(side="left", padx=(0, 2))
-        self.btn_combo_add_click = tk.Button(r_click, text="+ 瞄準點擊", bg=UITheme.ACCENT_GREEN, fg="#fff", font=UITheme.FONT_NORMAL_BOLD, activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", padx=6, command=lambda: self.add_click_action(is_combo=True))
-        self.btn_combo_add_click.pack(side="left", padx=1, fill="x", expand=True)
+        btn_combo_add_click = tk.Button(r_click, text="+ 瞄準點擊", bg=UITheme.ACCENT_GREEN, fg="#fff", font=UITheme.FONT_NORMAL_BOLD, activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", padx=6, command=lambda: self.add_click_action(is_combo=True))
+        btn_combo_add_click.pack(side="left", padx=1, fill="x", expand=True)
 
         tk.Label(r_click, text="X:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(side="left", padx=(3, 1))
         tk.Entry(r_click, textvariable=self.var_combo_manual_x, width=4, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
@@ -1448,8 +1446,8 @@ class App(tk.Tk):
         sr_click = tk.Frame(f_step, bg=UITheme.BG_PANEL)
         sr_click.pack(fill="x", pady=1)
         ttk.Combobox(sr_click, textvariable=self.var_step_btn, values=["左鍵", "右鍵"], width=4, state="readonly").pack(side="left", padx=(0, 2))
-        self.btn_step_click = tk.Button(sr_click, text="+ 瞄準點擊", bg=UITheme.ACCENT_GREEN, fg="#fff", font=UITheme.FONT_NORMAL_BOLD, activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", padx=6, command=lambda: self.add_click_action(is_combo=False))
-        self.btn_step_click.pack(side="left", padx=1, fill="x", expand=True)
+        btn_step_click = tk.Button(sr_click, text="+ 瞄準點擊", bg=UITheme.ACCENT_GREEN, fg="#fff", font=UITheme.FONT_NORMAL_BOLD, activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", padx=6, command=lambda: self.add_click_action(is_combo=False))
+        btn_step_click.pack(side="left", padx=1, fill="x", expand=True)
         tk.Label(sr_click, text="X:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(side="left", padx=(4, 1))
         tk.Entry(sr_click, textvariable=self.var_step_manual_x, width=4, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
         tk.Label(sr_click, text="Y:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(side="left", padx=(1, 1))
@@ -1535,7 +1533,7 @@ class App(tk.Tk):
             exportselection=False
         )
         self.step_listbox.pack(side="left", fill="both", expand=True)
-        self.step_listbox.bind("<Double-Button-1>", lambda e: self.on_step_listbox_double_click())
+        self.step_listbox.bind("<Double-Button-1>", lambda e: self.edit_selected_main_step())
         sc_step = tk.Scrollbar(f_list_s, orient="vertical", command=self.step_listbox.yview)
         sc_step.pack(side="right", fill="y")
         self.step_listbox.config(yscrollcommand=sc_step.set)
@@ -1667,11 +1665,6 @@ class App(tk.Tk):
                 self.pending_track_resync = False
                 self.update_step_lock_ui()
                 self.set_status("已恢復游標追蹤與編輯鎖定")
-
-    def on_step_listbox_double_click(self):
-        if running and self.var_track_exec.get():
-            return self.set_status("當前為追蹤模式（已鎖定），請先取消勾選「追蹤執行」再編輯步驟！")
-        self.edit_selected_main_step()
 
     # ======================= 設定檔管理 (附帶 Schema 遷移) =======================
     def get_profile_files(self):
@@ -2106,17 +2099,10 @@ class App(tk.Tk):
         self.update_step_list()
         self.set_status(f"已刪除變數: {var_name}")
 
-    def add_variable_to_main_steps(self):
-        """將表格中所選定的變數以引用方式直接加入掛機流程"""
-        if running and self.var_track_exec.get():
-            return self.set_status("當前為追蹤模式（已鎖定），請先取消勾選「追蹤執行」再加入變數！")
-        sel = self.tree_vars.selection()
-        if not sel:
-            return self.set_status("請先在表格中選擇要加入流程的變數！")
-        var_name = sel[0]
-        if var_name not in variables:
-            return self.set_status("找不到所選變數！")
-
+    def _build_variable_action(self, var_name):
+        """根據變數名稱與類型，組裝對應的動作字典與提示描述，若無效則回傳 (None, None)"""
+        if not var_name or var_name not in variables:
+            return None, None
         v_info = variables[var_name]
         v_type = v_info.get("type", "coord")
         v_val = v_info.get("value")
@@ -2134,14 +2120,14 @@ class App(tk.Tk):
                 "rel": self.var_use_rel.get(),
                 "var_name": var_name
             }
-            msg = f"已將變數【{var_name}】({btn_cn}點擊) 加入掛機流程"
+            desc = f"【{var_name}】({btn_cn}點擊)"
         elif v_type == "key":
             new_act = {
                 "type": "key",
                 "key": str(v_val),
                 "var_name": var_name
             }
-            msg = f"已將變數【{var_name}】(按鍵[{str(v_val).upper()}]) 加入掛機流程"
+            desc = f"【{var_name}】(按鍵[{str(v_val).upper()}])"
         elif v_type == "wait":
             try: sec = float(v_val)
             except Exception: sec = 1.0
@@ -2150,56 +2136,35 @@ class App(tk.Tk):
                 "sec": sec,
                 "var_name": var_name
             }
-            msg = f"已將變數【{var_name}】(停頓{sec}s) 加入掛機流程"
+            desc = f"【{var_name}】(停頓{sec}s)"
         else:
-            return
+            return None, None
 
-        self._insert_action_to_target(new_act, is_combo=False, success_msg=msg)
+        return new_act, desc
+
+    def add_variable_to_main_steps(self):
+        """將表格中所選定的變數以引用方式直接加入掛機流程"""
+        if running and self.var_track_exec.get():
+            return self.set_status("當前為追蹤模式（已鎖定），請先取消勾選「追蹤執行」再加入變數！")
+        sel = self.tree_vars.selection()
+        if not sel:
+            return self.set_status("請先在表格中選擇要加入流程的變數！")
+        var_name = sel[0]
+        new_act, desc = self._build_variable_action(var_name)
+        if not new_act:
+            return self.set_status("找不到所選變數或變數無效！")
+        ins = self.get_main_insert_index()
+        self._insert_action_to_target(new_act, is_combo=False, success_msg=f"已將變數{desc} 加入掛機流程 #{ins+1}")
 
     def combo_add_variable_action(self):
         """將選定的變數以引用方式加入當前選取組合"""
         var_name = self.var_combo_ref_var.get().strip()
-        if not var_name or var_name not in variables:
-            return self.set_status("請先選擇要引用的變數")
-
-        c_idx = self.get_selected_combo_idx()
-        if c_idx is None:
+        new_act, desc = self._build_variable_action(var_name)
+        if not new_act:
+            return self.set_status("請先選擇要引用的變數！")
+        if self.get_selected_combo_idx() is None:
             return self.set_status("請先在左邊清單選擇要加入動作的組合！")
-
-        v_info = variables[var_name]
-        v_type = v_info.get("type", "coord")
-        v_val = v_info.get("value")
-
-        if v_type == "coord":
-            px = v_val.get("x", 0) if isinstance(v_val, dict) else 0
-            py = v_val.get("y", 0) if isinstance(v_val, dict) else 0
-            btn = v_val.get("btn", "left") if isinstance(v_val, dict) else "left"
-            new_act = {
-                "type": "click",
-                "btn": btn,
-                "x": px,
-                "y": py,
-                "rel": self.var_use_rel.get(),
-                "var_name": var_name
-            }
-        elif v_type == "key":
-            new_act = {
-                "type": "key",
-                "key": str(v_val),
-                "var_name": var_name
-            }
-        elif v_type == "wait":
-            try: sec = float(v_val)
-            except Exception: sec = 1.0
-            new_act = {
-                "type": "wait",
-                "sec": sec,
-                "var_name": var_name
-            }
-        else:
-            return
-
-        self._insert_action_to_target(new_act, is_combo=True, success_msg=f"已在組合加入引用變數【{var_name}】")
+        self._insert_action_to_target(new_act, is_combo=True, success_msg=f"已在組合加入引用變數{desc}")
 
     # ======================= 組合管理邏輯 =======================
     def get_selected_combo_idx(self):
@@ -2575,50 +2540,11 @@ class App(tk.Tk):
         if running and self.var_track_exec.get():
             return self.set_status("當前為追蹤模式（已鎖定），請先取消勾選「追蹤執行」再新增動作！")
         var_name = self.var_step_ref_var.get().strip()
-        if not var_name or var_name not in variables:
+        new_act, desc = self._build_variable_action(var_name)
+        if not new_act:
             return self.set_status("請先在下拉選單選擇要引用的變數！")
-
-        v_info = variables[var_name]
-        v_type = v_info.get("type", "coord")
-        v_val = v_info.get("value")
-
-        if v_type == "coord":
-            px = v_val.get("x", 0) if isinstance(v_val, dict) else 0
-            py = v_val.get("y", 0) if isinstance(v_val, dict) else 0
-            btn = v_val.get("btn", "left") if isinstance(v_val, dict) else "left"
-            btn_cn = "右鍵" if btn == "right" else "左鍵"
-            new_act = {
-                "type": "click",
-                "btn": btn,
-                "x": px,
-                "y": py,
-                "rel": self.var_use_rel.get(),
-                "var_name": var_name
-            }
-            ins = self.get_main_insert_index()
-            msg = f"已插入引用變數到掛機流程 #{ins+1}: 【{var_name}】({btn_cn}點擊)"
-        elif v_type == "key":
-            new_act = {
-                "type": "key",
-                "key": str(v_val),
-                "var_name": var_name
-            }
-            ins = self.get_main_insert_index()
-            msg = f"已插入引用變數到掛機流程 #{ins+1}: 【{var_name}】(按鍵[{str(v_val).upper()}])"
-        elif v_type == "wait":
-            try: sec = float(v_val)
-            except Exception: sec = 1.0
-            new_act = {
-                "type": "wait",
-                "sec": sec,
-                "var_name": var_name
-            }
-            ins = self.get_main_insert_index()
-            msg = f"已插入引用變數到掛機流程 #{ins+1}: 【{var_name}】(停頓{sec}s)"
-        else:
-            return
-
-        self._insert_action_to_target(new_act, is_combo=False, success_msg=msg)
+        ins = self.get_main_insert_index()
+        self._insert_action_to_target(new_act, is_combo=False, success_msg=f"已插入引用變數到掛機流程 #{ins+1}: {desc}")
 
     def move_combo_action(self, delta):
         c_idx = self.get_selected_combo_idx()
@@ -2771,26 +2697,6 @@ class App(tk.Tk):
         sel = self.step_listbox.curselection()
         idx = sel[0] if sel else None
         self._duplicate_list_item(steps, idx, self.update_step_list, item_name="主步驟")
-
-    def unpack_main_step_combo(self):
-        if running and self.var_track_exec.get():
-            return self.set_status("當前為追蹤模式（已鎖定），請先取消勾選「追蹤執行」再進行操作！")
-        sel = self.step_listbox.curselection()
-        if not sel:
-            return self.set_status("請先在掛機流程選擇要展開的組合步驟！")
-        idx = sel[0]
-        step = steps[idx]
-        if step.get("type") != "combo":
-            return self.set_status("所選步驟不是組合，無法展開！")
-        c_actions = step.get("actions", [])
-        if not c_actions:
-            return self.set_status("此組合內沒有任何動作！")
-        del steps[idx]
-        for offset, act in enumerate(c_actions):
-            steps.insert(idx + offset, copy.deepcopy(act))
-        self.update_step_list(select_idx=idx)
-        self.set_status(f"已將組合 [{step.get('name', '')}] 展開為 {len(c_actions)} 個獨立步驟")
-        self.trigger_hot_reload()
 
     def delete_main_step(self):
         if running and self.var_track_exec.get():
