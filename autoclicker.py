@@ -704,7 +704,17 @@ class App(tk.Tk):
             exportselection=False
         )
         self.combo_act_listbox.pack(side="left", fill="both", expand=True)
+
+        def _on_combo_act_click(event):
+            idx = self.combo_act_listbox.nearest(event.y)
+            bbox = self.combo_act_listbox.bbox(idx)
+            if not bbox or event.y > (bbox[1] + bbox[3]):
+                self.combo_act_listbox.selection_clear(0, tk.END)
+                return "break"
+
+        self.combo_act_listbox.bind("<Button-1>", _on_combo_act_click)
         self.combo_act_listbox.bind("<Double-Button-1>", lambda e: self.edit_selected_combo_action())
+        f_cr_box.bind("<Button-1>", lambda e: self.combo_act_listbox.selection_clear(0, tk.END))
         sc_cr = tk.Scrollbar(f_cr_box, orient="vertical", command=self.combo_act_listbox.yview)
         sc_cr.pack(side="right", fill="y")
         self.combo_act_listbox.config(yscrollcommand=sc_cr.set)
@@ -829,7 +839,17 @@ class App(tk.Tk):
             exportselection=False
         )
         self.step_listbox.pack(side="left", fill="both", expand=True)
+
+        def _on_step_list_click(event):
+            idx = self.step_listbox.nearest(event.y)
+            bbox = self.step_listbox.bbox(idx)
+            if not bbox or event.y > (bbox[1] + bbox[3]):
+                self.step_listbox.selection_clear(0, tk.END)
+                return "break"
+
+        self.step_listbox.bind("<Button-1>", _on_step_list_click)
         self.step_listbox.bind("<Double-Button-1>", lambda e: self.edit_selected_main_step())
+        f_list_s.bind("<Button-1>", lambda e: self.step_listbox.selection_clear(0, tk.END))
         sc_step = tk.Scrollbar(f_list_s, orient="vertical", command=self.step_listbox.yview)
         sc_step.pack(side="right", fill="y")
         self.step_listbox.config(yscrollcommand=sc_step.set)
