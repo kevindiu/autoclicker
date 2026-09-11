@@ -25,7 +25,7 @@ from win32_api import (
     post_bg_key,
     force_bring_window_to_front
 )
-from widgets import VarTable
+from widgets import VarTable, PeriodicTaskCardView
 import dialogs
 import engine
 
@@ -112,8 +112,8 @@ class App(tk.Tk):
 
         self.last_active_step_idx = None
 
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_columnconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1, uniform="main_cols")
+        self.grid_columnconfigure(1, weight=1, uniform="main_cols")
         self.grid_rowconfigure(0, weight=1)
 
         self.build_left_panel()
@@ -181,13 +181,16 @@ class App(tk.Tk):
             self.after(50, self.poll_ui_queues)
 
     def set_status(self, msg):
-        """執行緒安全地更新狀態列訊息"""
+        """執行緒安全地更新狀態列訊息，並約束最大字數避免 Tkinter 佈局重算造成跳動"""
         if not self.is_closing:
             try:
+                s_msg = str(msg).strip()
+                if len(s_msg) > 52:
+                    s_msg = s_msg[:50] + "..."
                 if threading.current_thread() is threading.main_thread() and hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
-                    self.lbl_status.config(text=f"● 狀態: {msg}")
+                    self.lbl_status.config(text=f"● 狀態: {s_msg}")
                 else:
-                    self.status_queue.put(msg)
+                    self.status_queue.put(s_msg)
             except Exception:
                 pass
 
@@ -711,8 +714,8 @@ class App(tk.Tk):
         # 2. 自動循環清單（掛機流程）與定時週期任務 (左右雙清單並排)
         f_middle_split = tk.Frame(f_right, bg=UITheme.BG_PANEL)
         f_middle_split.pack(fill="both", expand=True, pady=(0, 3))
-        f_middle_split.grid_columnconfigure(0, weight=1)
-        f_middle_split.grid_columnconfigure(1, weight=1)
+        f_middle_split.grid_columnconfigure(0, weight=1, uniform="split_cols")
+        f_middle_split.grid_columnconfigure(1, weight=1, uniform="split_cols")
         f_middle_split.grid_rowconfigure(0, weight=1)
 
         # 2-A. 左側：自動循環清單（掛機流程）
@@ -826,23 +829,12 @@ class App(tk.Tk):
         f_list_pt = tk.Frame(f_pt, bg=UITheme.BG_DARK)
         f_list_pt.pack(side="top", fill="both", expand=True, pady=1)
 
-        self.periodic_listbox = tk.Listbox(
+        self.periodic_listbox = PeriodicTaskCardView(
             f_list_pt,
-            height=4,
-            bg=UITheme.BG_DARK,
-            fg=UITheme.TEXT_MAIN,
-            selectbackground=UITheme.ACCENT_BLUE,
-            selectforeground="#fff",
-            bd=0,
-            highlightthickness=0,
-            font=UITheme.FONT_NORMAL,
-            exportselection=False
+            on_double_click=self.edit_selected_periodic_task,
+            on_toggle=self.toggle_selected_periodic_task
         )
-        self.periodic_listbox.pack(side="left", fill="both", expand=True)
-        self.periodic_listbox.bind("<Double-Button-1>", lambda e: self.edit_selected_periodic_task())
-        sc_pt = tk.Scrollbar(f_list_pt, orient="vertical", command=self.periodic_listbox.yview)
-        sc_pt.pack(side="right", fill="y")
-        self.periodic_listbox.config(yscrollcommand=sc_pt.set)
+        self.periodic_listbox.pack(fill="both", expand=True)
 
         # 3. HUD 與主開關
         bot = tk.Frame(f_right, bg=UITheme.BG_PANEL)
@@ -1634,8 +1626,7 @@ class App(tk.Tk):
             return
         self.periodic_listbox.delete(0, tk.END)
         for pt in state.periodic_tasks:
-            summary = state.format_periodic_task_summary(pt, current_variables=state.variables)
-            self.periodic_listbox.insert(tk.END, summary)
+            self.periodic_listbox.insert(tk.END, pt)
         if select_idx is not None and 0 <= select_idx < len(state.periodic_tasks):
             self.periodic_listbox.selection_set(select_idx)
             self.periodic_listbox.see(select_idx)

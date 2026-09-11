@@ -68,10 +68,10 @@ def format_action_summary(act, index=None, current_variables=None):
 
     return body
 
-def format_periodic_task_summary(task, current_variables=None):
-    """格式化定時週期任務的顯示字串"""
+def format_periodic_task_summary(task, current_variables=None, max_name_len=18):
+    """格式化定時週期任務的顯示字串 (簡短俐落，支援長名稱智能縮略，避免溢出抖動)"""
     enabled = task.get("enabled", True)
-    enabled_str = "[✓ 啟用]" if enabled else "[✕ 停用]"
+    st_icon = "[✓]" if enabled else "[✕]"
     sec = task.get("interval", 1.0)
     try:
         f_sec = float(sec)
@@ -80,10 +80,30 @@ def format_periodic_task_summary(task, current_variables=None):
         sec_str = f"{sec}s"
 
     name = task.get("name", "").strip()
-    act = task.get("action", {})
-    act_summary = format_action_summary(act, current_variables=current_variables)
-    start_str = " (首發)" if task.get("run_on_start", False) else ""
+    start_str = " (首)" if task.get("run_on_start", False) else ""
+
     if name:
-        return f"{enabled_str} 每{sec_str} ➔ 【{name}】{act_summary}{start_str}"
+        disp_name = name if len(name) <= max_name_len else name[:max_name_len - 1] + "…"
+        return f"{st_icon} {sec_str} · {disp_name}{start_str}"
+
+    act = task.get("action", {})
+    var_name = act.get("var_name")
+    atype = act.get("type", "")
+
+    if var_name:
+        desc = f"變數:【{var_name}】"
+    elif atype == "call_combo":
+        desc = f"組合:【{act.get('target_name', '')}】"
+    elif atype == "key":
+        desc = f"按鍵 [{str(act.get('key', '')).upper()}]"
+    elif atype == "click":
+        btn_tag = "右鍵" if act.get("btn") == "right" else "左鍵"
+        desc = f"點擊·{btn_tag}"
+    elif atype == "wait":
+        desc = f"停頓 {act.get('sec', 0)}s"
     else:
-        return f"{enabled_str} 每{sec_str} ➔ {act_summary}{start_str}"
+        desc = f"[{atype}]"
+
+    disp_desc = desc if len(desc) <= max_name_len else desc[:max_name_len - 1] + "…"
+    return f"{st_icon} {sec_str} · {disp_desc}{start_str}"
+

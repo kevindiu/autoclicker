@@ -171,8 +171,7 @@ def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, 
                 return False
             task_name = pt.get("name", "").strip() or "定時任務"
             act = pt.get("action", {})
-            act_summary = state.format_action_summary(act, current_variables=current_vars)
-            app.set_status(f"{round_prefix}[定時觸發: {task_name}] {act_summary}")
+            app.set_status(f"{round_prefix}[定時] {task_name}")
 
             # 統一透過 dispatch_action 執行
             ok = dispatch_action(
