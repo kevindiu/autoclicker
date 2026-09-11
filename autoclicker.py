@@ -1079,7 +1079,7 @@ class App(tk.Tk):
         self.combo_listbox.delete(0, tk.END)
         for i, c in enumerate(state.combos):
             act_count = len(c.get("actions", []))
-            self.combo_listbox.insert(tk.END, f"{i+1:02d}. {c['name']} ({act_count}動作)")
+            self.combo_listbox.insert(tk.END, f"{c['name']} ({act_count}動作)")
         if select_idx is not None and 0 <= select_idx < len(state.combos):
             self.combo_listbox.selection_set(select_idx)
             self.on_combo_select()
@@ -1100,7 +1100,17 @@ class App(tk.Tk):
         self.refresh_call_combo_dropdown()
 
     def add_new_combo(self):
-        name = self.var_combo_name.get().strip() or f"組合{len(state.combos)+1}"
+        name = self.var_combo_name.get().strip()
+        if not name:
+            count = len(state.combos) + 1
+            name = f"組合{count}"
+            while any(c["name"] == name for c in state.combos):
+                count += 1
+                name = f"組合{count}"
+        elif any(c["name"] == name for c in state.combos):
+            messagebox.showwarning("名稱重覆", f"組合名稱「{name}」已存在！請使用其他名稱。", parent=self)
+            return
+
         state.combos.append({"name": name, "actions": []})
         self.refresh_combo_list(select_idx=len(state.combos)-1)
         self.set_status(f"已建立新組合: [{name}]")
@@ -1126,8 +1136,17 @@ class App(tk.Tk):
         idx = self.get_selected_combo_idx()
         if idx is None: return self.set_status("請先在左邊點選要改名的組合！")
         new_name = self.var_combo_name.get().strip()
-        if not new_name: return
+        if not new_name:
+            messagebox.showwarning("名稱錯誤", "組合名稱不能為空！", parent=self)
+            return
         old_name = state.combos[idx]["name"]
+        if new_name == old_name:
+            self.set_status(f"組合名稱未變更: [{old_name}]")
+            return
+        if any(c["name"] == new_name for c in state.combos):
+            messagebox.showwarning("名稱重覆", f"組合名稱「{new_name}」已存在！請使用其他名稱。", parent=self)
+            return
+
         state.combos[idx]["name"] = new_name
 
         for c in state.combos:
