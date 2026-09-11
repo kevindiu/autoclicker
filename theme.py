@@ -43,9 +43,9 @@ class UITheme:
     # ================= 統一清晰字體系統 (微軟正黑體 UI) =================
     FONT_FAMILY = "Microsoft JhengHei UI" if sys.platform == "win32" else ("PingFang TC" if sys.platform == "darwin" else "Noto Sans CJK TC")
     
-    FONT_SMALL = (FONT_FAMILY, 9)
-    FONT_SMALL_BOLD = (FONT_FAMILY, 9, "bold")
-    FONT_NORMAL = (FONT_FAMILY, 10)
-    FONT_NORMAL_BOLD = (FONT_FAMILY, 10, "bold")
-    FONT_TITLE = (FONT_FAMILY, 11, "bold")
-    FONT_BIG_BTN = (FONT_FAMILY, 12, "bold")
+    FONT_SMALL = (FONT_FAMILY, 8)
+    FONT_SMALL_BOLD = (FONT_FAMILY, 8, "bold")
+    FONT_NORMAL = (FONT_FAMILY, 9)
+    FONT_NORMAL_BOLD = (FONT_FAMILY, 9, "bold")
+    FONT_TITLE = (FONT_FAMILY, 10, "bold")
+    FONT_BIG_BTN = (FONT_FAMILY, 11, "bold")

@@ -488,6 +488,7 @@ class App(tk.Tk):
         col_v_btns.grid_columnconfigure(1, weight=1)
         col_v_btns.grid_rowconfigure(0, weight=1)
         col_v_btns.grid_rowconfigure(1, weight=1)
+        col_v_btns.grid_rowconfigure(2, weight=1)
 
         btn_var_add_main = tk.Button(
             col_v_btns,
@@ -497,8 +498,8 @@ class App(tk.Tk):
             activebackground=UITheme.ACCENT_BLUE_HOVER,
             font=UITheme.FONT_SMALL_BOLD,
             relief="flat",
-            padx=4,
-            pady=2,
+            padx=3,
+            pady=1,
             command=self.add_variable_to_main_steps
         )
         btn_var_add_main.grid(row=0, column=0, padx=1, pady=1, sticky="nsew")
@@ -511,8 +512,8 @@ class App(tk.Tk):
             activebackground=UITheme.ACCENT_GREEN_HOVER,
             font=UITheme.FONT_SMALL_BOLD,
             relief="flat",
-            padx=4,
-            pady=2,
+            padx=3,
+            pady=1,
             command=self.add_variable_dialog
         ).grid(row=0, column=1, padx=1, pady=1, sticky="nsew")
 
@@ -524,8 +525,8 @@ class App(tk.Tk):
             activebackground=UITheme.ACCENT_BLUE_HOVER,
             font=UITheme.FONT_SMALL_BOLD,
             relief="flat",
-            padx=4,
-            pady=2,
+            padx=3,
+            pady=1,
             command=self.edit_selected_variable
         ).grid(row=1, column=0, padx=1, pady=1, sticky="nsew")
 
@@ -537,16 +538,42 @@ class App(tk.Tk):
             activebackground=UITheme.ACCENT_RED_HOVER,
             font=UITheme.FONT_SMALL_BOLD,
             relief="flat",
-            padx=4,
-            pady=2,
+            padx=3,
+            pady=1,
             command=self.delete_selected_variable
         ).grid(row=1, column=1, padx=1, pady=1, sticky="nsew")
+
+        tk.Button(
+            col_v_btns,
+            text="▲ 上移",
+            bg=UITheme.BTN_GRAY,
+            fg="#fff",
+            activebackground=UITheme.BTN_GRAY_HOVER,
+            font=UITheme.FONT_SMALL_BOLD,
+            relief="flat",
+            padx=3,
+            pady=1,
+            command=lambda: self.move_variable(-1)
+        ).grid(row=2, column=0, padx=1, pady=1, sticky="nsew")
+
+        tk.Button(
+            col_v_btns,
+            text="▼ 下移",
+            bg=UITheme.BTN_GRAY,
+            fg="#fff",
+            activebackground=UITheme.BTN_GRAY_HOVER,
+            font=UITheme.FONT_SMALL_BOLD,
+            relief="flat",
+            padx=3,
+            pady=1,
+            command=lambda: self.move_variable(1)
+        ).grid(row=2, column=1, padx=1, pady=1, sticky="nsew")
 
         # 3. 技能組合區塊
         f_combo = tk.LabelFrame(pw_left, text=" 技能組合庫 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=6, pady=4)
 
-        pw_left.add(f_vars, minsize=80, height=135)
-        pw_left.add(f_combo, minsize=140)
+        pw_left.add(f_vars, minsize=85, height=155)
+        pw_left.add(f_combo, minsize=130)
 
         f_combo_split = tk.Frame(f_combo, bg=UITheme.BG_PANEL)
         f_combo_split.pack(fill="both", expand=True)
@@ -564,14 +591,19 @@ class App(tk.Tk):
 
         cr_btns = tk.Frame(f_cl, bg=UITheme.BG_PANEL)
         cr_btns.pack(fill="x", pady=(0, 2))
-        tk.Button(cr_btns, text="+ 新增", bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.add_new_combo).pack(side="left", fill="x", expand=True, padx=(0, 1))
-        tk.Button(cr_btns, text="✎ 改名", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.rename_selected_combo).pack(side="left", fill="x", expand=True, padx=1)
-        tk.Button(cr_btns, text="⎘ 複製", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.duplicate_selected_combo).pack(side="left", fill="x", expand=True, padx=(1, 0))
+        tk.Button(cr_btns, text="+ 新增", bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=1, command=self.add_new_combo).pack(side="left", fill="x", expand=True, padx=(0, 1))
+        tk.Button(cr_btns, text="✎ 改名", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=1, command=self.rename_selected_combo).pack(side="left", fill="x", expand=True, padx=1)
+        tk.Button(cr_btns, text="⎘ 複製", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=1, command=self.duplicate_selected_combo).pack(side="left", fill="x", expand=True, padx=(1, 0))
 
         cr_act = tk.Frame(f_cl, bg=UITheme.BG_PANEL)
-        cr_act.pack(side="bottom", fill="x", pady=(2, 0))
-        tk.Button(cr_act, text="➔ 加入掛機流程", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, font=UITheme.FONT_SMALL_BOLD, command=self.add_combo_to_main_steps).pack(side="left", fill="x", expand=True, padx=(0, 2))
-        tk.Button(cr_act, text="✕ 刪除", bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, font=UITheme.FONT_SMALL_BOLD, command=self.delete_selected_combo).pack(side="right")
+        cr_act.pack(side="bottom", fill="x", pady=(1, 0))
+        tk.Button(cr_act, text="➔ 加入掛機流程", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, font=UITheme.FONT_SMALL_BOLD, pady=1, command=self.add_combo_to_main_steps).pack(side="left", fill="x", expand=True, padx=(0, 2))
+        tk.Button(cr_act, text="✕ 刪除", bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, font=UITheme.FONT_SMALL_BOLD, pady=1, command=self.delete_selected_combo).pack(side="right")
+
+        cr_order = tk.Frame(f_cl, bg=UITheme.BG_PANEL)
+        cr_order.pack(side="bottom", fill="x", pady=(1, 1))
+        tk.Button(cr_order, text="▲ 上移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=1, command=lambda: self.move_combo(-1)).pack(side="left", fill="x", expand=True, padx=(0, 1))
+        tk.Button(cr_order, text="▼ 下移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=1, command=lambda: self.move_combo(1)).pack(side="left", fill="x", expand=True, padx=(1, 0))
 
         f_cl_box = tk.Frame(f_cl, bg=UITheme.BG_DARK)
         f_cl_box.pack(side="top", fill="both", expand=True, pady=2)
@@ -998,7 +1030,7 @@ class App(tk.Tk):
                 state.target_hwnd = None
 
     # ======================= 變數管理邏輯 =======================
-    def refresh_variables_table(self):
+    def refresh_variables_table(self, select_name=None):
         """重新整理變數表格一覽與關聯下拉選單"""
         if not hasattr(self, "tree_vars"):
             return
@@ -1026,6 +1058,9 @@ class App(tk.Tk):
                 v_str = str(val)
 
             self.tree_vars.insert("", "end", iid=name, values=(name, t_disp, v_str))
+
+        if select_name and hasattr(self.tree_vars, "select"):
+            self.tree_vars.select(select_name)
 
         var_names = list(state.variables.keys())
         if hasattr(self, "cbo_combo_add_var"):
@@ -1070,6 +1105,31 @@ class App(tk.Tk):
         self.refresh_combo_actions_list()
         self.update_step_list()
         self.set_status(f"已刪除變數: {var_name}")
+
+    def move_variable(self, delta):
+        sel = self.tree_vars.selection()
+        if not sel:
+            return self.set_status("請先在常用變數庫點選要移動的變數！")
+        sel_name = sel[0]
+        keys = list(state.variables.keys())
+        if sel_name not in keys:
+            return
+        idx = keys.index(sel_name)
+        target = idx + delta
+        if 0 <= target < len(keys):
+            keys[idx], keys[target] = keys[target], keys[idx]
+            new_vars = {k: state.variables[k] for k in keys}
+            state.variables.clear()
+            state.variables.update(new_vars)
+            with state.steps_lock:
+                state.active_variables = copy.deepcopy(state.variables)
+                state.reload_requested = True
+            self.refresh_variables_table(select_name=sel_name)
+            direction = "上移" if delta < 0 else "下移"
+            self.set_status(f"已將變數【{sel_name}】{direction}至 #{target+1}")
+            self.trigger_hot_reload()
+        else:
+            self.set_status("已在變數清單最頂或最底，無法再移動！")
 
     def _build_variable_action(self, var_name):
         """根據變數名稱與類型，組裝對應的動作字典與提示描述，若無效則回傳 (None, None)"""
@@ -1284,6 +1344,14 @@ class App(tk.Tk):
         self.update_step_list(select_idx=ins)
         self.set_status(f"已將組合 [{c['name']}] 加入掛機流程 #{ins+1}")
         self.trigger_hot_reload()
+
+    def move_combo(self, delta):
+        c_idx = self.get_selected_combo_idx()
+        if c_idx is None:
+            return self.set_status("請先在組合清單點選要移動的組合！")
+        def _refresh(target):
+            self.refresh_combo_list(select_idx=target)
+        self._move_list_item(state.combos, c_idx, delta, _refresh, item_name="技能組合")
 
     # ======================= 組合動作邏輯 =======================
     def get_selected_action_idx(self):

@@ -14,7 +14,7 @@ class VarTable(tk.Frame):
         self.rows = {}
 
         # 標題欄
-        self.hdr = tk.Frame(self, bg=UITheme.BG_PANEL, pady=3, padx=4)
+        self.hdr = tk.Frame(self, bg=UITheme.BG_PANEL, pady=2, padx=4)
         self.hdr.pack(fill="x")
         tk.Label(self.hdr, text="變數名稱", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_SMALL_BOLD, width=12, anchor="w").pack(side="left", padx=2)
         tk.Label(self.hdr, text="種類", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_SMALL_BOLD, width=9, anchor="center").pack(side="left", padx=2)
@@ -24,7 +24,7 @@ class VarTable(tk.Frame):
         f_box = tk.Frame(self, bg=bg)
         f_box.pack(fill="both", expand=True)
 
-        self.canvas = tk.Canvas(f_box, bg=bg, bd=0, highlightthickness=0, height=110)
+        self.canvas = tk.Canvas(f_box, bg=bg, bd=0, highlightthickness=0, height=130)
         self.scrollbar = tk.Scrollbar(f_box, orient="vertical", command=self.canvas.yview)
         self.body_frame = tk.Frame(self.canvas, bg=bg)
 
@@ -57,14 +57,14 @@ class VarTable(tk.Frame):
 
     def insert(self, parent, index, iid=None, values=()):
         name, t_disp, v_str = values
-        rf = tk.Frame(self.body_frame, bg=self.bg, pady=2, padx=4)
+        rf = tk.Frame(self.body_frame, bg=self.bg, pady=1, padx=4)
         rf.pack(fill="x", expand=True)
 
-        l1 = tk.Label(rf, text=name, bg=self.bg, fg=UITheme.TEXT_MAIN, font=UITheme.FONT_NORMAL, width=12, anchor="w")
+        l1 = tk.Label(rf, text=name, bg=self.bg, fg=UITheme.TEXT_MAIN, font=UITheme.FONT_SMALL, width=12, anchor="w")
         l1.pack(side="left", padx=2)
         l2 = tk.Label(rf, text=t_disp, bg=self.bg, fg=UITheme.CYAN_SUB, font=UITheme.FONT_SMALL_BOLD, width=9, anchor="center")
         l2.pack(side="left", padx=2)
-        l3 = tk.Label(rf, text=v_str, bg=self.bg, fg="#e5e7eb", font=UITheme.FONT_NORMAL, anchor="w")
+        l3 = tk.Label(rf, text=v_str, bg=self.bg, fg="#e5e7eb", font=UITheme.FONT_SMALL, anchor="w")
         l3.pack(side="left", fill="x", expand=True, padx=2)
 
         for w in (rf, l1, l2, l3):
@@ -92,6 +92,23 @@ class VarTable(tk.Frame):
 
     def selection(self):
         return (self.selected_name,) if self.selected_name else ()
+
+    def select(self, name):
+        self._select(name)
+        if name in self.rows:
+            try:
+                rf = self.rows[name]['frame']
+                self.update_idletasks()
+                y = rf.winfo_y()
+                total_h = self.body_frame.winfo_height()
+                if total_h > 0:
+                    frac = max(0.0, min(1.0, y / total_h))
+                    self.canvas.yview_moveto(frac)
+            except Exception:
+                pass
+
+    def selection_set(self, name):
+        self.select(name)
 
 
 # ==============================================================================
