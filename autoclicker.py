@@ -545,7 +545,7 @@ class App(tk.Tk):
         # 3. 技能組合區塊
         f_combo = tk.LabelFrame(pw_left, text=" 技能組合庫 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=6, pady=4)
 
-        pw_left.add(f_vars, minsize=65, height=110)
+        pw_left.add(f_vars, minsize=80, height=135)
         pw_left.add(f_combo, minsize=140)
 
         f_combo_split = tk.Frame(f_combo, bg=UITheme.BG_PANEL)

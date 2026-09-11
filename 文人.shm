@@ -1,4 +1,18 @@
 {
+  "variables": {
+    "掛機位置": {
+      "type": "coord",
+      "value": {
+        "x": 517,
+        "y": 514,
+        "btn": "left"
+      }
+    },
+    "汁野": {
+      "type": "key",
+      "value": "f2"
+    }
+  },
   "combos": [
     {
       "name": "P1英HP",
@@ -197,10 +211,6 @@
       "name": "SIT",
       "actions": [
         {
-          "type": "wait",
-          "sec": 0.5
-        },
-        {
           "type": "key",
           "key": "f1"
         },
@@ -224,33 +234,32 @@
       ]
     },
     {
-      "name": "地圖",
+      "name": "返回原位",
       "actions": [
         {
           "type": "key",
-          "key": "tab"
+          "key": "tab",
+          "enabled": true
         },
         {
           "type": "wait",
-          "sec": 0.5
+          "sec": 0.2
         },
         {
           "type": "click",
-          "x": 1008,
-          "y": 677,
-          "rel": true
+          "btn": "left",
+          "x": 724,
+          "y": 503,
+          "rel": true,
+          "var_name": "掛機位置"
         },
         {
           "type": "wait",
-          "sec": 0.5
+          "sec": 0.2
         },
         {
           "type": "key",
           "key": "tab"
-        },
-        {
-          "type": "wait",
-          "sec": 1.0
         }
       ]
     },
@@ -259,11 +268,30 @@
       "actions": [
         {
           "type": "key",
-          "key": "f2"
+          "key": "f2",
+          "var_name": "汁野"
         },
         {
           "type": "key",
-          "key": "f2"
+          "key": "f2",
+          "var_name": "汁野"
+        },
+        {
+          "type": "wait",
+          "sec": 0.5
+        }
+      ]
+    },
+    {
+      "name": "汁野再返回原位",
+      "actions": [
+        {
+          "type": "call_combo",
+          "target_name": "汁野"
+        },
+        {
+          "type": "call_combo",
+          "target_name": "返回原位"
         }
       ]
     }
@@ -285,58 +313,59 @@
     },
     {
       "type": "combo",
-      "name": "P1英HP",
+      "name": "P1人HP",
       "actions": [
         {
           "type": "click",
-          "x": 163,
-          "y": 212,
+          "x": 97,
+          "y": 194,
           "rel": true
         },
         {
           "type": "call_combo",
           "target_name": "HP"
         }
-      ]
+      ],
+      "enabled": true
     },
     {
       "type": "combo",
-      "name": "P3英HP",
+      "name": "P1人HP",
       "actions": [
         {
           "type": "click",
-          "x": 165,
-          "y": 307,
+          "x": 97,
+          "y": 194,
           "rel": true
         },
         {
           "type": "call_combo",
           "target_name": "HP"
         }
-      ]
+      ],
+      "enabled": true
     },
     {
       "type": "combo",
-      "name": "汁野",
+      "name": "P1人HP",
       "actions": [
         {
-          "type": "key",
-          "key": "f2"
+          "type": "click",
+          "x": 97,
+          "y": 194,
+          "rel": true
         },
         {
-          "type": "key",
-          "key": "f2"
+          "type": "call_combo",
+          "target_name": "HP"
         }
-      ]
+      ],
+      "enabled": true
     },
     {
       "type": "combo",
       "name": "SIT",
       "actions": [
-        {
-          "type": "wait",
-          "sec": 0.5
-        },
         {
           "type": "key",
           "key": "f1"
@@ -346,132 +375,19 @@
           "sec": 4.5
         }
       ]
-    },
+    }
+  ],
+  "periodic_tasks": [
     {
-      "type": "combo",
-      "name": "地圖",
-      "actions": [
-        {
-          "type": "key",
-          "key": "tab"
-        },
-        {
-          "type": "wait",
-          "sec": 0.5
-        },
-        {
-          "type": "click",
-          "x": 1008,
-          "y": 677,
-          "rel": true
-        },
-        {
-          "type": "wait",
-          "sec": 0.5
-        },
-        {
-          "type": "key",
-          "key": "tab"
-        },
-        {
-          "type": "wait",
-          "sec": 1.0
-        }
-      ]
-    },
-    {
-      "type": "combo",
-      "name": "P6英HP",
-      "actions": [
-        {
-          "type": "click",
-          "x": 159,
-          "y": 436,
-          "rel": true
-        },
-        {
-          "type": "call_combo",
-          "target_name": "HP"
-        }
-      ]
-    },
-    {
-      "type": "combo",
-      "name": "群回",
-      "actions": [
-        {
-          "type": "key",
-          "key": "f5"
-        },
-        {
-          "type": "wait",
-          "sec": 2.9
-        }
-      ]
-    },
-    {
-      "type": "combo",
-      "name": "汁野",
-      "actions": [
-        {
-          "type": "key",
-          "key": "f2"
-        },
-        {
-          "type": "key",
-          "key": "f2"
-        }
-      ]
-    },
-    {
-      "type": "combo",
-      "name": "SIT",
-      "actions": [
-        {
-          "type": "wait",
-          "sec": 0.5
-        },
-        {
-          "type": "key",
-          "key": "f1"
-        },
-        {
-          "type": "wait",
-          "sec": 4.5
-        }
-      ]
-    },
-    {
-      "type": "combo",
-      "name": "地圖",
-      "actions": [
-        {
-          "type": "key",
-          "key": "tab"
-        },
-        {
-          "type": "wait",
-          "sec": 0.5
-        },
-        {
-          "type": "click",
-          "x": 1008,
-          "y": 677,
-          "rel": true
-        },
-        {
-          "type": "wait",
-          "sec": 0.5
-        },
-        {
-          "type": "key",
-          "key": "tab"
-        },
-        {
-          "type": "wait",
-          "sec": 1.0
-        }
-      ]
+      "id": "pt_1789111006714",
+      "name": "定時_汁野再返回原位",
+      "interval": 10.0,
+      "enabled": true,
+      "run_on_start": false,
+      "action": {
+        "type": "call_combo",
+        "target_name": "汁野再返回原位"
+      }
     }
   ]
 }

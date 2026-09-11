@@ -24,7 +24,7 @@ class VarTable(tk.Frame):
         f_box = tk.Frame(self, bg=bg)
         f_box.pack(fill="both", expand=True)
 
-        self.canvas = tk.Canvas(f_box, bg=bg, bd=0, highlightthickness=0, height=82)
+        self.canvas = tk.Canvas(f_box, bg=bg, bd=0, highlightthickness=0, height=110)
         self.scrollbar = tk.Scrollbar(f_box, orient="vertical", command=self.canvas.yview)
         self.body_frame = tk.Frame(self.canvas, bg=bg)
 
