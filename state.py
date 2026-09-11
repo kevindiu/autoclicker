@@ -24,7 +24,6 @@ def format_action_summary(act, index=None, current_variables=None):
     var_dict = current_variables if current_variables is not None else variables
     atype = act.get("type", "")
 
-    idx_prefix = f"#{index+1:02d} " if index is not None else ""
     var_name = act.get("var_name")
 
     if atype == "click":
@@ -65,4 +64,4 @@ def format_action_summary(act, index=None, current_variables=None):
     else:
         body = f"[{atype}]"
 
-    return f"{idx_prefix}{body}"
+    return body
