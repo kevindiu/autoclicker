@@ -128,19 +128,19 @@ def post_bg_click(hwnd, client_x, client_y, offset_x=0, offset_y=0, btn="left"):
         return int(client_x), int(client_y)
     cx, cy = int(client_x) + offset_x, int(client_y) + offset_y
     lparam = to_lparam(((int(cy) & 0xFFFF) << 16) | (int(cx) & 0xFFFF))
+
+    down_msg = 0x0204 if btn == "right" else 0x0201
+    down_wparam = 0x0002 if btn == "right" else 0x0001
+    up_msg = 0x0205 if btn == "right" else 0x0202
+
+    # 連續立即發送 WM_MOUSEMOVE 與 WM_LBUTTONDOWN，絕不停頓，保證訊息原子性連續被遊戲處理，防止硬體滑鼠訊息插隊
     user32.PostMessageW(hwnd, 0x0200, 0, lparam)
-    if safe_sleep(0.02):
+    user32.PostMessageW(hwnd, down_msg, down_wparam, lparam)
+    if safe_sleep(0.04):
         try:
-            if btn == "right":
-                user32.PostMessageW(hwnd, 0x0204, 0x0002, lparam)
-            else:
-                user32.PostMessageW(hwnd, 0x0201, 0x0001, lparam)
-            safe_sleep(0.08)
-        finally:
-            if btn == "right":
-                user32.PostMessageW(hwnd, 0x0205, 0, lparam)
-            else:
-                user32.PostMessageW(hwnd, 0x0202, 0, lparam)
+            user32.PostMessageW(hwnd, up_msg, 0, lparam)
+        except Exception:
+            pass
     return cx, cy
 
 def post_bg_key(hwnd, key_str):

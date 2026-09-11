@@ -25,9 +25,11 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
         if not state.running or state.stop_event.is_set():
             return False
         if current_vars is None:
-            current_vars = {}
+            with state.steps_lock:
+                current_vars = copy.deepcopy(state.active_variables)
         if current_combos is None:
-            current_combos = []
+            with state.steps_lock:
+                current_combos = copy.deepcopy(state.active_combos)
     else:
         if state.stop_event.is_set():
             return False
@@ -56,14 +58,21 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
 
     atype = act.get("type")
     if atype == "click":
-        x, y = act["x"], act["y"]
+        x = act.get("x", 0)
+        y = act.get("y", 0)
         btn = act.get("btn", "left")
+        is_rel = act.get("rel")
         if v_data and v_data.get("type") == "coord":
             val = v_data.get("value", {})
             if isinstance(val, dict):
-                x, y = val.get("x", x), val.get("y", y)
+                x = val.get("x", x)
+                y = val.get("y", y)
                 btn = val.get("btn", btn)
-        msg = execute_click(x, y, act.get("rel"), use_bg, off_x, off_y, btn=btn)
+                if "rel" in val:
+                    is_rel = val.get("rel")
+        if is_rel is None:
+            is_rel = True if state.target_hwnd else False
+        msg = execute_click(x, y, is_rel, use_bg, off_x, off_y, btn=btn)
         var_info = f"【{var_name}】" if var_name else ""
         app.set_status(f"{round_prefix}{parent_desc} {var_info}{msg}")
         if not safe_sleep(0.12):

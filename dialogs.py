@@ -67,11 +67,14 @@ def prompt_variable_dialog(app, edit_name=None):
         init_x = str(orig_val.get("x", 0))
         init_y = str(orig_val.get("y", 0))
         init_btn = "右鍵" if orig_val.get("btn") == "right" else "左鍵"
+        init_rel = orig_val.get("rel", True)
     else:
         init_x, init_y, init_btn = "0", "0", "左鍵"
+        init_rel = True
     var_x = tk.StringVar(value=init_x)
     var_y = tk.StringVar(value=init_y)
     var_btn = tk.StringVar(value=init_btn)
+    var_rel = [init_rel]
 
     init_key = str(orig_val) if orig_type == "key" else "f1"
     var_key = tk.StringVar(value=init_key)
@@ -93,6 +96,7 @@ def prompt_variable_dialog(app, edit_name=None):
             dialog.grab_set()
             var_x.set(str(rx))
             var_y.set(str(ry))
+            var_rel[0] = rel
             btn_cn = "右鍵" if target_btn == "right" else "左鍵"
             app.set_status(f"變數取點成功 [{btn_cn}]: ({rx}, {ry})")
         def on_cancel():
@@ -178,7 +182,7 @@ def prompt_variable_dialog(app, edit_name=None):
                 messagebox.showerror("錯誤", "坐標 X 與 Y 必須是整數！", parent=dialog)
                 return
             btn_type = "right" if var_btn.get() == "右鍵" else "left"
-            val = {"x": px, "y": py, "btn": btn_type}
+            val = {"x": px, "y": py, "btn": btn_type, "rel": var_rel[0]}
         elif type_key == "key":
             k = var_key.get().strip().lower()
             if not k:
@@ -545,6 +549,7 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
                 action["x"] = int(var_x.get().strip())
                 action["y"] = int(var_y.get().strip())
                 action["btn"] = "right" if var_btn.get() == "右鍵" else "left"
+                action["rel"] = action.get("rel", True)
                 chosen = var_ref.get()
                 if chosen in coord_vars:
                     action["var_name"] = chosen
@@ -893,7 +898,8 @@ def prompt_edit_periodic_task(app, task=None):
                 btn = v_val.get("btn", "left") if isinstance(v_val, dict) else "left"
                 x = v_val.get("x", 0) if isinstance(v_val, dict) else 0
                 y = v_val.get("y", 0) if isinstance(v_val, dict) else 0
-                return {"type": "click", "x": x, "y": y, "btn": btn, "var_name": v_name}
+                rel = v_val.get("rel", True) if isinstance(v_val, dict) else True
+                return {"type": "click", "x": x, "y": y, "btn": btn, "rel": rel, "var_name": v_name}
             elif v_type == "wait":
                 try:
                     sec = float(v_val)
@@ -914,7 +920,7 @@ def prompt_edit_periodic_task(app, task=None):
                 x = int(var_x.get().strip())
                 y = int(var_y.get().strip())
                 btn = "right" if var_btn.get() == "右鍵" else "left"
-                return {"type": "click", "x": x, "y": y, "btn": btn}
+                return {"type": "click", "x": x, "y": y, "btn": btn, "rel": True}
             except ValueError:
                 messagebox.showerror("錯誤", "坐標 X 與 Y 必須輸入整數！", parent=dialog)
                 return None
