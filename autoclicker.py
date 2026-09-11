@@ -11,7 +11,7 @@ import pyautogui
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 
-from theme import UITheme, resource_path, WINDOW_TITLE, CONFIG_EXT
+from theme import UITheme, resource_path, WINDOW_TITLE, BASE_WINDOW_TITLE, CONFIG_EXT
 import state
 from state import format_action_summary
 from win32_api import (
@@ -877,7 +877,7 @@ class App(tk.Tk):
                 buff = ctypes.create_unicode_buffer(user32.GetWindowTextLengthW(hwnd) + 1)
                 user32.GetWindowTextW(hwnd, buff, len(buff))
                 t = buff.value.strip()
-                if t and WINDOW_TITLE not in t:
+                if t and BASE_WINDOW_TITLE not in t:
                     windows.append((hwnd, t))
             return True
         cb = WNDENUMPROC(enum_proc)

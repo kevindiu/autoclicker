@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -37,6 +39,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Inject Git Tag Version
+        run: |
+          python -c "import sys; v = sys.argv[1].strip() if len(sys.argv) > 1 and sys.argv[1].strip() else 'dev'; open('VERSION', 'w', encoding='utf-8').write(v)" "${{ github.ref_name }}"
+
       - name: Build Windows Executable
         if: runner.os == 'Windows'
         run: |
@@ -47,6 +53,7 @@ jobs:
             "--noupx",
             "--icon=app.ico",
             "--add-data=app.ico;.",
+            "--add-data=VERSION;.",
             "--exclude-module=PIL",
             "--exclude-module=Pillow",
             "--exclude-module=pymsgbox",
@@ -79,6 +86,7 @@ jobs:
             --icon=app.icns \
             --add-data "app.ico:." \
             --add-data "app.png:." \
+            --add-data "VERSION:." \
             --exclude-module PIL \
             --exclude-module Pillow \
             --exclude-module pymsgbox \

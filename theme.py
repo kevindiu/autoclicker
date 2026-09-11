@@ -1,15 +1,9 @@
 import os
 import sys
+from version import get_window_title, BASE_WINDOW_TITLE, get_app_version, resource_path
 
-WINDOW_TITLE = "水滸歷險 巨集助手"
+WINDOW_TITLE = get_window_title()
 CONFIG_EXT = ".shm"
-
-def resource_path(relative_path):
-    """獲取資源絕對路徑 (相容 PyInstaller 單一執行檔打包與原始碼執行)"""
-    if hasattr(sys, '_MEIPASS'):
-        return os.path.join(sys._MEIPASS, relative_path)
-    base_dir = os.path.abspath(os.path.dirname(__file__)) if '__file__' in globals() else os.path.abspath(".")
-    return os.path.join(base_dir, relative_path)
 
 # ==============================================================================
 # UI 色彩與樣式主題配置 (保持原有配色一致性)
