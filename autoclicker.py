@@ -1256,6 +1256,19 @@ class App(tk.Tk):
         col_v_btns = tk.Frame(f_vars_row, bg=UITheme.BG_PANEL)
         col_v_btns.pack(side="right", fill="y")
 
+        self.btn_var_add_main = tk.Button(
+            col_v_btns,
+            text="➔ 加入流程",
+            width=10,
+            bg=UITheme.ACCENT_BLUE,
+            fg="#fff",
+            activebackground=UITheme.ACCENT_BLUE_HOVER,
+            font=UITheme.FONT_SMALL_BOLD,
+            relief="flat",
+            command=self.add_variable_to_main_steps
+        )
+        self.btn_var_add_main.pack(fill="x", expand=True, pady=(0, 1))
+
         tk.Button(
             col_v_btns,
             text="+ 新增變數",
@@ -1266,7 +1279,7 @@ class App(tk.Tk):
             font=UITheme.FONT_SMALL_BOLD,
             relief="flat",
             command=self.add_variable_dialog
-        ).pack(fill="x", expand=True, pady=(0, 2))
+        ).pack(fill="x", expand=True, pady=1)
 
         tk.Button(
             col_v_btns,
@@ -1278,7 +1291,7 @@ class App(tk.Tk):
             font=UITheme.FONT_SMALL_BOLD,
             relief="flat",
             command=self.edit_selected_variable
-        ).pack(fill="x", expand=True, pady=2)
+        ).pack(fill="x", expand=True, pady=1)
 
         tk.Button(
             col_v_btns,
@@ -1290,7 +1303,7 @@ class App(tk.Tk):
             font=UITheme.FONT_SMALL_BOLD,
             relief="flat",
             command=self.delete_selected_variable
-        ).pack(fill="x", expand=True, pady=(2, 0))
+        ).pack(fill="x", expand=True, pady=(1, 0))
 
         # 3. 技能組合區塊
         f_combo = tk.LabelFrame(f_left, text=" 技能組合庫 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=6, pady=6)
@@ -2049,6 +2062,56 @@ class App(tk.Tk):
         self.refresh_combo_actions_list()
         self.update_step_list()
         self.set_status(f"已刪除變數: {var_name}")
+
+    def add_variable_to_main_steps(self):
+        """將表格中所選定的變數以引用方式直接加入掛機流程"""
+        if running and self.var_track_exec.get():
+            return self.set_status("當前為追蹤模式（已鎖定），請先取消勾選「追蹤執行」再加入變數！")
+        sel = self.tree_vars.selection()
+        if not sel:
+            return self.set_status("請先在表格中選擇要加入流程的變數！")
+        var_name = sel[0]
+        if var_name not in variables:
+            return self.set_status("找不到所選變數！")
+
+        v_info = variables[var_name]
+        v_type = v_info.get("type", "coord")
+        v_val = v_info.get("value")
+
+        if v_type == "coord":
+            px = v_val.get("x", 0) if isinstance(v_val, dict) else 0
+            py = v_val.get("y", 0) if isinstance(v_val, dict) else 0
+            btn = v_val.get("btn", "left") if isinstance(v_val, dict) else "left"
+            btn_cn = "右鍵" if btn == "right" else "左鍵"
+            new_act = {
+                "type": "click",
+                "btn": btn,
+                "x": px,
+                "y": py,
+                "rel": self.var_use_rel.get(),
+                "var_name": var_name
+            }
+            msg = f"已將變數【{var_name}】({btn_cn}點擊) 加入掛機流程"
+        elif v_type == "key":
+            new_act = {
+                "type": "key",
+                "key": str(v_val),
+                "var_name": var_name
+            }
+            msg = f"已將變數【{var_name}】(按鍵[{str(v_val).upper()}]) 加入掛機流程"
+        elif v_type == "wait":
+            try: sec = float(v_val)
+            except Exception: sec = 1.0
+            new_act = {
+                "type": "wait",
+                "sec": sec,
+                "var_name": var_name
+            }
+            msg = f"已將變數【{var_name}】(停頓{sec}s) 加入掛機流程"
+        else:
+            return
+
+        self._insert_action_to_target(new_act, is_combo=False, success_msg=msg)
 
     def combo_add_variable_action(self):
         """將選定的變數以引用方式加入當前選取組合"""
