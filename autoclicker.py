@@ -112,8 +112,8 @@ class App(tk.Tk):
 
         self.last_active_step_idx = None
 
-        self.grid_columnconfigure(0, weight=6)
-        self.grid_columnconfigure(1, weight=5)
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
         self.build_left_panel()
@@ -122,6 +122,7 @@ class App(tk.Tk):
         self.refresh_profiles()
         self.load_config()
         self.refresh_variables_table()
+        self.update_periodic_list()
         self.track_mouse_live()
 
         # 執行緒安全的 UI 通訊佇列
@@ -622,16 +623,20 @@ class App(tk.Tk):
         self.cbo_combo_add_var.pack(side="left", fill="x", expand=True, padx=(0, 1))
         tk.Button(f_var, text="+ 引用變數", width=8, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.combo_add_variable_action).pack(side="left")
 
-        # 底部單層全功能管理工具列 (統一佈局順序：上移/下移/試跑/修改/複製/刪除/清空)
+        # 底部管理工具列 (移除清空鈕，改為 2 行 3 列 (3x2) 網格佈局)
         cr_act_ctrl = tk.Frame(f_cr, bg=UITheme.BG_PANEL)
         cr_act_ctrl.pack(side="bottom", fill="x", pady=(2, 1))
-        tk.Button(cr_act_ctrl, text="▲ 上移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: self.move_combo_action(-1)).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl, text="▼ 下移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: self.move_combo_action(1)).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl, text="▶ 試跑", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.test_run_selected_combo_action).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl, text="✎ 修改", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.edit_selected_combo_action).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl, text="⎘ 複製", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.duplicate_combo_action).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl, text="✕ 刪除", bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.delete_combo_action).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(cr_act_ctrl, text="✕ 清空", bg=UITheme.ACCENT_RED_DARK, fg="#fff", activebackground=UITheme.ACCENT_RED_DARK_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.clear_combo_actions).pack(side="left", padx=1, fill="x", expand=True)
+        cr_act_ctrl.grid_columnconfigure(0, weight=1)
+        cr_act_ctrl.grid_columnconfigure(1, weight=1)
+        cr_act_ctrl.grid_columnconfigure(2, weight=1)
+
+        tk.Button(cr_act_ctrl, text="▲ 上移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: self.move_combo_action(-1)).grid(row=0, column=0, padx=1, pady=1, sticky="nsew")
+        tk.Button(cr_act_ctrl, text="▼ 下移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: self.move_combo_action(1)).grid(row=0, column=1, padx=1, pady=1, sticky="nsew")
+        tk.Button(cr_act_ctrl, text="▶ 試跑", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.test_run_selected_combo_action).grid(row=0, column=2, padx=1, pady=1, sticky="nsew")
+
+        tk.Button(cr_act_ctrl, text="✎ 修改", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.edit_selected_combo_action).grid(row=1, column=0, padx=1, pady=1, sticky="nsew")
+        tk.Button(cr_act_ctrl, text="⎘ 複製", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.duplicate_combo_action).grid(row=1, column=1, padx=1, pady=1, sticky="nsew")
+        tk.Button(cr_act_ctrl, text="✕ 刪除", bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.delete_combo_action).grid(row=1, column=2, padx=1, pady=1, sticky="nsew")
 
         # 動作清單 (由 side="top", expand=True 自動填補剩餘高度)
         f_cr_box = tk.Frame(f_cr, bg=UITheme.BG_DARK)
@@ -703,14 +708,21 @@ class App(tk.Tk):
         self.cbo_step_add_var.pack(side="left", fill="x", expand=True, padx=(0, 1))
         tk.Button(f_svar, text="+ 引用變數", width=8, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.step_add_variable_action).pack(side="left")
 
-        # 2. 自動循環清單（掛機流程）
-        f_seq = tk.LabelFrame(f_right, text=" 掛機流程清單 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=6, pady=6)
-        f_seq.pack(fill="both", expand=True)
+        # 2. 自動循環清單（掛機流程）與定時週期任務 (左右雙清單並排)
+        f_middle_split = tk.Frame(f_right, bg=UITheme.BG_PANEL)
+        f_middle_split.pack(fill="both", expand=True, pady=(0, 3))
+        f_middle_split.grid_columnconfigure(0, weight=1)
+        f_middle_split.grid_columnconfigure(1, weight=1)
+        f_middle_split.grid_rowconfigure(0, weight=1)
 
-        # 頂部控制列 (標題/提示、游標跟隨 與 試跑流程)
+        # 2-A. 左側：自動循環清單（掛機流程）
+        f_seq = tk.LabelFrame(f_middle_split, text=" 掛機流程清單 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=4, pady=4)
+        f_seq.grid(row=0, column=0, sticky="nsew", padx=(0, 2))
+
+        # 頂部控制列 (標題/提示 與 試跑流程)
         f_seq_hdr = tk.Frame(f_seq, bg=UITheme.BG_PANEL)
         f_seq_hdr.pack(fill="x", pady=(0, 2))
-        self.lbl_seq_hint = tk.Label(f_seq_hdr, text="【流程步驟】 (雙擊可修改)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL)
+        self.lbl_seq_hint = tk.Label(f_seq_hdr, text="【流程步驟】 (雙擊修改)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL)
         self.lbl_seq_hint.pack(side="left")
 
         self.btn_main_test_all = tk.Button(
@@ -721,32 +733,39 @@ class App(tk.Tk):
             activebackground=UITheme.ACCENT_INDIGO_HOVER,
             font=UITheme.FONT_SMALL_BOLD,
             relief="flat",
-            padx=6,
+            padx=4,
             command=self.test_run_execution_flow
         )
         self.btn_main_test_all.pack(side="right")
 
-        # 底部單層全功能管理工具列 (統一佈局順序：上移/下移/試跑/修改/複製/刪除/清空)
+        # 底部 2 行 3 列 (3x2) 工具列 (上移/下移/試跑, 修改/複製/刪除)
         sr2 = tk.Frame(f_seq, bg=UITheme.BG_PANEL)
         sr2.pack(side="bottom", fill="x", pady=(2, 0))
+        sr2.grid_columnconfigure(0, weight=1)
+        sr2.grid_columnconfigure(1, weight=1)
+        sr2.grid_columnconfigure(2, weight=1)
+
         self.btn_main_up = tk.Button(sr2, text="▲ 上移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: self.move_main_step(-1))
-        self.btn_main_up.pack(side="left", padx=1, fill="x", expand=True)
+        self.btn_main_up.grid(row=0, column=0, padx=1, pady=1, sticky="nsew")
+
         self.btn_main_down = tk.Button(sr2, text="▼ 下移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: self.move_main_step(1))
-        self.btn_main_down.pack(side="left", padx=1, fill="x", expand=True)
-        self.btn_main_test = tk.Button(sr2, text="▶ 試跑步驟", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.test_run_selected_main_step)
-        self.btn_main_test.pack(side="left", padx=1, fill="x", expand=True)
+        self.btn_main_down.grid(row=0, column=1, padx=1, pady=1, sticky="nsew")
+
+        self.btn_main_test = tk.Button(sr2, text="▶ 試跑", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.test_run_selected_main_step)
+        self.btn_main_test.grid(row=0, column=2, padx=1, pady=1, sticky="nsew")
+
         self.btn_main_edit = tk.Button(sr2, text="✎ 修改", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.edit_selected_main_step)
-        self.btn_main_edit.pack(side="left", padx=1, fill="x", expand=True)
+        self.btn_main_edit.grid(row=1, column=0, padx=1, pady=1, sticky="nsew")
+
         self.btn_main_dup = tk.Button(sr2, text="⎘ 複製", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.duplicate_main_step)
-        self.btn_main_dup.pack(side="left", padx=1, fill="x", expand=True)
+        self.btn_main_dup.grid(row=1, column=1, padx=1, pady=1, sticky="nsew")
+
         self.btn_main_del = tk.Button(sr2, text="✕ 刪除", bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.delete_main_step)
-        self.btn_main_del.pack(side="left", padx=1, fill="x", expand=True)
-        self.btn_main_clear = tk.Button(sr2, text="✕ 清空", bg=UITheme.ACCENT_RED_DARK, fg="#fff", activebackground=UITheme.ACCENT_RED_DARK_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.clear_main_steps)
-        self.btn_main_clear.pack(side="left", padx=1, fill="x", expand=True)
+        self.btn_main_del.grid(row=1, column=2, padx=1, pady=1, sticky="nsew")
 
         # 流程清單 (由 side="top", expand=True 自動填補剩餘高度)
         f_list_s = tk.Frame(f_seq, bg=UITheme.BG_DARK)
-        f_list_s.pack(side="top", fill="both", expand=True, pady=2)
+        f_list_s.pack(side="top", fill="both", expand=True, pady=1)
 
         self.step_listbox = tk.Listbox(
             f_list_s,
@@ -765,6 +784,65 @@ class App(tk.Tk):
         sc_step = tk.Scrollbar(f_list_s, orient="vertical", command=self.step_listbox.yview)
         sc_step.pack(side="right", fill="y")
         self.step_listbox.config(yscrollcommand=sc_step.set)
+
+        # 2-B. 右側：定時週期任務清單
+        f_pt = tk.LabelFrame(f_middle_split, text=" 定時週期任務 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=4, pady=4)
+        f_pt.grid(row=0, column=1, sticky="nsew", padx=(2, 0))
+
+        f_pt_hdr = tk.Frame(f_pt, bg=UITheme.BG_PANEL)
+        f_pt_hdr.pack(fill="x", pady=(0, 2))
+        lbl_pt_hint = tk.Label(f_pt_hdr, text="【定時任務】 (雙擊修改)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL)
+        lbl_pt_hint.pack(side="left")
+
+        btn_pt_add_hdr = tk.Button(
+            f_pt_hdr,
+            text="+ 新增",
+            bg=UITheme.ACCENT_GREEN,
+            fg="#fff",
+            activebackground=UITheme.ACCENT_GREEN_HOVER,
+            font=UITheme.FONT_SMALL_BOLD,
+            relief="flat",
+            padx=6,
+            command=self.add_new_periodic_task
+        )
+        btn_pt_add_hdr.pack(side="right")
+
+        # 底部 2 行 3 列 (3x2) 工具列 (+新增/✎修改/✓開關, ▶試跑/⎘複製/✕刪除)
+        pt_ctrl = tk.Frame(f_pt, bg=UITheme.BG_PANEL)
+        pt_ctrl.pack(side="bottom", fill="x", pady=(2, 0))
+        pt_ctrl.grid_columnconfigure(0, weight=1)
+        pt_ctrl.grid_columnconfigure(1, weight=1)
+        pt_ctrl.grid_columnconfigure(2, weight=1)
+
+        tk.Button(pt_ctrl, text="+ 新增", bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.add_new_periodic_task).grid(row=0, column=0, padx=1, pady=1, sticky="nsew")
+        tk.Button(pt_ctrl, text="✎ 修改", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.edit_selected_periodic_task).grid(row=0, column=1, padx=1, pady=1, sticky="nsew")
+        tk.Button(pt_ctrl, text="✓ 開關", bg=UITheme.ACCENT_CYAN, fg="#fff", activebackground=UITheme.ACCENT_CYAN_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.toggle_selected_periodic_task).grid(row=0, column=2, padx=1, pady=1, sticky="nsew")
+
+        tk.Button(pt_ctrl, text="▶ 試跑", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.test_run_selected_periodic_task).grid(row=1, column=0, padx=1, pady=1, sticky="nsew")
+        tk.Button(pt_ctrl, text="⎘ 複製", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.duplicate_selected_periodic_task).grid(row=1, column=1, padx=1, pady=1, sticky="nsew")
+        tk.Button(pt_ctrl, text="✕ 刪除", bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.delete_selected_periodic_task).grid(row=1, column=2, padx=1, pady=1, sticky="nsew")
+
+        # 定時清單
+        f_list_pt = tk.Frame(f_pt, bg=UITheme.BG_DARK)
+        f_list_pt.pack(side="top", fill="both", expand=True, pady=1)
+
+        self.periodic_listbox = tk.Listbox(
+            f_list_pt,
+            height=4,
+            bg=UITheme.BG_DARK,
+            fg=UITheme.TEXT_MAIN,
+            selectbackground=UITheme.ACCENT_BLUE,
+            selectforeground="#fff",
+            bd=0,
+            highlightthickness=0,
+            font=UITheme.FONT_NORMAL,
+            exportselection=False
+        )
+        self.periodic_listbox.pack(side="left", fill="both", expand=True)
+        self.periodic_listbox.bind("<Double-Button-1>", lambda e: self.edit_selected_periodic_task())
+        sc_pt = tk.Scrollbar(f_list_pt, orient="vertical", command=self.periodic_listbox.yview)
+        sc_pt.pack(side="right", fill="y")
+        self.periodic_listbox.config(yscrollcommand=sc_pt.set)
 
         # 3. HUD 與主開關
         bot = tk.Frame(f_right, bg=UITheme.BG_PANEL)
@@ -796,7 +874,7 @@ class App(tk.Tk):
             if not os.path.exists(f"default{CONFIG_EXT}"):
                 try:
                     with open(f"default{CONFIG_EXT}", "w", encoding="utf-8") as f:
-                        json.dump({"variables": {}, "combos": [], "steps": []}, f)
+                        json.dump({"variables": {}, "combos": [], "steps": [], "periodic_tasks": []}, f)
                 except Exception: pass
 
         self.cbo_profile["values"] = profiles
@@ -819,7 +897,7 @@ class App(tk.Tk):
                 return
         try:
             with open(fn, "w", encoding="utf-8") as f:
-                json.dump({"variables": state.variables, "combos": state.combos, "steps": state.steps}, f, ensure_ascii=False, indent=2)
+                json.dump({"variables": state.variables, "combos": state.combos, "steps": state.steps, "periodic_tasks": state.periodic_tasks}, f, ensure_ascii=False, indent=2)
             self.refresh_profiles(select_name=name)
             self.set_status(f"已新建並儲存至 {fn}")
         except Exception as e:
@@ -834,7 +912,7 @@ class App(tk.Tk):
                 return self.set_status("已取消儲存")
         try:
             with open(fn, "w", encoding="utf-8") as f:
-                json.dump({"variables": state.variables, "combos": state.combos, "steps": state.steps}, f, ensure_ascii=False, indent=2)
+                json.dump({"variables": state.variables, "combos": state.combos, "steps": state.steps, "periodic_tasks": state.periodic_tasks}, f, ensure_ascii=False, indent=2)
             self.set_status(f"已成功儲存至 {fn}")
             self.refresh_profiles(select_name=name)
         except Exception as e:
@@ -859,10 +937,13 @@ class App(tk.Tk):
             state.combos.extend(data.get("combos", []))
             state.steps.clear()
             state.steps.extend(data.get("steps", []))
+            state.periodic_tasks.clear()
+            state.periodic_tasks.extend(data.get("periodic_tasks", []))
 
             self.refresh_combo_list()
             self.refresh_combo_actions_list()
             self.update_step_list()
+            self.update_periodic_list()
             self.set_status(f"成功載入設定檔：{name}")
         except Exception as e:
             self.set_status(f"載入失敗: {e}")
@@ -1255,6 +1336,7 @@ class App(tk.Tk):
                 state.active_steps = copy.deepcopy(state.steps)
                 state.active_combos = copy.deepcopy(state.combos)
                 state.active_variables = copy.deepcopy(state.variables)
+                state.active_periodic_tasks = copy.deepcopy(state.periodic_tasks)
                 state.reload_requested = True
 
     def _move_list_item(self, lst, idx, delta, refresh_cb, item_name="項目"):
@@ -1546,6 +1628,86 @@ class App(tk.Tk):
     def clear_main_steps(self):
         self._clear_list_items(state.steps, "請問是否清空整個掛機流程？\n清空後未儲存的內容無法還原！", self.update_step_list, "掛機流程")
 
+    # ======================= 定時週期任務管理邏輯 =======================
+    def update_periodic_list(self, select_idx=None):
+        if not hasattr(self, "periodic_listbox"):
+            return
+        self.periodic_listbox.delete(0, tk.END)
+        for pt in state.periodic_tasks:
+            summary = state.format_periodic_task_summary(pt, current_variables=state.variables)
+            self.periodic_listbox.insert(tk.END, summary)
+        if select_idx is not None and 0 <= select_idx < len(state.periodic_tasks):
+            self.periodic_listbox.selection_set(select_idx)
+            self.periodic_listbox.see(select_idx)
+
+    def add_new_periodic_task(self):
+        new_pt = dialogs.prompt_edit_periodic_task(self, task=None)
+        if new_pt:
+            state.periodic_tasks.append(new_pt)
+            new_idx = len(state.periodic_tasks) - 1
+            self.update_periodic_list(new_idx)
+            self.set_status(f"已新增定時任務：【{new_pt.get('name')}】(每 {new_pt.get('interval')} 秒)")
+            self.trigger_hot_reload()
+
+    def edit_selected_periodic_task(self):
+        sel = self.periodic_listbox.curselection()
+        if not sel:
+            return self.set_status("請先在定時任務清單中選擇任務！")
+        idx = sel[0]
+        updated_pt = dialogs.prompt_edit_periodic_task(self, task=state.periodic_tasks[idx])
+        if updated_pt:
+            state.periodic_tasks[idx] = updated_pt
+            self.update_periodic_list(idx)
+            self.set_status(f"已更新定時任務 #{idx+1}：【{updated_pt.get('name')}】")
+            self.trigger_hot_reload()
+
+    def toggle_selected_periodic_task(self):
+        sel = self.periodic_listbox.curselection()
+        if not sel:
+            return self.set_status("請先在定時任務清單中選擇要開關的任務！")
+        idx = sel[0]
+        pt = state.periodic_tasks[idx]
+        pt["enabled"] = not pt.get("enabled", True)
+        st_text = "啟用" if pt["enabled"] else "停用"
+        self.update_periodic_list(idx)
+        self.set_status(f"已將定時任務【{pt.get('name')}】切換為 [{st_text}]")
+        self.trigger_hot_reload()
+
+    def duplicate_selected_periodic_task(self):
+        sel = self.periodic_listbox.curselection()
+        if not sel:
+            return self.set_status("請先在定時任務清單中選擇要複製的任務！")
+        idx = sel[0]
+        copied_pt = copy.deepcopy(state.periodic_tasks[idx])
+        copied_pt["id"] = f"pt_{int(time.time()*1000)}"
+        copied_pt["name"] = f"{copied_pt.get('name', '任務')}_副本"
+        state.periodic_tasks.insert(idx + 1, copied_pt)
+        self.update_periodic_list(idx + 1)
+        self.set_status(f"已複製定時任務至 #{idx+2}")
+        self.trigger_hot_reload()
+
+    def delete_selected_periodic_task(self):
+        sel = self.periodic_listbox.curselection()
+        if not sel:
+            return self.set_status("請先在定時任務清單中選擇要刪除的任務！")
+        idx = sel[0]
+        name = state.periodic_tasks[idx].get("name", "未命名")
+        del state.periodic_tasks[idx]
+        new_sel = min(idx, len(state.periodic_tasks) - 1) if state.periodic_tasks else None
+        self.update_periodic_list(new_sel)
+        self.set_status(f"已刪除定時任務：【{name}】")
+        self.trigger_hot_reload()
+
+    def test_run_selected_periodic_task(self):
+        sel = self.periodic_listbox.curselection()
+        if not sel:
+            return self.set_status("請先在定時任務清單中選擇要試跑的任務！")
+        idx = sel[0]
+        pt = state.periodic_tasks[idx]
+        t_name = pt.get("name", "定時任務")
+        act = pt.get("action", {})
+        self.run_in_test_thread(f"定時任務【{t_name}】", lambda: self.execute_single_action(act, f"[定時試跑: {t_name}]"))
+
     # ======================= 動作執行調度器委派 =======================
     def dispatch_action(self, act, parent_desc, current_vars=None, current_combos=None, depth=0, visited_set=None, is_test=False, round_prefix=""):
         return engine.dispatch_action(
@@ -1574,11 +1736,14 @@ class App(tk.Tk):
             self.set_running_ui(False)
             self.set_status("試跑已手動中止！" if was_test else "已手動停止")
         else:
-            if not state.steps: return self.set_status("執行清單是空的，請先加入步驟！")
+            has_enabled_periodic = any(pt.get("enabled", True) for pt in state.periodic_tasks)
+            if not state.steps and not has_enabled_periodic:
+                return self.set_status("掛機流程清單與定時任務均為空，請先加入步驟或定時任務！")
             with state.steps_lock:
                 state.active_steps = copy.deepcopy(state.steps)
                 state.active_combos = copy.deepcopy(state.combos)
                 state.active_variables = copy.deepcopy(state.variables)
+                state.active_periodic_tasks = copy.deepcopy(state.periodic_tasks)
                 state.reload_requested = False
             state.stop_event.clear()
             state.running = True

@@ -6,14 +6,16 @@ import threading
 combos = []
 steps = []           # 主 UI 編輯器草稿 (Draft)
 variables = {}       # 全域變數庫字典: {var_name: {"type": "coord"|"key"|"wait", ...}}
+periodic_tasks = []  # 主 UI 定時任務草稿 (Draft)
 active_steps = []    # 背景運行實例快照 (Active Snapshot)
 active_combos = []   # 背景組合運行實例快照 (Active Combo Snapshot)
 active_variables = {} # 背景變數運行實例快照 (Active Variables Snapshot)
+active_periodic_tasks = [] # 背景定時任務運行實例快照 (Active Periodic Snapshot)
 
 running = False
 is_testing = False
 reload_requested = False
-steps_lock = threading.Lock() # 保護 active_steps, active_combos 與 active_variables
+steps_lock = threading.Lock() # 保護 active_steps, active_combos, active_variables 與 active_periodic_tasks
 stop_event = threading.Event()
 target_hwnd = None
 currently_held_keys = set()   # 追蹤當前被按下的按鍵，格式: ("bg", hwnd, vk) 或 ("fg", key_str)
@@ -65,3 +67,23 @@ def format_action_summary(act, index=None, current_variables=None):
         body = f"[{atype}]"
 
     return body
+
+def format_periodic_task_summary(task, current_variables=None):
+    """格式化定時週期任務的顯示字串"""
+    enabled = task.get("enabled", True)
+    enabled_str = "[✓ 啟用]" if enabled else "[✕ 停用]"
+    sec = task.get("interval", 1.0)
+    try:
+        f_sec = float(sec)
+        sec_str = f"{int(f_sec)}s" if f_sec.is_integer() else f"{f_sec}s"
+    except Exception:
+        sec_str = f"{sec}s"
+
+    name = task.get("name", "").strip()
+    act = task.get("action", {})
+    act_summary = format_action_summary(act, current_variables=current_variables)
+    start_str = " (首發)" if task.get("run_on_start", False) else ""
+    if name:
+        return f"{enabled_str} 每{sec_str} ➔ 【{name}】{act_summary}{start_str}"
+    else:
+        return f"{enabled_str} 每{sec_str} ➔ {act_summary}{start_str}"

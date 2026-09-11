@@ -1,4 +1,5 @@
 import copy
+import time
 import tkinter as tk
 from tkinter import ttk, messagebox
 
@@ -659,3 +660,327 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
 
     app.wait_window(dialog)
     return modified[0]
+
+def prompt_edit_periodic_task(app, task=None):
+    """彈出定時週期任務新增 / 修改對話框"""
+    is_edit = task is not None
+    title = "修改定時週期任務" if is_edit else "新增定時週期任務"
+
+    orig_task = copy.deepcopy(task) if is_edit else {}
+    task_id = orig_task.get("id") or f"pt_{int(time.time()*1000)}"
+    init_name = orig_task.get("name", "")
+    init_interval = str(orig_task.get("interval", 30.0))
+    init_enabled = orig_task.get("enabled", True)
+    init_run_on_start = orig_task.get("run_on_start", False)
+
+    act = orig_task.get("action", {})
+    act_type = act.get("type", "call_combo" if state.combos else "key")
+    act_var = act.get("var_name")
+
+    dialog = tk.Toplevel(app)
+    dialog.title(title)
+    dialog.configure(bg=UITheme.BG_PANEL)
+    dialog.resizable(False, False)
+    dialog.attributes("-topmost", True)
+    dialog.transient(app)
+    dialog.grab_set()
+    app.apply_app_icon(dialog)
+
+    w, h = 420, 460
+    app.update_idletasks()
+    pos_x = app.winfo_x() + max(0, (app.winfo_width() - w) // 2)
+    pos_y = app.winfo_y() + max(0, (app.winfo_height() - h) // 2)
+    dialog.geometry(f"{w}x{h}+{pos_x}+{pos_y}")
+
+    result = [None]
+    f_main = tk.Frame(dialog, bg=UITheme.BG_PANEL, padx=16, pady=12)
+    f_main.pack(fill="both", expand=True)
+
+    # 1. 基本設定卡片
+    f_base = tk.LabelFrame(f_main, text=" 基本設定 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=8, pady=6)
+    f_base.pack(fill="x", pady=(0, 8))
+
+    # 任務名稱
+    r1 = tk.Frame(f_base, bg=UITheme.BG_PANEL)
+    r1.pack(fill="x", pady=2)
+    tk.Label(r1, text="任務名稱:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL_BOLD, width=8, anchor="e").pack(side="left", padx=(0, 6))
+    var_name = tk.StringVar(value=init_name)
+    e_name = tk.Entry(r1, textvariable=var_name, bg=UITheme.BG_INPUT, fg="#fff", font=UITheme.FONT_NORMAL, relief="flat")
+    e_name.pack(side="left", fill="x", expand=True)
+
+    # 執行間隔 (秒)
+    r2 = tk.Frame(f_base, bg=UITheme.BG_PANEL)
+    r2.pack(fill="x", pady=2)
+    tk.Label(r2, text="觸發間隔:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL_BOLD, width=8, anchor="e").pack(side="left", padx=(0, 6))
+    var_interval = tk.StringVar(value=init_interval)
+    e_interval = tk.Entry(r2, textvariable=var_interval, width=8, bg=UITheme.BG_INPUT, fg="#fff", font=UITheme.FONT_NORMAL, relief="flat")
+    e_interval.pack(side="left", padx=(0, 4))
+    tk.Label(r2, text="秒 (例如: 30 或 2.5)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(side="left")
+
+    # 啟用與啟動時立即首發
+    r3 = tk.Frame(f_base, bg=UITheme.BG_PANEL)
+    r3.pack(fill="x", pady=(4, 0))
+    var_enabled = tk.BooleanVar(value=init_enabled)
+    var_start = tk.BooleanVar(value=init_run_on_start)
+    tk.Checkbutton(r3, text="啟用此定時任務", variable=var_enabled, bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, selectcolor=UITheme.BG_PANEL, activebackground=UITheme.BG_PANEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(8, 12))
+    tk.Checkbutton(r3, text="巨集啟動時先執行一次", variable=var_start, bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, selectcolor=UITheme.BG_PANEL, activebackground=UITheme.BG_PANEL, font=UITheme.FONT_NORMAL).pack(side="left")
+
+    # 2. 執行動作設定卡片
+    f_act = tk.LabelFrame(f_main, text=" 執行動作內容 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=8, pady=6)
+    f_act.pack(fill="both", expand=True, pady=(0, 8))
+
+    # Determine initial category
+    if act_var:
+        init_category = "[引用全域變數]"
+    elif act_type == "call_combo":
+        init_category = "[呼叫技能組合]"
+    elif act_type == "click":
+        init_category = "[單一點擊]"
+    elif act_type == "wait":
+        init_category = "[單一停頓]"
+    else:
+        init_category = "[單一按鍵]"
+
+    r_cat = tk.Frame(f_act, bg=UITheme.BG_PANEL)
+    r_cat.pack(fill="x", pady=(0, 6))
+    tk.Label(r_cat, text="動作類型:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL_BOLD, width=8, anchor="e").pack(side="left", padx=(0, 6))
+    var_category = tk.StringVar(value=init_category)
+    cbo_cat = ttk.Combobox(r_cat, textvariable=var_category, values=["[呼叫技能組合]", "[引用全域變數]", "[單一按鍵]", "[單一點擊]", "[單一停頓]"], state="readonly", font=UITheme.FONT_NORMAL)
+    cbo_cat.pack(side="left", fill="x", expand=True)
+
+    # 動態內容容器
+    f_dynamic = tk.Frame(f_act, bg=UITheme.BG_PANEL)
+    f_dynamic.pack(fill="both", expand=True, pady=4)
+
+    # 各類型對應變數
+    combos_list = [c["name"] for c in state.combos]
+    var_combo = tk.StringVar(value=act.get("target_name") or (combos_list[0] if combos_list else ""))
+
+    vars_list = list(state.variables.keys())
+    var_var_name = tk.StringVar(value=act_var or (vars_list[0] if vars_list else ""))
+
+    var_key = tk.StringVar(value=str(act.get("key", "f1")))
+
+    var_x = tk.StringVar(value=str(act.get("x", 0)))
+    var_y = tk.StringVar(value=str(act.get("y", 0)))
+    var_btn = tk.StringVar(value="右鍵" if act.get("btn") == "right" else "左鍵")
+
+    var_wait = tk.StringVar(value=str(act.get("sec", 1.0)))
+
+    def update_dynamic_panel(event=None):
+        for widget in f_dynamic.winfo_children():
+            widget.destroy()
+
+        cat = var_category.get()
+        if cat == "[呼叫技能組合]":
+            row = tk.Frame(f_dynamic, bg=UITheme.BG_PANEL)
+            row.pack(fill="x", pady=6)
+            tk.Label(row, text="目標組合:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(4, 6))
+            c_vals = [c["name"] for c in state.combos]
+            if not c_vals:
+                tk.Label(row, text="(目前技能組合庫中無組合，請先建立組合)", bg=UITheme.BG_PANEL, fg=UITheme.ACCENT_RED, font=UITheme.FONT_SMALL).pack(side="left")
+            else:
+                if var_combo.get() not in c_vals:
+                    var_combo.set(c_vals[0])
+                cbo = ttk.Combobox(row, textvariable=var_combo, values=c_vals, state="readonly", font=UITheme.FONT_NORMAL)
+                cbo.pack(side="left", fill="x", expand=True)
+
+        elif cat == "[引用全域變數]":
+            row = tk.Frame(f_dynamic, bg=UITheme.BG_PANEL)
+            row.pack(fill="x", pady=4)
+            tk.Label(row, text="目標變數:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(4, 6))
+            v_vals = list(state.variables.keys())
+            if not v_vals:
+                tk.Label(row, text="(目前無任何變數，請先於變數庫建立)", bg=UITheme.BG_PANEL, fg=UITheme.ACCENT_RED, font=UITheme.FONT_SMALL).pack(side="left")
+            else:
+                if var_var_name.get() not in v_vals:
+                    var_var_name.set(v_vals[0])
+                cbo = ttk.Combobox(row, textvariable=var_var_name, values=v_vals, state="readonly", font=UITheme.FONT_NORMAL)
+                cbo.pack(side="left", fill="x", expand=True)
+
+                lbl_preview = tk.Label(f_dynamic, text="", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_SUB, font=UITheme.FONT_SMALL)
+                lbl_preview.pack(anchor="w", padx=10, pady=2)
+
+                def _update_var_preview(e=None):
+                    v_name = var_var_name.get()
+                    if v_name in state.variables:
+                        v_info = state.variables[v_name]
+                        v_type = v_info.get("type", "")
+                        v_val = v_info.get("value", "")
+                        lbl_preview.config(text=f"變數型態: [{v_type}]  數值: {v_val}")
+                cbo.bind("<<ComboboxSelected>>", _update_var_preview)
+                _update_var_preview()
+
+        elif cat == "[單一按鍵]":
+            row = tk.Frame(f_dynamic, bg=UITheme.BG_PANEL)
+            row.pack(fill="x", pady=6)
+            tk.Label(row, text="按鍵名稱:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(4, 6))
+            e_k = tk.Entry(row, textvariable=var_key, width=12, bg=UITheme.BG_INPUT, fg="#fff", font=UITheme.FONT_NORMAL, relief="flat")
+            e_k.pack(side="left", padx=(0, 6))
+            tk.Label(row, text="(例如: f1, space, 1, a)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(side="left")
+
+        elif cat == "[單一點擊]":
+            r_c1 = tk.Frame(f_dynamic, bg=UITheme.BG_PANEL)
+            r_c1.pack(fill="x", pady=2)
+            tk.Label(r_c1, text="滑鼠按鍵:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(4, 6))
+            ttk.Combobox(r_c1, textvariable=var_btn, values=["左鍵", "右鍵"], width=6, state="readonly").pack(side="left", padx=(0, 8))
+
+            tk.Label(r_c1, text="X:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_NORMAL).pack(side="left", padx=(4, 2))
+            tk.Entry(r_c1, textvariable=var_x, width=6, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 6))
+            tk.Label(r_c1, text="Y:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_NORMAL).pack(side="left", padx=(4, 2))
+            tk.Entry(r_c1, textvariable=var_y, width=6, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left")
+
+            r_c2 = tk.Frame(f_dynamic, bg=UITheme.BG_PANEL)
+            r_c2.pack(fill="x", pady=4)
+            btn_rec = tk.Button(r_c2, text="◎ 重新瞄準取點 (Space)", bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, font=UITheme.FONT_NORMAL_BOLD, relief="flat", padx=8)
+            btn_rec.pack(fill="x", padx=4)
+
+            def do_rec():
+                if state.running:
+                    app.set_status("巨集正在循環執行中，為免干擾滑鼠瞄準，請先停止運行再取點！")
+                    return
+                dialog.grab_release()
+                dialog.withdraw()
+
+                def on_finish_space(rx, ry, rel):
+                    dialog.deiconify()
+                    dialog.lift()
+                    dialog.focus_force()
+                    dialog.grab_set()
+                    var_x.set(str(rx))
+                    var_y.set(str(ry))
+                    app.set_status(f"定時點擊取點成功: ({rx}, {ry})")
+
+                def on_cancel_space():
+                    dialog.deiconify()
+                    dialog.lift()
+                    dialog.focus_force()
+                    dialog.grab_set()
+
+                target_btn = "right" if var_btn.get() == "右鍵" else "left"
+                app.capture_pos_space(on_finish_space, on_cancel_space, btn=target_btn)
+
+            btn_rec.config(command=do_rec)
+
+        elif cat == "[單一停頓]":
+            row = tk.Frame(f_dynamic, bg=UITheme.BG_PANEL)
+            row.pack(fill="x", pady=6)
+            tk.Label(row, text="等待秒數:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(4, 6))
+            e_w = tk.Entry(row, textvariable=var_wait, width=8, bg=UITheme.BG_INPUT, fg="#fff", font=UITheme.FONT_NORMAL, relief="flat")
+            e_w.pack(side="left", padx=(0, 6))
+            tk.Label(row, text="秒 (大於 0 的數字)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(side="left")
+
+    cbo_cat.bind("<<ComboboxSelected>>", update_dynamic_panel)
+    update_dynamic_panel()
+
+    def build_action_dict():
+        cat = var_category.get()
+        if cat == "[呼叫技能組合]":
+            tgt = var_combo.get().strip()
+            if not tgt:
+                messagebox.showerror("錯誤", "請先選擇有效的技能組合！", parent=dialog)
+                return None
+            return {"type": "call_combo", "target_name": tgt}
+        elif cat == "[引用全域變數]":
+            v_name = var_var_name.get().strip()
+            if not v_name or v_name not in state.variables:
+                messagebox.showerror("錯誤", "請先選擇有效的全域變數！", parent=dialog)
+                return None
+            v_info = state.variables[v_name]
+            v_type = v_info.get("type", "key")
+            v_val = v_info.get("value", {})
+            if v_type == "coord":
+                btn = v_val.get("btn", "left") if isinstance(v_val, dict) else "left"
+                x = v_val.get("x", 0) if isinstance(v_val, dict) else 0
+                y = v_val.get("y", 0) if isinstance(v_val, dict) else 0
+                return {"type": "click", "x": x, "y": y, "btn": btn, "var_name": v_name}
+            elif v_type == "wait":
+                try:
+                    sec = float(v_val)
+                except Exception:
+                    sec = 1.0
+                return {"type": "wait", "sec": sec, "var_name": v_name}
+            else:
+                key_str = str(v_val) if v_val else "f1"
+                return {"type": "key", "key": key_str, "var_name": v_name}
+        elif cat == "[單一按鍵]":
+            k = var_key.get().strip().lower()
+            if not k:
+                messagebox.showerror("錯誤", "按鍵名稱不可為空！", parent=dialog)
+                return None
+            return {"type": "key", "key": k}
+        elif cat == "[單一點擊]":
+            try:
+                x = int(var_x.get().strip())
+                y = int(var_y.get().strip())
+                btn = "right" if var_btn.get() == "右鍵" else "left"
+                return {"type": "click", "x": x, "y": y, "btn": btn}
+            except ValueError:
+                messagebox.showerror("錯誤", "坐標 X 與 Y 必須輸入整數！", parent=dialog)
+                return None
+        elif cat == "[單一停頓]":
+            try:
+                s = float(var_wait.get().strip())
+                if s <= 0:
+                    raise ValueError
+                return {"type": "wait", "sec": s}
+            except ValueError:
+                messagebox.showerror("錯誤", "停頓時間必須大於 0 秒！", parent=dialog)
+                return None
+        return None
+
+    def do_test():
+        built_act = build_action_dict()
+        if not built_act:
+            return
+        app.execute_single_action(built_act, f"[試跑定時動作]")
+
+    def on_ok():
+        try:
+            interval_val = float(var_interval.get().strip())
+            if interval_val <= 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("錯誤", "執行間隔必須輸入大於 0 的秒數！", parent=dialog)
+            return
+
+        built_act = build_action_dict()
+        if not built_act:
+            return
+
+        name_val = var_name.get().strip()
+        if not name_val:
+            if built_act.get("type") == "call_combo":
+                name_val = f"定時_{built_act.get('target_name', '組合')}"
+            elif built_act.get("var_name"):
+                name_val = f"定時_{built_act.get('var_name')}"
+            elif built_act.get("type") == "key":
+                name_val = f"定時按鍵_{built_act.get('key', '').upper()}"
+            elif built_act.get("type") == "click":
+                btn_str = "右鍵" if built_act.get("btn") == "right" else "左鍵"
+                name_val = f"定時點擊_{btn_str}"
+            else:
+                name_val = "定時任務"
+
+        result[0] = {
+            "id": task_id,
+            "name": name_val,
+            "interval": interval_val,
+            "enabled": var_enabled.get(),
+            "run_on_start": var_start.get(),
+            "action": built_act
+        }
+        dialog.destroy()
+
+    bf = tk.Frame(dialog, bg=UITheme.BG_PANEL, padx=16, pady=10)
+    bf.pack(fill="x")
+    tk.Button(bf, text="▶ 試跑動作", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, padx=6, command=do_test).pack(side="left")
+    tk.Button(bf, text="✓ 確定儲存", width=10, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_NORMAL_BOLD, command=on_ok).pack(side="right", padx=(4, 0))
+    tk.Button(bf, text="✕ 取消", width=8, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_NORMAL, command=dialog.destroy).pack(side="right")
+
+    dialog.bind("<Return>", lambda e: on_ok())
+    dialog.bind("<Escape>", lambda e: dialog.destroy())
+
+    app.wait_window(dialog)
+    return result[0]
+

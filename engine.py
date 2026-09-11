@@ -1,4 +1,5 @@
 import copy
+import time
 import pyautogui
 
 import state
@@ -148,10 +149,72 @@ def execute_single_action(app, act, desc):
     """執行單一動作（試跑用途）"""
     dispatch_action(app, act, desc, is_test=True)
 
+def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, current_combos, round_prefix=""):
+    """檢查是否有已到期的定時任務；若有，安全依序執行並更新上次執行時間戳記"""
+    if not periodic_tasks_runtime:
+        return True
+
+    now = time.time()
+    for pt in periodic_tasks_runtime:
+        if not pt.get("enabled", True):
+            continue
+        try:
+            interval = float(pt.get("interval", 1.0))
+        except Exception:
+            interval = 1.0
+        if interval <= 0:
+            interval = 1.0
+
+        last_run = pt.get("last_run", 0.0)
+        if now - last_run >= interval:
+            if not state.running or state.stop_event.is_set():
+                return False
+            task_name = pt.get("name", "").strip() or "定時任務"
+            act = pt.get("action", {})
+            act_summary = state.format_action_summary(act, current_variables=current_vars)
+            app.set_status(f"{round_prefix}[定時觸發: {task_name}] {act_summary}")
+
+            # 統一透過 dispatch_action 執行
+            ok = dispatch_action(
+                app,
+                act,
+                f"[定時:{task_name}]",
+                current_vars=current_vars,
+                current_combos=current_combos,
+                depth=0,
+                visited_set=set(),
+                is_test=False,
+                round_prefix=round_prefix
+            )
+            pt["last_run"] = time.time()
+            if not ok:
+                return False
+            if not safe_sleep(0.05):
+                return False
+    return True
+
 def macro_worker_loop(app):
     """背景巨集循環執行緒主迴圈"""
     round_idx = 1
+    with state.steps_lock:
+        active_pts = copy.deepcopy(state.active_periodic_tasks)
+
+    start_time = time.time()
+    periodic_tasks_runtime = []
+    for pt in active_pts:
+        pt_copy = copy.deepcopy(pt)
+        # 若勾選「啟動時立即首發一次」，則設定 last_run 為 0，首度檢查時即觸發；否則設為 start_time，待滿 interval 秒後首發
+        pt_copy["last_run"] = 0.0 if pt.get("run_on_start", False) else start_time
+        periodic_tasks_runtime.append(pt_copy)
+
     try:
+        # 首輪開始前：若有設定「啟動時立即首發」的定時任務，先檢查執行一次
+        with state.steps_lock:
+            init_vars = copy.deepcopy(state.active_variables)
+            init_combos = copy.deepcopy(state.active_combos)
+        if not check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, init_vars, init_combos, round_prefix="啟動首發: "):
+            return
+
         while state.running and not state.stop_event.is_set():
             with state.steps_lock:
                 current_steps = copy.deepcopy(state.active_steps)
@@ -159,14 +222,38 @@ def macro_worker_loop(app):
                 current_variables = copy.deepcopy(state.active_variables)
                 was_reloaded = state.reload_requested
                 state.reload_requested = False
+                if was_reloaded:
+                    latest_pts = copy.deepcopy(state.active_periodic_tasks)
 
-            if not current_steps:
-                app.set_status("掛機流程清單為空，巨集已自動停止！")
+            if was_reloaded:
+                # 平滑套用熱更新，保留進行中定時任務的上次執行計時
+                existing_timers = {pt.get("id"): pt.get("last_run") for pt in periodic_tasks_runtime if pt.get("id")}
+                new_runtime = []
+                now = time.time()
+                for pt in latest_pts:
+                    pt_copy = copy.deepcopy(pt)
+                    pt_id = pt_copy.get("id")
+                    if pt_id in existing_timers:
+                        pt_copy["last_run"] = existing_timers[pt_id]
+                    else:
+                        pt_copy["last_run"] = 0.0 if pt.get("run_on_start", False) else now
+                    new_runtime.append(pt_copy)
+                periodic_tasks_runtime = new_runtime
+                app.set_status(f"第 {round_idx} 輪: 已自動套用最新流程與定時任務！")
+
+            has_enabled_periodic = any(pt.get("enabled", True) for pt in periodic_tasks_runtime)
+            if not current_steps and not has_enabled_periodic:
+                app.set_status("掛機流程清單與定時任務均為空，巨集已自動停止！")
                 state.running = False
                 break
 
-            if was_reloaded:
-                app.set_status(f"第 {round_idx} 輪: 已自動套用最新流程！")
+            if not current_steps:
+                # 若主流程為空但有啟用的定時任務，進行待命定時輪詢
+                if not check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_variables, current_combos, round_prefix=""):
+                    break
+                if not safe_sleep(0.1):
+                    break
+                continue
 
             for idx, step in enumerate(current_steps):
                 if not state.running or state.stop_event.is_set():
@@ -176,12 +263,14 @@ def macro_worker_loop(app):
                 pfx = f"第 {round_idx} 輪: "
 
                 stype = step["type"]
+                step_ok = True
                 if stype == "combo":
                     c_name = step.get("name", "組合")
                     sub_actions = step.get("actions", [])
                     sub_total = len(sub_actions)
                     for a_idx, act in enumerate(sub_actions):
                         if not state.running or state.stop_event.is_set():
+                            step_ok = False
                             break
                         app.highlight_active_step(idx, sub_idx=a_idx)
                         if not dispatch_action(
@@ -195,6 +284,7 @@ def macro_worker_loop(app):
                             is_test=False,
                             round_prefix=pfx
                         ):
+                            step_ok = False
                             break
                 else:
                     if not dispatch_action(
@@ -208,7 +298,18 @@ def macro_worker_loop(app):
                         is_test=False,
                         round_prefix=pfx
                     ):
-                        break
+                        step_ok = False
+
+                if not step_ok or not state.running or state.stop_event.is_set():
+                    break
+
+                # 當前步驟或 COMBO 已完全執行結束！安全檢查並執行到期的定時任務
+                if not check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_variables, current_combos, round_prefix=pfx):
+                    break
+
+            # 輪次銜接時亦進行一次定時任務檢查
+            if not check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_variables, current_combos, round_prefix=f"第 {round_idx} 輪結束: "):
+                break
 
             round_idx += 1
             if not safe_sleep(0.05):
