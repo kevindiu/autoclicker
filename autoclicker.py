@@ -452,9 +452,22 @@ class App(tk.Tk):
         tk.Label(r2, text="Y:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_NORMAL).pack(side="left", padx=(3, 1))
         tk.Entry(r2, textvariable=self.var_offset_y, width=3, bg=UITheme.BG_INPUT, fg="#ffffff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
 
+        # 垂直 PanedWindow 將「常用變數庫」與「技能組合庫」連接，支援滑鼠即時拖曳調整大小 (Dynamic Resizing)
+        pw_left = tk.PanedWindow(
+            f_left,
+            orient="vertical",
+            bg=UITheme.BORDER,
+            bd=0,
+            sashwidth=5,
+            sashrelief="flat",
+            sashpad=1,
+            opaqueresize=True
+        )
+        pw_left.pack(fill="both", expand=True)
+
         # 2. 常用變數庫
         f_vars = tk.LabelFrame(
-            f_left,
+            pw_left,
             text=" 常用變數庫 ",
             bg=UITheme.BG_PANEL,
             fg=UITheme.CYAN_TITLE,
@@ -462,16 +475,15 @@ class App(tk.Tk):
             padx=6,
             pady=3
         )
-        f_vars.pack(fill="x", pady=(0, 4))
 
         f_vars_row = tk.Frame(f_vars, bg=UITheme.BG_PANEL)
-        f_vars_row.pack(fill="x", expand=True)
+        f_vars_row.pack(fill="both", expand=True)
 
         self.tree_vars = VarTable(f_vars_row, on_double_click=self.edit_selected_variable)
         self.tree_vars.pack(side="left", fill="both", expand=True, padx=(0, 6))
 
         col_v_btns = tk.Frame(f_vars_row, bg=UITheme.BG_PANEL)
-        col_v_btns.pack(side="right", fill="y")
+        col_v_btns.pack(side="right", anchor="n")
         col_v_btns.grid_columnconfigure(0, weight=1)
         col_v_btns.grid_columnconfigure(1, weight=1)
         col_v_btns.grid_rowconfigure(0, weight=1)
@@ -531,8 +543,10 @@ class App(tk.Tk):
         ).grid(row=1, column=1, padx=1, pady=1, sticky="nsew")
 
         # 3. 技能組合區塊
-        f_combo = tk.LabelFrame(f_left, text=" 技能組合庫 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=6, pady=4)
-        f_combo.pack(fill="both", expand=True)
+        f_combo = tk.LabelFrame(pw_left, text=" 技能組合庫 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=6, pady=4)
+
+        pw_left.add(f_vars, minsize=65, height=110)
+        pw_left.add(f_combo, minsize=140)
 
         f_combo_split = tk.Frame(f_combo, bg=UITheme.BG_PANEL)
         f_combo_split.pack(fill="both", expand=True)
