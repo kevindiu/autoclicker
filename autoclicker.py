@@ -259,14 +259,16 @@ def format_action_summary(act, index=None, current_variables=None):
     var_name = act.get("var_name")
 
     if atype == "click":
-        btn_tag = "右鍵" if act.get("btn") == "right" else "左鍵"
         if var_name:
             v_info = var_dict.get(var_name, {})
             val = v_info.get("value") if isinstance(v_info.get("value"), dict) else v_info
-            cx = val.get("x", act.get("x", 0))
-            cy = val.get("y", act.get("y", 0))
+            btn_key = val.get("btn", act.get("btn", "left")) if isinstance(val, dict) else act.get("btn", "left")
+            btn_tag = "右鍵" if btn_key == "right" else "左鍵"
+            cx = val.get("x", act.get("x", 0)) if isinstance(val, dict) else act.get("x", 0)
+            cy = val.get("y", act.get("y", 0)) if isinstance(val, dict) else act.get("y", 0)
             body = f"[點擊·{btn_tag}] -> 變數:【{var_name}】({cx},{cy})"
         else:
+            btn_tag = "右鍵" if act.get("btn") == "right" else "左鍵"
             prefix = "相對:" if act.get("rel") else "絕對:"
             body = f"[點擊·{btn_tag}] -> {prefix}({act.get('x', 0)},{act.get('y', 0)})"
     elif atype == "key":
@@ -992,6 +994,8 @@ class App(tk.Tk):
                     if isinstance(v_val, dict):
                         var_x.set(str(v_val.get("x", 0)))
                         var_y.set(str(v_val.get("y", 0)))
+                        if "btn" in v_val:
+                            var_btn.set("右鍵" if v_val.get("btn") == "right" else "左鍵")
             cbo_ref.bind("<<ComboboxSelected>>", on_ref_change)
 
             tk.Label(f, text="按鍵類型:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL).grid(row=1, column=0, padx=6, pady=3, sticky="e")
@@ -1436,7 +1440,7 @@ class App(tk.Tk):
         sc_step.pack(side="right", fill="y")
         self.step_listbox.config(yscrollcommand=sc_step.set)
 
-        # 底部單層全功能管理工具列 (統一佈局順序：上移/下移/試跑/修改/複製/展開/刪除/清空)
+        # 底部單層全功能管理工具列 (統一佈局順序：上移/下移/試跑/修改/複製/刪除/清空)
         sr2 = tk.Frame(f_seq, bg=UITheme.BG_PANEL)
         sr2.pack(fill="x", pady=(2, 0))
         tk.Button(sr2, text="▲ 上移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: self.move_main_step(-1)).pack(side="left", padx=1, fill="x", expand=True)
@@ -1444,7 +1448,6 @@ class App(tk.Tk):
         tk.Button(sr2, text="▶ 試跑", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.test_run_selected_main_step).pack(side="left", padx=1, fill="x", expand=True)
         tk.Button(sr2, text="✎ 修改", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.edit_selected_main_step).pack(side="left", padx=1, fill="x", expand=True)
         tk.Button(sr2, text="⎘ 複製", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.duplicate_main_step).pack(side="left", padx=1, fill="x", expand=True)
-        tk.Button(sr2, text="[ 展開組合 ]", bg=UITheme.ACCENT_CYAN, fg="#fff", activebackground=UITheme.ACCENT_CYAN_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.unpack_main_step_combo).pack(side="left", padx=1, fill="x", expand=True)
         tk.Button(sr2, text="✕ 刪除", bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.delete_main_step).pack(side="left", padx=1, fill="x", expand=True)
         tk.Button(sr2, text="✕ 清空", bg=UITheme.ACCENT_RED_DARK, fg="#fff", activebackground=UITheme.ACCENT_RED_DARK_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.clear_main_steps).pack(side="left", padx=1, fill="x", expand=True)
         # 3. HUD 與主開關
@@ -1609,7 +1612,8 @@ class App(tk.Tk):
 
             if t_key == "coord":
                 if isinstance(val, dict):
-                    v_str = f"({val.get('x', 0)}, {val.get('y', 0)})"
+                    btn_tag = "右鍵·" if val.get("btn") == "right" else "左鍵·"
+                    v_str = f"{btn_tag}({val.get('x', 0)}, {val.get('y', 0)})"
                 else:
                     v_str = str(val)
             elif t_key == "key":
@@ -1651,7 +1655,7 @@ class App(tk.Tk):
         dialog.grab_set()
         self.apply_app_icon(dialog)
 
-        w, h = 380, 310
+        w, h = 380, 340
         self.update_idletasks()
         pos_x = self.winfo_x() + max(0, (self.winfo_width() - w) // 2)
         pos_y = self.winfo_y() + max(0, (self.winfo_height() - h) // 2)
@@ -1686,10 +1690,12 @@ class App(tk.Tk):
         if orig_type == "coord" and isinstance(orig_val, dict):
             init_x = str(orig_val.get("x", 0))
             init_y = str(orig_val.get("y", 0))
+            init_btn = "右鍵" if orig_val.get("btn") == "right" else "左鍵"
         else:
-            init_x, init_y = "0", "0"
+            init_x, init_y, init_btn = "0", "0", "左鍵"
         var_x = tk.StringVar(value=init_x)
         var_y = tk.StringVar(value=init_y)
+        var_btn = tk.StringVar(value=init_btn)
 
         init_key = str(orig_val) if orig_type == "key" else "f1"
         var_key = tk.StringVar(value=init_key)
@@ -1700,6 +1706,7 @@ class App(tk.Tk):
         def start_space_capture():
             dialog.grab_release()
             dialog.withdraw()
+            target_btn = "right" if var_btn.get() == "右鍵" else "left"
             def on_finish(rx, ry, rel):
                 dialog.deiconify()
                 dialog.lift()
@@ -1707,13 +1714,14 @@ class App(tk.Tk):
                 dialog.grab_set()
                 var_x.set(str(rx))
                 var_y.set(str(ry))
-                self.set_status(f"變數取點成功: ({rx}, {ry})")
+                btn_cn = "右鍵" if target_btn == "right" else "左鍵"
+                self.set_status(f"變數取點成功 [{btn_cn}]: ({rx}, {ry})")
             def on_cancel():
                 dialog.deiconify()
                 dialog.lift()
                 dialog.focus_force()
                 dialog.grab_set()
-            self.capture_pos_space(on_finish, on_cancel, btn="left")
+            self.capture_pos_space(on_finish, on_cancel, btn=target_btn)
 
         def render_inputs():
             for child in f_val_box.winfo_children():
@@ -1722,8 +1730,14 @@ class App(tk.Tk):
             selected_type_disp = var_type.get()
             selected_type = type_key_map.get(selected_type_disp, "coord")
             if selected_type == "coord":
+                r_btn = tk.Frame(f_val_box, bg=UITheme.BG_PANEL)
+                r_btn.pack(fill="x", pady=(1, 3))
+                tk.Label(r_btn, text="點擊類型:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 4))
+                cbo_btn = ttk.Combobox(r_btn, textvariable=var_btn, values=["左鍵", "右鍵"], width=6, state="readonly", font=UITheme.FONT_NORMAL)
+                cbo_btn.pack(side="left", padx=(0, 4))
+
                 r_coords = tk.Frame(f_val_box, bg=UITheme.BG_PANEL)
-                r_coords.pack(fill="x", pady=(2, 6))
+                r_coords.pack(fill="x", pady=(2, 5))
 
                 tk.Label(r_coords, text="X:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 4))
                 e_x = tk.Entry(r_coords, textvariable=var_x, width=7, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL)
@@ -1787,7 +1801,8 @@ class App(tk.Tk):
                 except ValueError:
                     messagebox.showerror("錯誤", "坐標 X 與 Y 必須是整數！", parent=dialog)
                     return
-                val = {"x": px, "y": py}
+                btn_type = "right" if var_btn.get() == "右鍵" else "left"
+                val = {"x": px, "y": py, "btn": btn_type}
             elif type_key == "key":
                 k = var_key.get().strip().lower()
                 if not k:
@@ -1890,9 +1905,10 @@ class App(tk.Tk):
         if v_type == "coord":
             px = v_val.get("x", 0) if isinstance(v_val, dict) else 0
             py = v_val.get("y", 0) if isinstance(v_val, dict) else 0
+            btn = v_val.get("btn", "left") if isinstance(v_val, dict) else "left"
             new_act = {
                 "type": "click",
-                "btn": "left",
+                "btn": btn,
                 "x": px,
                 "y": py,
                 "rel": self.var_use_rel.get(),
@@ -2012,6 +2028,8 @@ class App(tk.Tk):
         idx = self.get_selected_combo_idx()
         if idx is None: return
         name = combos[idx]["name"]
+        if not messagebox.askyesno("刪除組合確認", f"確定要刪除組合【{name}】嗎？組合內的所有動作將會一併清除！", parent=self):
+            return
         del combos[idx]
         new_sel = min(idx, len(combos) - 1) if combos else None
         self.refresh_combo_list(select_idx=new_sel)
@@ -2391,11 +2409,12 @@ class App(tk.Tk):
         atype = act.get("type")
         if atype == "click":
             x, y = act["x"], act["y"]
+            btn = act.get("btn", "left")
             if v_data and v_data.get("type") == "coord":
                 val = v_data.get("value", {})
                 if isinstance(val, dict):
                     x, y = val.get("x", x), val.get("y", y)
-            btn = act.get("btn", "left")
+                    btn = val.get("btn", btn)
             msg = execute_click(x, y, act.get("rel"), use_bg, off_x, off_y, btn=btn)
             var_info = f"【{var_name}】" if var_name else ""
             self.set_status(f"{round_prefix}{parent_desc} {var_info}{msg}")
