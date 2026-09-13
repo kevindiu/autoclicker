@@ -110,6 +110,11 @@ class App(tk.Tk):
         self.var_step_combo_to_call = tk.StringVar()
         self.var_step_ref_var = tk.StringVar()
 
+        # 執行日誌控制變數與佇列
+        self.var_log_autoscroll = tk.BooleanVar(value=True)
+        self.log_queue = queue.Queue()
+        self.log_count = 0
+
         self.last_active_step_idx = None
 
         self.grid_columnconfigure(0, weight=1, uniform="main_cols")
@@ -168,6 +173,32 @@ class App(tk.Tk):
         if last_msg is not None and hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
             self.lbl_status.config(text=f"● 狀態: {last_msg}")
 
+        # 批次消費執行日誌佇列 (嚴格維持最新 100 筆)
+        log_items = []
+        try:
+            while True:
+                log_items.append(self.log_queue.get_nowait())
+        except (queue.Empty, Exception):
+            pass
+
+        if log_items and hasattr(self, "txt_log") and self.txt_log.winfo_exists():
+            try:
+                self.txt_log.config(state="normal")
+                for t_str, tag, text in log_items:
+                    self.txt_log.insert(tk.END, f"[{t_str}] ", "time")
+                    self.txt_log.insert(tk.END, f"[{tag}] ", f"tag_{tag}")
+                    self.txt_log.insert(tk.END, f"{text}\n", f"text_{tag}")
+                    if self.log_count >= 100:
+                        self.txt_log.delete("1.0", "2.0")
+                    else:
+                        self.log_count += 1
+
+                if self.var_log_autoscroll.get():
+                    self.txt_log.see(tk.END)
+                self.txt_log.config(state="disabled")
+            except Exception:
+                pass
+
         while True:
             try:
                 fn = self.ui_task_queue.get_nowait()
@@ -179,6 +210,26 @@ class App(tk.Tk):
                 pass
         if not self.is_closing:
             self.after(50, self.poll_ui_queues)
+
+    def append_log(self, tag, text):
+        """線程安全地推送一筆格式化日誌至執行日誌佇列"""
+        if not self.is_closing:
+            try:
+                t_str = time.strftime("%H:%M:%S")
+                self.log_queue.put((t_str, tag, str(text).strip()))
+            except Exception:
+                pass
+
+    def clear_logs(self):
+        """清空日誌視窗與緩衝計數"""
+        if hasattr(self, "txt_log") and self.txt_log.winfo_exists():
+            try:
+                self.txt_log.config(state="normal")
+                self.txt_log.delete("1.0", tk.END)
+                self.txt_log.config(state="disabled")
+                self.log_count = 0
+            except Exception:
+                pass
 
     def set_status(self, msg):
         """執行緒安全地更新狀態列訊息，並約束最大字數避免 Tkinter 佈局重算造成跳動"""
@@ -237,13 +288,17 @@ class App(tk.Tk):
             self.set_running_ui(True, is_test=True)
             try:
                 self.set_status(f"正在試跑 {task_name}...")
+                self.append_log("試跑", f"▶ 正在試跑: {task_name}")
                 task_fn()
                 if state.stop_event.is_set():
                     self.set_status(f"{task_name} 試跑已手動中止！")
+                    self.append_log("試跑", f"⏹ {task_name} 試跑已手動中止！")
                 else:
                     self.set_status(f"{task_name} 試跑完成！")
+                    self.append_log("試跑", f"✓ {task_name} 試跑完成！")
             except Exception as e:
                 self.set_status(f"{task_name} 試跑異常: {e}")
+                self.append_log("警示", f"✕ {task_name} 試跑異常: {e}")
             finally:
                 state.is_testing = False
                 emergency_release_all()
@@ -902,12 +957,90 @@ class App(tk.Tk):
         )
         self.periodic_listbox.pack(fill="both", expand=True)
 
-        # 3. HUD 與主開關
+        # 3. HUD、執行日誌 與 主開關
         bot = tk.Frame(f_right, bg=UITheme.BG_PANEL)
         bot.pack(fill="x", pady=(2, 0))
 
         self.lbl_mouse_hud = tk.Label(bot, text="● 游標實時坐標: (0, 0)", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_NORMAL_BOLD)
         self.lbl_mouse_hud.pack(fill="x")
+
+        # 執行日誌標題與控制列
+        f_log_hdr = tk.Frame(bot, bg=UITheme.BG_PANEL)
+        f_log_hdr.pack(fill="x", pady=(2, 1))
+
+        tk.Label(
+            f_log_hdr,
+            text="📋 執行日誌 (最新 100 筆)",
+            bg=UITheme.BG_PANEL,
+            fg=UITheme.CYAN_SUB,
+            font=UITheme.FONT_SMALL_BOLD
+        ).pack(side="left")
+
+        btn_clear_log = tk.Button(
+            f_log_hdr,
+            text="清空",
+            bg=UITheme.BTN_GRAY,
+            fg="#fff",
+            activebackground=UITheme.BTN_GRAY_HOVER,
+            relief="flat",
+            font=UITheme.FONT_SMALL,
+            padx=6,
+            pady=0,
+            command=self.clear_logs
+        )
+        btn_clear_log.pack(side="right", padx=(4, 0))
+
+        chk_autoscroll = tk.Checkbutton(
+            f_log_hdr,
+            text="自動滾動",
+            variable=self.var_log_autoscroll,
+            bg=UITheme.BG_PANEL,
+            fg=UITheme.TEXT_MUTED,
+            selectcolor=UITheme.BG_INPUT,
+            activebackground=UITheme.BG_PANEL,
+            activeforeground=UITheme.TEXT_MAIN,
+            font=UITheme.FONT_SMALL
+        )
+        chk_autoscroll.pack(side="right")
+
+        f_log_box = tk.Frame(bot, bg=UITheme.BG_DARK, highlightbackground=UITheme.BORDER, highlightthickness=1)
+        f_log_box.pack(fill="x", pady=(0, 2))
+
+        self.txt_log = tk.Text(
+            f_log_box,
+            height=5,
+            bg=UITheme.BG_DARK,
+            fg=UITheme.TEXT_MAIN,
+            font=UITheme.FONT_SMALL,
+            bd=0,
+            highlightthickness=0,
+            state="disabled",
+            wrap="none"
+        )
+        self.txt_log.pack(side="left", fill="both", expand=True, padx=(4, 0), pady=2)
+
+        sc_log = tk.Scrollbar(f_log_box, orient="vertical", command=self.txt_log.yview)
+        sc_log.pack(side="right", fill="y")
+        self.txt_log.config(yscrollcommand=sc_log.set)
+
+        self.txt_log.bind("<MouseWheel>", lambda e: self.txt_log.yview_scroll(int(-1 * (e.delta / 120)), "units") if e.delta else None, add="+")
+        self.txt_log.bind("<Button-4>", lambda e: self.txt_log.yview_scroll(-1, "units"), add="+")
+        self.txt_log.bind("<Button-5>", lambda e: self.txt_log.yview_scroll(1, "units"), add="+")
+
+        # 設定 Tag 色彩樣式
+        self.txt_log.tag_config("time", foreground="#94a3b8")
+        self.txt_log.tag_config("tag_流程", foreground="#f1f5f9")
+        self.txt_log.tag_config("tag_定時", foreground="#38bdf8")
+        self.txt_log.tag_config("tag_組合", foreground="#c084fc")
+        self.txt_log.tag_config("tag_系統", foreground="#4ade80")
+        self.txt_log.tag_config("tag_試跑", foreground="#818cf8")
+        self.txt_log.tag_config("tag_警示", foreground="#f87171")
+        self.txt_log.tag_config("text_警示", foreground="#fca5a5")
+        self.txt_log.tag_config("text_流程", foreground="#e2e8f0")
+        self.txt_log.tag_config("text_定時", foreground="#bae6fd")
+        self.txt_log.tag_config("text_組合", foreground="#e9d5ff")
+        self.txt_log.tag_config("text_系統", foreground="#86efac")
+        self.txt_log.tag_config("text_試跑", foreground="#c7d2fe")
 
         self.lbl_status = tk.Label(bot, text="● 狀態: 已就緒", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MAIN, font=UITheme.FONT_NORMAL)
         self.lbl_status.pack(fill="x", pady=(0, 3))
@@ -1827,7 +1960,9 @@ class App(tk.Tk):
             state.stop_event.set()
             emergency_release_all()
             self.set_running_ui(False)
-            self.set_status("試跑已手動中止！" if was_test else "已手動停止")
+            msg = "試跑已手動中止！" if was_test else "已手動停止"
+            self.set_status(msg)
+            self.append_log("系統", f"⏹ 巨集{msg}")
         else:
             has_enabled_periodic = any(pt.get("enabled", True) for pt in state.periodic_tasks)
             if not state.steps and not has_enabled_periodic:
@@ -1842,6 +1977,9 @@ class App(tk.Tk):
             state.running = True
             self.set_running_ui(True)
             self.set_status("循環運作中...")
+            win_title = self.var_window.get() if hasattr(self, "var_window") else ""
+            mode_str = "後台模式" if self.cached_use_bg else "前台模式"
+            self.append_log("系統", f"▶ 巨集啟動 ({mode_str} | 目標: {win_title})")
             threading.Thread(target=self.macro_worker_loop, daemon=True).start()
 
     def macro_worker_loop(self):

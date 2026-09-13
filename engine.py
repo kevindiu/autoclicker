@@ -48,6 +48,15 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
     if not use_bg and IS_WINDOWS and state.target_hwnd:
         force_bring_window_to_front(state.target_hwnd)
 
+    if is_test:
+        log_tag = "試跑"
+    elif "[定時:" in parent_desc:
+        log_tag = "定時"
+    elif depth > 0 or ("[" in parent_desc and ("#" in parent_desc or "組合" in parent_desc)):
+        log_tag = "組合"
+    else:
+        log_tag = "流程"
+
     var_name = act.get("var_name")
     v_data = None
     if var_name:
@@ -74,7 +83,10 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
             is_rel = True if state.target_hwnd else False
         msg = execute_click(x, y, is_rel, use_bg, off_x, off_y, btn=btn)
         var_info = f"【{var_name}】" if var_name else ""
-        app.set_status(f"{round_prefix}{parent_desc} {var_info}{msg}")
+        log_txt = f"{round_prefix}{parent_desc} {var_info}{msg}"
+        app.set_status(log_txt)
+        if hasattr(app, "append_log"):
+            app.append_log(log_tag, log_txt)
         if not safe_sleep(0.12):
             return False
 
@@ -99,7 +111,10 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
                 with state.currently_held_keys_lock:
                     state.currently_held_keys.discard(("fg", key))
         var_info = f"【{var_name}】" if var_name else ""
+        mode_tag = " (後台)" if use_bg else " (前台)"
         app.set_status(f"{round_prefix}{parent_desc} {var_info}按鍵 [{key.upper()}]")
+        if hasattr(app, "append_log"):
+            app.append_log(log_tag, f"{round_prefix}{parent_desc} {var_info}按鍵 [{key.upper()}]{mode_tag}")
         if not safe_sleep(0.10):
             return False
 
@@ -111,7 +126,10 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
             except Exception:
                 pass
         var_info = f"【{var_name}】" if var_name else ""
-        app.set_status(f"{round_prefix}{parent_desc} {var_info}等待 {sec}s")
+        log_txt = f"{round_prefix}{parent_desc} {var_info}等待 {sec}s"
+        app.set_status(log_txt)
+        if hasattr(app, "append_log"):
+            app.append_log(log_tag, log_txt)
         if not safe_sleep(sec):
             return False
 
@@ -120,10 +138,16 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
         if not tgt_name:
             return True
         if depth >= 10:
-            app.set_status(f"{round_prefix}呼叫 [{tgt_name}] 超過深度上限")
+            warn_msg = f"{round_prefix}呼叫 [{tgt_name}] 超過深度上限"
+            app.set_status(warn_msg)
+            if hasattr(app, "append_log"):
+                app.append_log("警示", warn_msg)
             return True
         if tgt_name in visited_set:
-            app.set_status(f"{round_prefix}循環呼叫 [{tgt_name}]，自動跳過")
+            warn_msg = f"{round_prefix}循環呼叫 [{tgt_name}]，自動跳過"
+            app.set_status(warn_msg)
+            if hasattr(app, "append_log"):
+                app.append_log("警示", warn_msg)
             return True
 
         tgt_combo = next((c for c in current_combos if c["name"] == tgt_name), None)
@@ -150,7 +174,10 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
                 ):
                     return False
         else:
-            app.set_status(f"{round_prefix}找不到被呼叫的組合 [{tgt_name}]")
+            warn_msg = f"{round_prefix}找不到被呼叫的組合 [{tgt_name}]"
+            app.set_status(warn_msg)
+            if hasattr(app, "append_log"):
+                app.append_log("警示", warn_msg)
 
     return True
 
@@ -181,6 +208,8 @@ def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, 
             task_name = pt.get("name", "").strip() or "定時任務"
             act = pt.get("action", {})
             app.set_status(f"{round_prefix}[定時] {task_name}")
+            if hasattr(app, "append_log"):
+                app.append_log("定時", f"{round_prefix}任務【{task_name}】到期觸發 (每 {interval}s)")
 
             # 統一透過 dispatch_action 執行
             ok = dispatch_action(
@@ -247,11 +276,17 @@ def macro_worker_loop(app):
                         pt_copy["last_run"] = 0.0 if pt.get("run_on_start", False) else now
                     new_runtime.append(pt_copy)
                 periodic_tasks_runtime = new_runtime
-                app.set_status(f"第 {round_idx} 輪: 已自動套用最新流程與定時任務！")
+                msg = f"第 {round_idx} 輪: 已自動套用最新流程與定時任務！"
+                app.set_status(msg)
+                if hasattr(app, "append_log"):
+                    app.append_log("系統", f"⚡ {msg}")
 
             has_enabled_periodic = any(pt.get("enabled", True) for pt in periodic_tasks_runtime)
             if not current_steps and not has_enabled_periodic:
-                app.set_status("掛機流程清單與定時任務均為空，巨集已自動停止！")
+                msg = "掛機流程清單與定時任務均為空，巨集已自動停止！"
+                app.set_status(msg)
+                if hasattr(app, "append_log"):
+                    app.append_log("警示", msg)
                 state.running = False
                 break
 
@@ -262,6 +297,9 @@ def macro_worker_loop(app):
                 if not safe_sleep(0.1):
                     break
                 continue
+
+            if hasattr(app, "append_log"):
+                app.append_log("系統", f"--- 開始第 {round_idx} 輪循環 ---")
 
             for idx, step in enumerate(current_steps):
                 if not state.running or state.stop_event.is_set():
@@ -324,10 +362,15 @@ def macro_worker_loop(app):
                 break
     except Exception as e:
         app.set_status(f"異常中斷: {e}")
+        if hasattr(app, "append_log"):
+            app.append_log("警示", f"✕ 異常中斷: {e}")
     finally:
         state.running = False
         emergency_release_all()
         app.set_running_ui(False)
+        if hasattr(app, "append_log"):
+            completed = round_idx - 1 if round_idx > 1 else (1 if round_idx == 1 and not state.stop_event.is_set() else 0)
+            app.append_log("系統", f"⏹ 巨集循環結束 (累計運行 {completed} 輪)")
 
 def test_run_execution_flow_worker(app):
     """一次性試跑整個掛機執行流程的背景工作函式"""
