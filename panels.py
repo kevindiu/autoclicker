@@ -464,15 +464,14 @@ class RightPanel(tk.Frame):
         self.cbo_step_add_var.pack(side="left", fill="x", expand=True, padx=(0, 1))
         tk.Button(f_svar, text="+ 引用變數", width=8, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.step_add_variable_action).pack(side="left")
 
-        # 3. 底部固定控制區 (HUD、即時狀態 與 鎖定大小大按鈕)
+        # 3. 底部固定控制區 (HUD 游標坐標 與 鎖定大小大按鈕)
         bot = tk.Frame(self, bg=UITheme.BG_PANEL)
         bot.pack(side="bottom", fill="x", pady=(2, 0))
 
         self.lbl_mouse_hud = tk.Label(bot, text="● 游標實時坐標: (0, 0)", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_NORMAL_BOLD)
-        self.lbl_mouse_hud.pack(fill="x")
+        self.lbl_mouse_hud.pack(fill="x", pady=(0, 2))
 
-        self.lbl_status = tk.Label(bot, text="● 狀態: 已就緒", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MAIN, font=UITheme.FONT_NORMAL)
-        self.lbl_status.pack(fill="x", pady=(1, 2))
+        self.lbl_status = None
 
         # 鎖定大小之開始/停止按鈕容器 (嚴格鎖定 46px 高度)
         f_btn_wrap = tk.Frame(bot, height=46, bg=UITheme.BG_PANEL)
@@ -692,7 +691,7 @@ class RightPanel(tk.Frame):
 
         self.txt_log = tk.Text(
             f_log_box,
-            height=5,
+            height=6,
             bg=UITheme.BG_DARK,
             fg=UITheme.TEXT_MAIN,
             font=UITheme.FONT_SMALL,
@@ -727,16 +726,15 @@ class RightPanel(tk.Frame):
         self.txt_log.tag_config("text_試跑", foreground="#c7d2fe")
 
         pw_right.add(f_middle_split, minsize=140)
-        pw_right.add(f_log_panel, minsize=75, height=130)
+        pw_right.add(f_log_panel, minsize=75, height=150)
 
     def get_widgets(self):
         """明確定義右欄面板所管理的公開 UI 控制項字典"""
         return {
             "step_listbox": getattr(self, "step_listbox", None),
-            "periodic_listbox": getattr(self, "periodic_listbox", None),
+            "periodic_task_view": getattr(self, "periodic_task_view", None),
             "txt_log": getattr(self, "txt_log", None),
             "lbl_mouse_hud": getattr(self, "lbl_mouse_hud", None),
-            "lbl_status": getattr(self, "lbl_status", None),
             "btn_toggle": getattr(self, "btn_toggle", None),
             "cbo_step_call_combo": getattr(self, "cbo_step_call_combo", None),
             "cbo_step_add_var": getattr(self, "cbo_step_add_var", None),

@@ -210,8 +210,9 @@ class App(tk.Tk):
                 last_msg = self.status_queue.get_nowait()
         except queue.Empty:
             pass
-        if last_msg is not None and hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
-            self.lbl_status.config(text=f"● 狀態: {last_msg}")
+        lbl_status = getattr(self, "lbl_status", None)
+        if last_msg is not None and lbl_status and lbl_status.winfo_exists():
+            lbl_status.config(text=f"● 狀態: {last_msg}")
 
         # 批次消費執行日誌佇列 (嚴格維持最新 100 筆)
         log_items = []
@@ -285,14 +286,17 @@ class App(tk.Tk):
                 pass
 
     def set_status(self, msg):
-        """執行緒安全地更新狀態列訊息，並約束最大字數避免 Tkinter 佈局重算造成跳動"""
+        """執行緒安全地更新狀態列訊息 (無狀態列標籤時安全略過)"""
         if not self.is_closing:
             try:
+                lbl_status = getattr(self, "lbl_status", None)
+                if not lbl_status:
+                    return
                 s_msg = str(msg).strip()
                 if len(s_msg) > 52:
                     s_msg = s_msg[:50] + "..."
-                if threading.current_thread() is threading.main_thread() and hasattr(self, "lbl_status") and self.lbl_status.winfo_exists():
-                    self.lbl_status.config(text=f"● 狀態: {s_msg}")
+                if threading.current_thread() is threading.main_thread() and lbl_status.winfo_exists():
+                    lbl_status.config(text=f"● 狀態: {s_msg}")
                 else:
                     self.status_queue.put(s_msg)
             except (queue.Full, tk.TclError, AttributeError):
