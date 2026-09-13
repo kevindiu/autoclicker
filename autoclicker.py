@@ -1,6 +1,5 @@
 import os
 import sys
-import json
 import time
 import copy
 import ctypes
@@ -35,16 +34,25 @@ import dialogs
 import engine
 
 # ==============================================================================
-# 全域資料與相容別名 (提供相容性與外部腳本直接存取)
+# 全域資料與相容別名動態代理 (解決 L40-47 模組級淺引用在 reset / 重新賦值後斷裂問題)
 # ==============================================================================
-combos = state.combos
-steps = state.steps
-variables = state.variables
-active_steps = state.active_steps
-active_combos = state.active_combos
-active_variables = state.active_variables
-steps_lock = state.steps_lock
-stop_event = state.stop_event
+_STATE_PROXY_ATTRS = (
+    "combos", "steps", "variables", "periodic_tasks",
+    "active_steps", "active_combos", "active_variables", "active_periodic_tasks",
+    "running_lock", "steps_lock", "stop_event", "target_hwnd",
+    "is_testing", "reload_requested", "currently_held_keys",
+    "currently_held_keys_lock", "periodic_timers", "periodic_timers_lock",
+    "running"
+)
+
+def __getattr__(name):
+    """PEP 562 模組層級動態屬性委派：始終即時指向 state 的當前資料，避免 reset / 重新賦值淺引用斷裂"""
+    if name in _STATE_PROXY_ATTRS or hasattr(state, name):
+        return getattr(state, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+def __dir__():
+    return sorted(set(globals().keys()) | set(_STATE_PROXY_ATTRS) | set(dir(state)))
 
 # ==============================================================================
 # 原生 Tkinter GUI 主應用程式
@@ -157,13 +165,13 @@ class App(tk.Tk):
 
     def get_current_data_snapshot(self):
         """獲取當前設定資料的序列化字串，用於精確對比是否有未儲存的變更"""
-        return config_manager.get_data_snapshot(state)
+        return state.get_data_snapshot()
 
     def has_unsaved_changes(self):
         """檢查當前記憶體中的設定相較於最後儲存狀態是否有更新"""
         if not hasattr(self, "last_saved_snapshot") or not self.last_saved_snapshot:
             return False
-        return config_manager.has_unsaved_changes(self.last_saved_snapshot, state)
+        return state.has_unsaved_changes(self.last_saved_snapshot)
 
     def on_close(self):
         """主視窗關閉事件處理 (若有未儲存之變更則提示使用者儲存)"""
@@ -177,15 +185,8 @@ class App(tk.Tk):
             if ans is None:
                 return
             elif ans is True:
-                fn = f"{curr_profile}{CONFIG_EXT}"
                 try:
-                    with open(fn, "w", encoding="utf-8") as f:
-                        json.dump({
-                            "variables": state.variables,
-                            "combos": state.combos,
-                            "steps": state.steps,
-                            "periodic_tasks": state.periodic_tasks
-                        }, f, ensure_ascii=False, indent=2)
+                    config_manager.save_profile_file(curr_profile, state, CONFIG_EXT)
                 except Exception as e:
                     if not messagebox.askyesno("儲存失敗", f"儲存失敗 ({e})，是否仍要強制退出？", parent=self):
                         return
@@ -1461,6 +1462,27 @@ class App(tk.Tk):
 
     def macro_worker_loop(self):
         engine.macro_worker_loop(self)
+
+# ==============================================================================
+# 模組類別包裝 (保證 autoclicker 屬性讀寫均動態委派至 state，杜絕淺引用斷裂)
+# ==============================================================================
+class _AutoclickerModule(sys.modules[__name__].__class__):
+    """自訂模組類別，攔截模組屬性讀寫，保證別名與 state 保持 100% 雙向動態同步"""
+    def __getattr__(self, name):
+        if name in _STATE_PROXY_ATTRS or hasattr(state, name):
+            return getattr(state, name)
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    def __setattr__(self, name, value):
+        if name in _STATE_PROXY_ATTRS or (hasattr(state, name) and name not in ("__class__",)):
+            setattr(state, name, value)
+        else:
+            super().__setattr__(name, value)
+
+    def __dir__(self):
+        return sorted(set(super().__dir__()) | set(_STATE_PROXY_ATTRS) | set(dir(state)))
+
+sys.modules[__name__].__class__ = _AutoclickerModule
 
 if __name__ == "__main__":
     if sys.platform == "win32":

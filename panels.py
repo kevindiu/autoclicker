@@ -20,6 +20,7 @@ class LeftPanel(tk.Frame):
         )
         self.app = app
         self._build_ui()
+        self.export_widgets_to_app(app)
 
     def _build_ui(self):
         app = self.app
@@ -352,15 +353,42 @@ class LeftPanel(tk.Frame):
         sc_cr.pack(side="right", fill="y")
         self.combo_act_listbox.config(yscrollcommand=sc_cr.set)
 
-        # 橋接回寫到主控制器 app，維持完全相容
-        app.cbo_profile = self.cbo_profile
-        app.cbo_window = self.cbo_window
-        app.tree_vars = self.tree_vars
-        app.combo_listbox = self.combo_listbox
-        app.lbl_combo_editing = self.lbl_combo_editing
-        app.cbo_call_combo = self.cbo_call_combo
-        app.cbo_combo_add_var = self.cbo_combo_add_var
-        app.combo_act_listbox = self.combo_act_listbox
+    def get_widgets(self):
+        """明確定義左欄面板所管理的公開 UI 控制項字典"""
+        return {
+            "cbo_profile": getattr(self, "cbo_profile", None),
+            "cbo_window": getattr(self, "cbo_window", None),
+            "tree_vars": getattr(self, "tree_vars", None),
+            "combo_listbox": getattr(self, "combo_listbox", None),
+            "lbl_combo_editing": getattr(self, "lbl_combo_editing", None),
+            "cbo_call_combo": getattr(self, "cbo_call_combo", None),
+            "cbo_combo_add_var": getattr(self, "cbo_combo_add_var", None),
+            "combo_act_listbox": getattr(self, "combo_act_listbox", None),
+        }
+
+    def export_widgets_to_app(self, app):
+        """統一把面板子組件引用寫回 app，讓跨組件依賴關係清晰、可追蹤"""
+        if app is None:
+            return
+        for name, widget in self.get_widgets().items():
+            if widget is not None:
+                setattr(app, name, widget)
+
+    # ======================= 公開組件存取 API =======================
+    def get_tree_vars(self):
+        return self.tree_vars
+
+    def get_cbo_profile(self):
+        return self.cbo_profile
+
+    def get_cbo_window(self):
+        return self.cbo_window
+
+    def get_combo_listbox(self):
+        return self.combo_listbox
+
+    def get_combo_act_listbox(self):
+        return self.combo_act_listbox
 
 
 # ==============================================================================
@@ -380,6 +408,7 @@ class RightPanel(tk.Frame):
         )
         self.app = app
         self._build_ui()
+        self.export_widgets_to_app(app)
 
     def _build_ui(self):
         app = self.app
@@ -700,19 +729,49 @@ class RightPanel(tk.Frame):
         pw_right.add(f_middle_split, minsize=140)
         pw_right.add(f_log_panel, minsize=75, height=130)
 
-        # 橋接回寫到主控制器 app，維持完全相容
-        app.step_listbox = self.step_listbox
-        app.periodic_listbox = self.periodic_listbox
-        app.txt_log = self.txt_log
-        app.lbl_mouse_hud = self.lbl_mouse_hud
-        app.lbl_status = self.lbl_status
-        app.btn_toggle = self.btn_toggle
-        app.cbo_step_call_combo = self.cbo_step_call_combo
-        app.cbo_step_add_var = self.cbo_step_add_var
-        app.btn_main_test_all = self.btn_main_test_all
-        app.btn_main_up = self.btn_main_up
-        app.btn_main_down = self.btn_main_down
-        app.btn_main_test = self.btn_main_test
-        app.btn_main_edit = self.btn_main_edit
-        app.btn_main_dup = self.btn_main_dup
-        app.btn_main_del = self.btn_main_del
+    def get_widgets(self):
+        """明確定義右欄面板所管理的公開 UI 控制項字典"""
+        return {
+            "step_listbox": getattr(self, "step_listbox", None),
+            "periodic_listbox": getattr(self, "periodic_listbox", None),
+            "txt_log": getattr(self, "txt_log", None),
+            "lbl_mouse_hud": getattr(self, "lbl_mouse_hud", None),
+            "lbl_status": getattr(self, "lbl_status", None),
+            "btn_toggle": getattr(self, "btn_toggle", None),
+            "cbo_step_call_combo": getattr(self, "cbo_step_call_combo", None),
+            "cbo_step_add_var": getattr(self, "cbo_step_add_var", None),
+            "btn_main_test_all": getattr(self, "btn_main_test_all", None),
+            "btn_main_up": getattr(self, "btn_main_up", None),
+            "btn_main_down": getattr(self, "btn_main_down", None),
+            "btn_main_test": getattr(self, "btn_main_test", None),
+            "btn_main_edit": getattr(self, "btn_main_edit", None),
+            "btn_main_dup": getattr(self, "btn_main_dup", None),
+            "btn_main_del": getattr(self, "btn_main_del", None),
+        }
+
+    def export_widgets_to_app(self, app):
+        """統一把面板子組件引用寫回 app，讓跨組件依賴關係清晰、可追蹤"""
+        if app is None:
+            return
+        for name, widget in self.get_widgets().items():
+            if widget is not None:
+                setattr(app, name, widget)
+
+    # ======================= 公開組件存取 API =======================
+    def get_step_listbox(self):
+        return self.step_listbox
+
+    def get_periodic_listbox(self):
+        return self.periodic_listbox
+
+    def get_txt_log(self):
+        return self.txt_log
+
+    def get_lbl_status(self):
+        return self.lbl_status
+
+    def get_lbl_mouse_hud(self):
+        return self.lbl_mouse_hud
+
+    def get_btn_toggle(self):
+        return self.btn_toggle

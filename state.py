@@ -126,6 +126,12 @@ class AppState:
         except (TypeError, ValueError):
             return ""
 
+    def has_unsaved_changes(self, last_saved_snapshot: str) -> bool:
+        """檢查當前編輯器資料相較於最後儲存快照是否有變更"""
+        if not last_saved_snapshot:
+            return False
+        return self.get_data_snapshot() != last_saved_snapshot
+
 
 # ==============================================================================
 # 預設全域狀態單例與管理函式
@@ -161,6 +167,24 @@ def is_running() -> bool:
 def set_running(val: bool):
     """線程安全地設定巨集運行狀態 (向後相容捷徑)"""
     app_state.set_running(val)
+
+def reset():
+    """完全重設當前全域狀態 (保證只進行原地修改，絕不重新賦值新物件)"""
+    app_state.reset()
+
+def get_data_snapshot(target_state=None) -> str:
+    """獲取資料快照字串 (向後相容捷徑，唯一委派至 AppState)"""
+    s = target_state if target_state is not None else app_state
+    if hasattr(s, "get_data_snapshot"):
+        return s.get_data_snapshot()
+    return app_state.get_data_snapshot()
+
+def has_unsaved_changes(last_saved_snapshot: str, target_state=None) -> bool:
+    """檢查是否有未儲存變更 (向後相容捷徑，唯一委派至 AppState)"""
+    s = target_state if target_state is not None else app_state
+    if hasattr(s, "has_unsaved_changes"):
+        return s.has_unsaved_changes(last_saved_snapshot)
+    return app_state.has_unsaved_changes(last_saved_snapshot)
 
 
 # ==============================================================================
