@@ -1,4 +1,31 @@
 {
+  "variables": {
+    "掛機位置": {
+      "type": "coord",
+      "value": {
+        "x": 513,
+        "y": 511,
+        "btn": "left",
+        "rel": true
+      }
+    },
+    "汁野": {
+      "type": "key",
+      "value": "f2"
+    },
+    "坐下": {
+      "type": "key",
+      "value": "f1"
+    },
+    "靈氣劍": {
+      "type": "key",
+      "value": "f4"
+    },
+    "風花": {
+      "type": "key",
+      "value": "f5"
+    }
+  },
   "combos": [
     {
       "name": "P1英MP",
@@ -11,7 +38,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "MP"
+          "target_name": "技：靈氣劍"
         }
       ]
     },
@@ -26,7 +53,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "MP"
+          "target_name": "技：靈氣劍"
         }
       ]
     },
@@ -41,7 +68,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "MP"
+          "target_name": "技：靈氣劍"
         }
       ]
     },
@@ -56,7 +83,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "MP"
+          "target_name": "技：靈氣劍"
         }
       ]
     },
@@ -71,7 +98,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "MP"
+          "target_name": "技：靈氣劍"
         }
       ]
     },
@@ -86,20 +113,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "MP"
-        }
-      ]
-    },
-    {
-      "name": "MP",
-      "actions": [
-        {
-          "type": "key",
-          "key": "f4"
-        },
-        {
-          "type": "wait",
-          "sec": 4.5
+          "target_name": "技：靈氣劍"
         }
       ]
     },
@@ -114,7 +128,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "MP"
+          "target_name": "技：靈氣劍"
         }
       ]
     },
@@ -129,7 +143,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "MP"
+          "target_name": "技：靈氣劍"
         }
       ]
     },
@@ -144,7 +158,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "MP"
+          "target_name": "技：靈氣劍"
         }
       ]
     },
@@ -159,7 +173,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "MP"
+          "target_name": "技：靈氣劍"
         }
       ]
     },
@@ -174,7 +188,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "MP"
+          "target_name": "技：靈氣劍"
         }
       ]
     },
@@ -189,20 +203,17 @@
         },
         {
           "type": "call_combo",
-          "target_name": "MP"
+          "target_name": "技：靈氣劍"
         }
       ]
     },
     {
-      "name": "SIT",
+      "name": "坐下",
       "actions": [
         {
-          "type": "wait",
-          "sec": 0.5
-        },
-        {
           "type": "key",
-          "key": "f1"
+          "key": "f1",
+          "var_name": "坐下"
         },
         {
           "type": "wait",
@@ -211,38 +222,28 @@
       ]
     },
     {
-      "name": "群回",
+      "name": "返回原位",
       "actions": [
         {
           "type": "key",
-          "key": "f5"
+          "key": "tab",
+          "enabled": true
         },
         {
           "type": "wait",
-          "sec": 2.8
-        }
-      ]
-    },
-    {
-      "name": "地圖",
-      "actions": [
-        {
-          "type": "key",
-          "key": "tab"
-        },
-        {
-          "type": "wait",
-          "sec": 0.5
+          "sec": 0.1
         },
         {
           "type": "click",
-          "x": 1008,
-          "y": 677,
-          "rel": true
+          "btn": "left",
+          "x": 724,
+          "y": 503,
+          "rel": true,
+          "var_name": "掛機位置"
         },
         {
           "type": "wait",
-          "sec": 0.5
+          "sec": 0.2
         },
         {
           "type": "key",
@@ -250,7 +251,7 @@
         },
         {
           "type": "wait",
-          "sec": 1.0
+          "sec": 0.3
         }
       ]
     },
@@ -259,7 +260,76 @@
       "actions": [
         {
           "type": "key",
-          "key": "f2"
+          "key": "f2",
+          "var_name": "汁野"
+        },
+        {
+          "type": "wait",
+          "sec": 0.5
+        },
+        {
+          "type": "key",
+          "key": "f2",
+          "var_name": "汁野"
+        },
+        {
+          "type": "wait",
+          "sec": 0.3
+        }
+      ]
+    },
+    {
+      "name": "汁野再返回原位",
+      "actions": [
+        {
+          "type": "call_combo",
+          "target_name": "汁野"
+        },
+        {
+          "type": "call_combo",
+          "target_name": "返回原位"
+        }
+      ]
+    },
+    {
+      "name": "技：靈氣劍",
+      "actions": [
+        {
+          "type": "key",
+          "key": "f4",
+          "var_name": "靈氣劍"
+        },
+        {
+          "type": "wait",
+          "sec": 4.5
+        }
+      ]
+    },
+    {
+      "name": "技：群回",
+      "actions": [
+        {
+          "type": "key",
+          "key": "f5",
+          "var_name": "風花"
+        },
+        {
+          "type": "wait",
+          "sec": 2.9
+        }
+      ]
+    },
+    {
+      "name": "技：回魂丹",
+      "actions": [
+        {
+          "type": "key",
+          "key": "f10",
+          "var_name": "回魂丹"
+        },
+        {
+          "type": "wait",
+          "sec": 5.5
         }
       ]
     }
@@ -267,71 +337,43 @@
   "steps": [
     {
       "type": "combo",
-      "name": "群回",
+      "name": "技：風花",
       "actions": [
         {
           "type": "key",
-          "key": "f5"
+          "key": "f5",
+          "var_name": "風花"
         },
         {
           "type": "wait",
-          "sec": 2.8
+          "sec": 3.2
         }
       ]
     },
     {
       "type": "combo",
-      "name": "P1英MP",
+      "name": "P2人MP",
       "actions": [
         {
           "type": "click",
-          "x": 163,
-          "y": 212,
+          "x": 95,
+          "y": 242,
           "rel": true
         },
         {
           "type": "call_combo",
-          "target_name": "MP"
+          "target_name": "技：靈氣劍"
         }
       ]
     },
     {
       "type": "combo",
-      "name": "P3英MP",
-      "actions": [
-        {
-          "type": "click",
-          "x": 165,
-          "y": 307,
-          "rel": true
-        },
-        {
-          "type": "call_combo",
-          "target_name": "MP"
-        }
-      ]
-    },
-    {
-      "type": "combo",
-      "name": "汁野",
+      "name": "坐下",
       "actions": [
         {
           "type": "key",
-          "key": "f2"
-        }
-      ]
-    },
-    {
-      "type": "combo",
-      "name": "SIT",
-      "actions": [
-        {
-          "type": "wait",
-          "sec": 0.5
-        },
-        {
-          "type": "key",
-          "key": "f1"
+          "key": "f1",
+          "var_name": "坐下"
         },
         {
           "type": "wait",
@@ -341,125 +383,32 @@
     },
     {
       "type": "combo",
-      "name": "地圖",
-      "actions": [
-        {
-          "type": "key",
-          "key": "tab"
-        },
-        {
-          "type": "wait",
-          "sec": 0.5
-        },
-        {
-          "type": "click",
-          "x": 1008,
-          "y": 677,
-          "rel": true
-        },
-        {
-          "type": "wait",
-          "sec": 0.5
-        },
-        {
-          "type": "key",
-          "key": "tab"
-        },
-        {
-          "type": "wait",
-          "sec": 1.0
-        }
-      ]
-    },
-    {
-      "type": "combo",
-      "name": "P6英MP",
+      "name": "P2人MP",
       "actions": [
         {
           "type": "click",
-          "x": 159,
-          "y": 436,
+          "x": 95,
+          "y": 242,
           "rel": true
         },
         {
           "type": "call_combo",
-          "target_name": "MP"
+          "target_name": "技：靈氣劍"
         }
       ]
-    },
+    }
+  ],
+  "periodic_tasks": [
     {
-      "type": "combo",
-      "name": "群回",
-      "actions": [
-        {
-          "type": "key",
-          "key": "f5"
-        },
-        {
-          "type": "wait",
-          "sec": 2.8
-        }
-      ]
-    },
-    {
-      "type": "combo",
-      "name": "汁野",
-      "actions": [
-        {
-          "type": "key",
-          "key": "f2"
-        }
-      ]
-    },
-    {
-      "type": "combo",
-      "name": "SIT",
-      "actions": [
-        {
-          "type": "wait",
-          "sec": 0.5
-        },
-        {
-          "type": "key",
-          "key": "f1"
-        },
-        {
-          "type": "wait",
-          "sec": 4.5
-        }
-      ]
-    },
-    {
-      "type": "combo",
-      "name": "地圖",
-      "actions": [
-        {
-          "type": "key",
-          "key": "tab"
-        },
-        {
-          "type": "wait",
-          "sec": 0.5
-        },
-        {
-          "type": "click",
-          "x": 1008,
-          "y": 677,
-          "rel": true
-        },
-        {
-          "type": "wait",
-          "sec": 0.5
-        },
-        {
-          "type": "key",
-          "key": "tab"
-        },
-        {
-          "type": "wait",
-          "sec": 1.0
-        }
-      ]
+      "id": "pt_1789111006714",
+      "name": "定時_汁野再返回原位",
+      "interval": 8.0,
+      "enabled": true,
+      "run_on_start": false,
+      "action": {
+        "type": "call_combo",
+        "target_name": "汁野再返回原位"
+      }
     }
   ]
 }

@@ -3,14 +3,31 @@
     "掛機位置": {
       "type": "coord",
       "value": {
-        "x": 517,
-        "y": 514,
-        "btn": "left"
+        "x": 513,
+        "y": 511,
+        "btn": "left",
+        "rel": true
       }
     },
     "汁野": {
       "type": "key",
       "value": "f2"
+    },
+    "坐下": {
+      "type": "key",
+      "value": "f1"
+    },
+    "治療術": {
+      "type": "key",
+      "value": "f4"
+    },
+    "回復術": {
+      "type": "key",
+      "value": "f5"
+    },
+    "回魂丹": {
+      "type": "key",
+      "value": "f10"
     }
   },
   "combos": [
@@ -25,7 +42,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "HP"
+          "target_name": "技：治療術"
         }
       ]
     },
@@ -40,7 +57,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "HP"
+          "target_name": "技：治療術"
         }
       ]
     },
@@ -55,7 +72,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "HP"
+          "target_name": "技：治療術"
         }
       ]
     },
@@ -70,7 +87,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "HP"
+          "target_name": "技：治療術"
         }
       ]
     },
@@ -85,7 +102,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "HP"
+          "target_name": "技：治療術"
         }
       ]
     },
@@ -100,20 +117,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "HP"
-        }
-      ]
-    },
-    {
-      "name": "HP",
-      "actions": [
-        {
-          "type": "key",
-          "key": "f4"
-        },
-        {
-          "type": "wait",
-          "sec": 2.5
+          "target_name": "技：治療術"
         }
       ]
     },
@@ -128,7 +132,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "HP"
+          "target_name": "技：治療術"
         }
       ]
     },
@@ -143,7 +147,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "HP"
+          "target_name": "技：治療術"
         }
       ]
     },
@@ -158,7 +162,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "HP"
+          "target_name": "技：治療術"
         }
       ]
     },
@@ -173,7 +177,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "HP"
+          "target_name": "技：治療術"
         }
       ]
     },
@@ -188,7 +192,7 @@
         },
         {
           "type": "call_combo",
-          "target_name": "HP"
+          "target_name": "技：治療術"
         }
       ]
     },
@@ -203,33 +207,21 @@
         },
         {
           "type": "call_combo",
-          "target_name": "HP"
+          "target_name": "技：治療術"
         }
       ]
     },
     {
-      "name": "SIT",
+      "name": "坐下",
       "actions": [
         {
           "type": "key",
-          "key": "f1"
+          "key": "f1",
+          "var_name": "坐下"
         },
         {
           "type": "wait",
           "sec": 4.5
-        }
-      ]
-    },
-    {
-      "name": "群回",
-      "actions": [
-        {
-          "type": "key",
-          "key": "f5"
-        },
-        {
-          "type": "wait",
-          "sec": 2.9
         }
       ]
     },
@@ -243,7 +235,7 @@
         },
         {
           "type": "wait",
-          "sec": 0.2
+          "sec": 0.1
         },
         {
           "type": "click",
@@ -260,6 +252,10 @@
         {
           "type": "key",
           "key": "tab"
+        },
+        {
+          "type": "wait",
+          "sec": 0.3
         }
       ]
     },
@@ -272,13 +268,17 @@
           "var_name": "汁野"
         },
         {
+          "type": "wait",
+          "sec": 0.5
+        },
+        {
           "type": "key",
           "key": "f2",
           "var_name": "汁野"
         },
         {
           "type": "wait",
-          "sec": 0.5
+          "sec": 0.3
         }
       ]
     },
@@ -294,16 +294,59 @@
           "target_name": "返回原位"
         }
       ]
+    },
+    {
+      "name": "技：治療術",
+      "actions": [
+        {
+          "type": "key",
+          "key": "f4",
+          "var_name": "治療術"
+        },
+        {
+          "type": "wait",
+          "sec": 2.5
+        }
+      ]
+    },
+    {
+      "name": "技：回復術",
+      "actions": [
+        {
+          "type": "key",
+          "key": "f5",
+          "var_name": "回復術"
+        },
+        {
+          "type": "wait",
+          "sec": 2.9
+        }
+      ]
+    },
+    {
+      "name": "技：回魂丹",
+      "actions": [
+        {
+          "type": "key",
+          "key": "f10",
+          "var_name": "回魂丹"
+        },
+        {
+          "type": "wait",
+          "sec": 5.5
+        }
+      ]
     }
   ],
   "steps": [
     {
       "type": "combo",
-      "name": "群回",
+      "name": "技：回復術",
       "actions": [
         {
           "type": "key",
-          "key": "f5"
+          "key": "f5",
+          "var_name": "回復術"
         },
         {
           "type": "wait",
@@ -313,66 +356,48 @@
     },
     {
       "type": "combo",
-      "name": "P1人HP",
+      "name": "P2人HP",
       "actions": [
         {
           "type": "click",
-          "x": 97,
-          "y": 194,
+          "x": 95,
+          "y": 242,
           "rel": true
         },
         {
           "type": "call_combo",
-          "target_name": "HP"
+          "target_name": "技：治療術"
         }
-      ],
-      "enabled": true
+      ]
     },
     {
       "type": "combo",
-      "name": "P1人HP",
-      "actions": [
-        {
-          "type": "click",
-          "x": 97,
-          "y": 194,
-          "rel": true
-        },
-        {
-          "type": "call_combo",
-          "target_name": "HP"
-        }
-      ],
-      "enabled": true
-    },
-    {
-      "type": "combo",
-      "name": "P1人HP",
-      "actions": [
-        {
-          "type": "click",
-          "x": 97,
-          "y": 194,
-          "rel": true
-        },
-        {
-          "type": "call_combo",
-          "target_name": "HP"
-        }
-      ],
-      "enabled": true
-    },
-    {
-      "type": "combo",
-      "name": "SIT",
+      "name": "坐下",
       "actions": [
         {
           "type": "key",
-          "key": "f1"
+          "key": "f1",
+          "var_name": "坐下"
         },
         {
           "type": "wait",
           "sec": 4.5
+        }
+      ]
+    },
+    {
+      "type": "combo",
+      "name": "P2人HP",
+      "actions": [
+        {
+          "type": "click",
+          "x": 95,
+          "y": 242,
+          "rel": true
+        },
+        {
+          "type": "call_combo",
+          "target_name": "技：治療術"
         }
       ]
     }
@@ -381,12 +406,23 @@
     {
       "id": "pt_1789111006714",
       "name": "定時_汁野再返回原位",
-      "interval": 10.0,
+      "interval": 8.0,
       "enabled": true,
       "run_on_start": false,
       "action": {
         "type": "call_combo",
         "target_name": "汁野再返回原位"
+      }
+    },
+    {
+      "id": "pt_1789126096362",
+      "name": "定時_回魂丹",
+      "interval": 180.0,
+      "enabled": true,
+      "run_on_start": false,
+      "action": {
+        "type": "call_combo",
+        "target_name": "技：回魂丹"
       }
     }
   ]
