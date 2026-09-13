@@ -83,7 +83,7 @@ def prompt_variable_dialog(app, edit_name=None):
     var_wait = tk.StringVar(value=init_wait)
 
     def start_space_capture():
-        if state.running:
+        if state.is_running():
             app.set_status("巨集正在循環執行中，為免干擾滑鼠瞄準，請先停止運行再取點！")
             return
         dialog.grab_release()
@@ -517,7 +517,7 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
         btn_rec.grid(row=4, column=0, columnspan=2, pady=(8, 2))
 
         def do_rec():
-            if state.running:
+            if state.is_running():
                 app.set_status("巨集正在循環執行中，為免干擾滑鼠瞄準，請先停止運行再取點！")
                 return
             dialog.grab_release()
@@ -841,7 +841,7 @@ def prompt_edit_periodic_task(app, task=None):
             btn_rec.pack(fill="x", padx=4)
 
             def do_rec():
-                if state.running:
+                if state.is_running():
                     app.set_status("巨集正在循環執行中，為免干擾滑鼠瞄準，請先停止運行再取點！")
                     return
                 dialog.grab_release()

@@ -19,8 +19,57 @@ def to_lparam(val):
     val = int(val) & 0xFFFFFFFF
     return val if val < 0x80000000 else val - 0x100000000
 
-HWND_TOPMOST = ctypes.c_void_p(-1)
-HWND_NOTOPMOST = ctypes.c_void_p(-2)
+# ==============================================================================
+# Win32 訊息與系統旗標常數定義 (Windows Messages & System Constants)
+# ==============================================================================
+# 滑鼠訊息 (Mouse Messages)
+WM_MOUSEMOVE     = 0x0200
+WM_LBUTTONDOWN   = 0x0201
+WM_LBUTTONUP     = 0x0202
+WM_RBUTTONDOWN   = 0x0204
+WM_RBUTTONUP     = 0x0205
+
+# 鍵盤訊息 (Keyboard Messages)
+WM_KEYDOWN       = 0x0100
+WM_KEYUP         = 0x0101
+
+# 滑鼠按鍵按壓狀態旗標 (Mouse Button wParam Flags)
+MK_LBUTTON       = 0x0001
+MK_RBUTTON       = 0x0002
+
+# 鍵盤釋放轉換狀態遮罩 (Key Release LPARAM Masks)
+KEY_RELEASE_LPARAM_MASK    = 0xC0000000  # bits 30 & 31: Previous key state & Transition state
+KEY_RELEASE_DEFAULT_LPARAM = 0xC0000001  # Repeat count 1 + bits 30 & 31
+
+# 虛擬按鍵碼 (Virtual Key Codes)
+VK_SPACE         = 0x20
+VK_RETURN        = 0x0D
+VK_ESCAPE        = 0x1B
+VK_TAB           = 0x09
+VK_SHIFT         = 0x10
+VK_CONTROL       = 0x11
+VK_MENU          = 0x12  # Alt key
+VK_LEFT          = 0x25
+VK_UP            = 0x26
+VK_RIGHT         = 0x27
+VK_DOWN          = 0x28
+
+# GetAsyncKeyState 狀態遮罩
+KEY_PRESSED_MASK = 0x8000
+
+# keybd_event 事件旗標
+KEYEVENTF_KEYUP  = 0x0002
+
+# ShowWindow 命令常數
+SW_RESTORE       = 9
+
+# SetWindowPos 旗標 (Window Sizing & Positioning Flags)
+SWP_NOSIZE       = 0x0001
+SWP_NOMOVE       = 0x0002
+SWP_SHOWWINDOW   = 0x0040
+
+HWND_TOPMOST     = ctypes.c_void_p(-1)
+HWND_NOTOPMOST   = ctypes.c_void_p(-2)
 
 class POINT(ctypes.Structure):
     _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
@@ -70,9 +119,9 @@ else:
     WNDENUMPROC = None
 
 VK_MAP = {
-    "space": 0x20, "enter": 0x0D, "return": 0x0D, "esc": 0x1B, "escape": 0x1B,
-    "tab": 0x09, "shift": 0x10, "ctrl": 0x11, "alt": 0x12,
-    "up": 0x26, "down": 0x28, "left": 0x25, "right": 0x27,
+    "space": VK_SPACE, "enter": VK_RETURN, "return": VK_RETURN, "esc": VK_ESCAPE, "escape": VK_ESCAPE,
+    "tab": VK_TAB, "shift": VK_SHIFT, "ctrl": VK_CONTROL, "alt": VK_MENU,
+    "up": VK_UP, "down": VK_DOWN, "left": VK_LEFT, "right": VK_RIGHT,
     **{f"f{i}": 0x6F + i for i in range(1, 13)},
 }
 
@@ -85,7 +134,7 @@ def safe_sleep(seconds):
     while time.time() < end:
         if state.stop_event.is_set():
             return False
-        if not state.is_testing and not state.running:
+        if not state.is_testing and not state.is_running():
             return False
         time.sleep(0.02)
     return True
@@ -95,8 +144,8 @@ def emergency_release_all():
     # 1. 釋放背景滑鼠
     if IS_WINDOWS and state.target_hwnd and user32:
         try:
-            user32.PostMessageW(state.target_hwnd, 0x0202, 0, 0)
-            user32.PostMessageW(state.target_hwnd, 0x0205, 0, 0)
+            user32.PostMessageW(state.target_hwnd, WM_LBUTTONUP, 0, 0)
+            user32.PostMessageW(state.target_hwnd, WM_RBUTTONUP, 0, 0)
         except Exception:
             pass
 
@@ -106,7 +155,7 @@ def emergency_release_all():
             try:
                 if item[0] == "bg" and IS_WINDOWS and user32:
                     _, h, vk = item
-                    user32.PostMessageW(h, 0x0101, vk, to_lparam(0xC0000001))
+                    user32.PostMessageW(h, WM_KEYUP, vk, to_lparam(KEY_RELEASE_DEFAULT_LPARAM))
                 elif item[0] == "fg":
                     _, k = item
                     pyautogui.keyUp(k)
@@ -129,12 +178,12 @@ def post_bg_click(hwnd, client_x, client_y, offset_x=0, offset_y=0, btn="left"):
     cx, cy = int(client_x) + offset_x, int(client_y) + offset_y
     lparam = to_lparam(((int(cy) & 0xFFFF) << 16) | (int(cx) & 0xFFFF))
 
-    down_msg = 0x0204 if btn == "right" else 0x0201
-    down_wparam = 0x0002 if btn == "right" else 0x0001
-    up_msg = 0x0205 if btn == "right" else 0x0202
+    down_msg = WM_RBUTTONDOWN if btn == "right" else WM_LBUTTONDOWN
+    down_wparam = MK_RBUTTON if btn == "right" else MK_LBUTTON
+    up_msg = WM_RBUTTONUP if btn == "right" else WM_LBUTTONUP
 
-    # 連續立即發送 WM_MOUSEMOVE 與 WM_LBUTTONDOWN，絕不停頓，保證訊息原子性連續被遊戲處理，防止硬體滑鼠訊息插隊
-    user32.PostMessageW(hwnd, 0x0200, 0, lparam)
+    # 連續立即發送 WM_MOUSEMOVE 與 WM_LBUTTONDOWN / WM_RBUTTONDOWN，絕不停頓，保證訊息原子性連續被遊戲處理，防止硬體滑鼠訊息插隊
+    user32.PostMessageW(hwnd, WM_MOUSEMOVE, 0, lparam)
     user32.PostMessageW(hwnd, down_msg, down_wparam, lparam)
     if safe_sleep(0.04):
         try:
@@ -165,14 +214,14 @@ def post_bg_key(hwnd, key_str):
         except Exception:
             pass
         lparam_down = to_lparam(1 | (scan_code << 16))
-        lparam_up = to_lparam(1 | (scan_code << 16) | 0xC0000000)
+        lparam_up = to_lparam(1 | (scan_code << 16) | KEY_RELEASE_LPARAM_MASK)
         with state.currently_held_keys_lock:
             state.currently_held_keys.add(("bg", hwnd, vk))
         try:
-            user32.PostMessageW(hwnd, 0x0100, vk, lparam_down)
+            user32.PostMessageW(hwnd, WM_KEYDOWN, vk, lparam_down)
             safe_sleep(0.06)
         finally:
-            user32.PostMessageW(hwnd, 0x0101, vk, lparam_up)
+            user32.PostMessageW(hwnd, WM_KEYUP, vk, lparam_up)
             with state.currently_held_keys_lock:
                 state.currently_held_keys.discard(("bg", hwnd, vk))
 
@@ -203,13 +252,13 @@ def force_bring_window_to_front(hwnd):
     try:
         if user32.GetForegroundWindow() == hwnd:
             return  # 目標已在前台，不重複執行置頂與敲擊 Alt 鍵
-        user32.ShowWindow(hwnd, 9)
-        SWP_FLAGS = 0x0001 | 0x0002 | 0x0040
-        user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_FLAGS)
-        user32.SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_FLAGS)
+        user32.ShowWindow(hwnd, SW_RESTORE)
+        swp_flags = SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW
+        user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, swp_flags)
+        user32.SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, swp_flags)
 
-        user32.keybd_event(0x12, 0, 0, 0)
-        user32.keybd_event(0x12, 0, 2, 0)
+        user32.keybd_event(VK_MENU, 0, 0, 0)
+        user32.keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, 0)
 
         user32.SetForegroundWindow(hwnd)
         user32.BringWindowToTop(hwnd)

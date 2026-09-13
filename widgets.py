@@ -493,7 +493,7 @@ class PeriodicTaskCardView(tk.Frame):
         with state.periodic_timers_lock:
             timers = dict(state.periodic_timers)
 
-        is_running = state.running
+        is_running = state.is_running()
         for idx, c in enumerate(self.card_widgets):
             task_id = c.get("id") or f"pt_idx_{idx}"
             task = c.get("task", {})

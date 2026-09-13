@@ -23,7 +23,10 @@ from win32_api import (
     emergency_release_all,
     execute_click,
     post_bg_key,
-    force_bring_window_to_front
+    force_bring_window_to_front,
+    VK_SPACE,
+    VK_ESCAPE,
+    KEY_PRESSED_MASK
 )
 from widgets import VarTable, PeriodicTaskCardView
 import dialogs
@@ -194,7 +197,7 @@ class App(tk.Tk):
                         return
 
         self.is_closing = True
-        state.running = False
+        state.set_running(False)
         state.stop_event.set()
         emergency_release_all()
         self.destroy()
@@ -317,6 +320,7 @@ class App(tk.Tk):
                 btn_text = "■ 停止試跑" if is_test else "■ 停止運行"
                 self.btn_toggle.config(text=btn_text, bg=UITheme.ACCENT_RED, activebackground=UITheme.ACCENT_RED_HOVER)
             else:
+                self.btn_toggle.config(text="▶ 開始循環執行", bg=UITheme.ACCENT_GREEN, activebackground=UITheme.ACCENT_GREEN_HOVER)
                 if hasattr(self, "periodic_listbox") and hasattr(self.periodic_listbox, "update_countdowns"):
                     try:
                         self.periodic_listbox.update_countdowns()
@@ -334,7 +338,7 @@ class App(tk.Tk):
 
     def run_in_test_thread(self, task_name, task_fn):
         """統一的非同步試跑安全守衛與執行緒啟動器"""
-        if state.running:
+        if state.is_running():
             return self.set_status("巨集正在循環執行中，請先停止再試跑！")
         if state.is_testing:
             return self.set_status("已有試跑任務正在執行中，請稍候！")
@@ -448,8 +452,8 @@ class App(tk.Tk):
         lbl_hud.pack(fill="both", expand=True)
 
         if IS_WINDOWS and user32:
-            user32.GetAsyncKeyState(0x20)
-            user32.GetAsyncKeyState(0x1B)
+            user32.GetAsyncKeyState(VK_SPACE)
+            user32.GetAsyncKeyState(VK_ESCAPE)
 
         is_handled = [False]
 
@@ -470,7 +474,7 @@ class App(tk.Tk):
             lbl_hud.config(text=f"【設定{btn_cn}點擊】滑鼠指住目標 -> 按 [SPACE 空白鍵] 確定！(坐標: {coord_desc} | ESC 取消)")
 
             if IS_WINDOWS and user32:
-                if user32.GetAsyncKeyState(0x20) & 0x8000:
+                if user32.GetAsyncKeyState(VK_SPACE) & KEY_PRESSED_MASK:
                     is_handled[0] = True
                     banner.destroy()
                     self.force_bring_self_to_front()
@@ -478,7 +482,7 @@ class App(tk.Tk):
                     on_finish(rx, ry, rel)
                     return
 
-                if user32.GetAsyncKeyState(0x1B) & 0x8000:
+                if user32.GetAsyncKeyState(VK_ESCAPE) & KEY_PRESSED_MASK:
                     is_handled[0] = True
                     banner.destroy()
                     self.force_bring_self_to_front()
@@ -1175,7 +1179,7 @@ class App(tk.Tk):
             self.cbo_profile.current(0)
 
     def create_new_profile(self):
-        if state.running or state.is_testing:
+        if state.is_running() or state.is_testing:
             return self.set_status("巨集正在執行或試跑中，請先停止再新建設定檔！")
         name = simpledialog.askstring("新建設定檔", "請輸入新設定檔名稱 (毋須輸入副檔名):", parent=self)
         if not name or not name.strip(): return
@@ -1210,7 +1214,7 @@ class App(tk.Tk):
             self.set_status(f"儲存失敗: {e}")
 
     def load_config(self):
-        if state.running or state.is_testing:
+        if state.is_running() or state.is_testing:
             return self.set_status("巨集正在執行或試跑中，請先停止再載入設定檔！")
         name = self.var_profile_name.get().strip()
         if not name: return
@@ -1662,7 +1666,7 @@ class App(tk.Tk):
     # ======================= 熱更新同步與清單動作輔助函數 =======================
     def trigger_hot_reload(self):
         """若巨集運行中，同步最新草稿至背景實例快照，並於下一輪自動生效"""
-        if state.running:
+        if state.is_running():
             with state.steps_lock:
                 state.active_steps = copy.deepcopy(state.steps)
                 state.active_combos = copy.deepcopy(state.combos)
@@ -1730,7 +1734,7 @@ class App(tk.Tk):
             return ins
 
     def add_click_action(self, is_combo=False):
-        if state.running:
+        if state.is_running():
             return self.set_status("巨集正在循環執行中，為免干擾滑鼠瞄準，請先停止運行再取點！")
         if is_combo and self.get_selected_combo_idx() is None:
             return self.set_status("請先選取一個組合！")
@@ -2057,9 +2061,9 @@ class App(tk.Tk):
 
     # ======================= 主執行引擎 =======================
     def toggle_run(self):
-        if state.running or state.is_testing:
+        if state.is_running() or state.is_testing:
             was_test = state.is_testing
-            state.running = False
+            state.set_running(False)
             state.is_testing = False
             state.stop_event.set()
             emergency_release_all()
@@ -2078,7 +2082,7 @@ class App(tk.Tk):
                 state.active_periodic_tasks = copy.deepcopy(state.periodic_tasks)
                 state.reload_requested = False
             state.stop_event.clear()
-            state.running = True
+            state.set_running(True)
             self.set_running_ui(True)
             self.set_status("循環運作中...")
             win_title = self.var_window.get() if hasattr(self, "var_window") else ""

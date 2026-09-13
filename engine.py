@@ -22,7 +22,7 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
         visited_set = set()
 
     if not is_test:
-        if not state.running or state.stop_event.is_set():
+        if not state.is_running() or state.stop_event.is_set():
             return False
         if current_vars is None:
             with state.steps_lock:
@@ -156,7 +156,7 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
             sub_actions = tgt_combo.get("actions", [])
             sub_total = len(sub_actions)
             for sub_idx, sub_act in enumerate(sub_actions):
-                if not is_test and (not state.running or state.stop_event.is_set()):
+                if not is_test and (not state.is_running() or state.stop_event.is_set()):
                     return False
                 if is_test and state.stop_event.is_set():
                     return False
@@ -221,7 +221,7 @@ def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, 
 
         last_run = pt.get("last_run", 0.0)
         if now - last_run >= interval:
-            if not state.running or state.stop_event.is_set():
+            if not state.is_running() or state.stop_event.is_set():
                 return False
             task_name = pt.get("name", "").strip() or "定時任務"
             pt_id = pt.get("id") or f"pt_idx_{idx}"
@@ -275,7 +275,7 @@ def macro_worker_loop(app):
         if not check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, init_vars, init_combos, round_prefix="啟動首發: "):
             return
 
-        while state.running and not state.stop_event.is_set():
+        while state.is_running() and not state.stop_event.is_set():
             with state.steps_lock:
                 current_steps = copy.deepcopy(state.active_steps)
                 current_combos = copy.deepcopy(state.active_combos)
@@ -311,7 +311,7 @@ def macro_worker_loop(app):
                 app.set_status(msg)
                 if hasattr(app, "append_log"):
                     app.append_log("警示", msg)
-                state.running = False
+                state.set_running(False)
                 break
 
             if not current_steps:
@@ -326,7 +326,7 @@ def macro_worker_loop(app):
                 app.append_log("系統", f"--- 開始第 {round_idx} 輪循環 ---")
 
             for idx, step in enumerate(current_steps):
-                if not state.running or state.stop_event.is_set():
+                if not state.is_running() or state.stop_event.is_set():
                     break
 
                 app.highlight_active_step(idx)
@@ -339,7 +339,7 @@ def macro_worker_loop(app):
                     sub_actions = step.get("actions", [])
                     sub_total = len(sub_actions)
                     for a_idx, act in enumerate(sub_actions):
-                        if not state.running or state.stop_event.is_set():
+                        if not state.is_running() or state.stop_event.is_set():
                             step_ok = False
                             break
                         app.highlight_active_step(idx, sub_idx=a_idx)
@@ -370,7 +370,7 @@ def macro_worker_loop(app):
                     ):
                         step_ok = False
 
-                if not step_ok or not state.running or state.stop_event.is_set():
+                if not step_ok or not state.is_running() or state.stop_event.is_set():
                     break
 
                 # 當前步驟或 COMBO 已完全執行結束！安全檢查並執行到期的定時任務
@@ -389,7 +389,7 @@ def macro_worker_loop(app):
         if hasattr(app, "append_log"):
             app.append_log("警示", f"✕ 異常中斷: {e}")
     finally:
-        state.running = False
+        state.set_running(False)
         with state.periodic_timers_lock:
             state.periodic_timers.clear()
         emergency_release_all()

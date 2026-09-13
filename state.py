@@ -1,3 +1,4 @@
+import sys
 import threading
 
 # ==============================================================================
@@ -12,7 +13,20 @@ active_combos = []   # 背景組合運行實例快照 (Active Combo Snapshot)
 active_variables = {} # 背景變數運行實例快照 (Active Variables Snapshot)
 active_periodic_tasks = [] # 背景定時任務運行實例快照 (Active Periodic Snapshot)
 
-running = False
+running_lock = threading.Lock()
+_running = False
+
+def is_running():
+    """線程安全地檢查巨集是否處於運行狀態"""
+    with running_lock:
+        return _running
+
+def set_running(val):
+    """線程安全地設定巨集運行狀態"""
+    global _running
+    with running_lock:
+        _running = bool(val)
+
 is_testing = False
 reload_requested = False
 steps_lock = threading.Lock() # 保護 active_steps, active_combos, active_variables 與 active_periodic_tasks
@@ -108,4 +122,18 @@ def format_periodic_task_summary(task, current_variables=None, max_name_len=18):
 
     disp_desc = desc if len(desc) <= max_name_len else desc[:max_name_len - 1] + "…"
     return f"{st_icon} {sec_str} · {disp_desc}{start_str}"
+
+# ==============================================================================
+# 模組屬性包裝：使直接存取 state.running 的讀寫皆自動享有 running_lock 執行緒安全防護
+# ==============================================================================
+class _StateModule(sys.modules[__name__].__class__):
+    @property
+    def running(self):
+        return is_running()
+
+    @running.setter
+    def running(self, val):
+        set_running(val)
+
+sys.modules[__name__].__class__ = _StateModule
 
