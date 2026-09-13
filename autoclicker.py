@@ -126,6 +126,7 @@ class App(tk.Tk):
         self.refresh_window_dropdown()
         self.refresh_profiles()
         self.load_config()
+        self.last_saved_snapshot = self.get_current_data_snapshot()
         self.refresh_variables_table()
         self.update_periodic_list()
         self.track_mouse_live()
@@ -149,8 +150,49 @@ class App(tk.Tk):
         except Exception:
             pass
 
+    def get_current_data_snapshot(self):
+        """獲取當前設定資料的序列化字串，用於精確對比是否有未儲存的變更"""
+        try:
+            return json.dumps({
+                "variables": state.variables,
+                "combos": state.combos,
+                "steps": state.steps,
+                "periodic_tasks": state.periodic_tasks
+            }, sort_keys=True)
+        except Exception:
+            return ""
+
+    def has_unsaved_changes(self):
+        """檢查當前記憶體中的設定相較於最後儲存狀態是否有更新"""
+        if not hasattr(self, "last_saved_snapshot") or not self.last_saved_snapshot:
+            return False
+        return self.get_current_data_snapshot() != self.last_saved_snapshot
+
     def on_close(self):
-        """主視窗關閉事件處理"""
+        """主視窗關閉事件處理 (若有未儲存之變更則提示使用者儲存)"""
+        if self.has_unsaved_changes():
+            curr_profile = self.var_profile_name.get().strip() or "default"
+            ans = messagebox.askyesnocancel(
+                "儲存確認",
+                f"檢測到設定已修改，請問是否儲存至「{curr_profile}」？\n\n- 是(Yes)：儲存變更並退出\n- 否(No)：不儲存並直接退出\n- 取消(Cancel)：返回程式",
+                parent=self
+            )
+            if ans is None:
+                return
+            elif ans is True:
+                fn = f"{curr_profile}{CONFIG_EXT}"
+                try:
+                    with open(fn, "w", encoding="utf-8") as f:
+                        json.dump({
+                            "variables": state.variables,
+                            "combos": state.combos,
+                            "steps": state.steps,
+                            "periodic_tasks": state.periodic_tasks
+                        }, f, ensure_ascii=False, indent=2)
+                except Exception as e:
+                    if not messagebox.askyesno("儲存失敗", f"儲存失敗 ({e})，是否仍要強制退出？", parent=self):
+                        return
+
         self.is_closing = True
         state.running = False
         state.stop_event.set()
@@ -822,9 +864,48 @@ class App(tk.Tk):
         self.cbo_step_add_var.pack(side="left", fill="x", expand=True, padx=(0, 1))
         tk.Button(f_svar, text="+ 引用變數", width=8, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=self.step_add_variable_action).pack(side="left")
 
+        # 3. 底部固定控制區 (HUD、即時狀態 與 鎖定大小大按鈕)
+        bot = tk.Frame(f_right, bg=UITheme.BG_PANEL)
+        bot.pack(side="bottom", fill="x", pady=(2, 0))
+
+        self.lbl_mouse_hud = tk.Label(bot, text="● 游標實時坐標: (0, 0)", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_NORMAL_BOLD)
+        self.lbl_mouse_hud.pack(fill="x")
+
+        self.lbl_status = tk.Label(bot, text="● 狀態: 已就緒", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MAIN, font=UITheme.FONT_NORMAL)
+        self.lbl_status.pack(fill="x", pady=(1, 2))
+
+        # 鎖定大小之開始/停止按鈕容器 (嚴格鎖定 46px 高度，絕不隨字元或狀態跳動)
+        f_btn_wrap = tk.Frame(bot, height=46, bg=UITheme.BG_PANEL)
+        f_btn_wrap.pack(fill="x", pady=(2, 0))
+        f_btn_wrap.pack_propagate(False)
+
+        self.btn_toggle = tk.Button(
+            f_btn_wrap,
+            text="▶ 開始循環執行",
+            bg=UITheme.ACCENT_GREEN,
+            fg="#ffffff",
+            font=UITheme.FONT_BIG_BTN,
+            activebackground=UITheme.ACCENT_GREEN_HOVER,
+            relief="flat",
+            command=self.toggle_run
+        )
+        self.btn_toggle.pack(fill="both", expand=True)
+
+        # 垂直 PanedWindow 將「流程/定時雙清單」與「執行日誌」連接，支援滑鼠即時拖曳調整大小 (Dynamic Resizing)
+        pw_right = tk.PanedWindow(
+            f_right,
+            orient="vertical",
+            bg=UITheme.BORDER,
+            bd=0,
+            sashwidth=5,
+            sashrelief="flat",
+            sashpad=1,
+            opaqueresize=True
+        )
+        pw_right.pack(side="top", fill="both", expand=True, pady=(0, 2))
+
         # 2. 自動循環清單（掛機流程）與定時週期任務 (左右雙清單並排)
-        f_middle_split = tk.Frame(f_right, bg=UITheme.BG_PANEL)
-        f_middle_split.pack(fill="both", expand=True, pady=(0, 3))
+        f_middle_split = tk.Frame(pw_right, bg=UITheme.BG_PANEL)
         f_middle_split.grid_columnconfigure(0, weight=1, uniform="split_cols")
         f_middle_split.grid_columnconfigure(1, weight=1, uniform="split_cols")
         f_middle_split.grid_rowconfigure(0, weight=1)
@@ -957,15 +1038,11 @@ class App(tk.Tk):
         )
         self.periodic_listbox.pack(fill="both", expand=True)
 
-        # 3. HUD、執行日誌 與 主開關
-        bot = tk.Frame(f_right, bg=UITheme.BG_PANEL)
-        bot.pack(fill="x", pady=(2, 0))
-
-        self.lbl_mouse_hud = tk.Label(bot, text="● 游標實時坐標: (0, 0)", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_NORMAL_BOLD)
-        self.lbl_mouse_hud.pack(fill="x")
+        # 執行日誌面板 (置於 PanedWindow 下方窗格，支援拖曳上方分隔條動態調整大小)
+        f_log_panel = tk.Frame(pw_right, bg=UITheme.BG_PANEL)
 
         # 執行日誌標題與控制列
-        f_log_hdr = tk.Frame(bot, bg=UITheme.BG_PANEL)
+        f_log_hdr = tk.Frame(f_log_panel, bg=UITheme.BG_PANEL)
         f_log_hdr.pack(fill="x", pady=(2, 1))
 
         tk.Label(
@@ -1003,8 +1080,8 @@ class App(tk.Tk):
         )
         chk_autoscroll.pack(side="right")
 
-        f_log_box = tk.Frame(bot, bg=UITheme.BG_DARK, highlightbackground=UITheme.BORDER, highlightthickness=1)
-        f_log_box.pack(fill="x", pady=(0, 2))
+        f_log_box = tk.Frame(f_log_panel, bg=UITheme.BG_DARK, highlightbackground=UITheme.BORDER, highlightthickness=1)
+        f_log_box.pack(fill="both", expand=True, pady=(0, 2))
 
         self.txt_log = tk.Text(
             f_log_box,
@@ -1042,10 +1119,8 @@ class App(tk.Tk):
         self.txt_log.tag_config("text_系統", foreground="#86efac")
         self.txt_log.tag_config("text_試跑", foreground="#c7d2fe")
 
-        self.lbl_status = tk.Label(bot, text="● 狀態: 已就緒", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MAIN, font=UITheme.FONT_NORMAL)
-        self.lbl_status.pack(fill="x", pady=(0, 3))
-        self.btn_toggle = tk.Button(bot, text="▶ 開始循環執行", height=2, bg=UITheme.ACCENT_GREEN, fg="#ffffff", font=UITheme.FONT_BIG_BTN, activebackground=UITheme.ACCENT_GREEN_HOVER, command=self.toggle_run)
-        self.btn_toggle.pack(fill="x")
+        pw_right.add(f_middle_split, minsize=140)
+        pw_right.add(f_log_panel, minsize=75, height=130)
 
     def on_combo_double_click_add(self, event=None):
         """雙擊組合清單時直接加入掛機流程"""
@@ -1090,6 +1165,7 @@ class App(tk.Tk):
             with open(fn, "w", encoding="utf-8") as f:
                 json.dump({"variables": state.variables, "combos": state.combos, "steps": state.steps, "periodic_tasks": state.periodic_tasks}, f, ensure_ascii=False, indent=2)
             self.refresh_profiles(select_name=name)
+            self.last_saved_snapshot = self.get_current_data_snapshot()
             self.set_status(f"已新建並儲存至 {fn}")
         except Exception as e:
             self.set_status(f"新建失敗: {e}")
@@ -1106,6 +1182,7 @@ class App(tk.Tk):
                 json.dump({"variables": state.variables, "combos": state.combos, "steps": state.steps, "periodic_tasks": state.periodic_tasks}, f, ensure_ascii=False, indent=2)
             self.set_status(f"已成功儲存至 {fn}")
             self.refresh_profiles(select_name=name)
+            self.last_saved_snapshot = self.get_current_data_snapshot()
         except Exception as e:
             self.set_status(f"儲存失敗: {e}")
 
@@ -1135,6 +1212,7 @@ class App(tk.Tk):
             self.refresh_combo_actions_list()
             self.update_step_list()
             self.update_periodic_list()
+            self.last_saved_snapshot = self.get_current_data_snapshot()
             self.set_status(f"成功載入設定檔：{name}")
         except Exception as e:
             self.set_status(f"載入失敗: {e}")

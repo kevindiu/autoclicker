@@ -48,4 +48,4 @@ class UITheme:
     FONT_NORMAL = (FONT_FAMILY, 9)
     FONT_NORMAL_BOLD = (FONT_FAMILY, 9, "bold")
     FONT_TITLE = (FONT_FAMILY, 10, "bold")
-    FONT_BIG_BTN = (FONT_FAMILY, 11, "bold")
+    FONT_BIG_BTN = (FONT_FAMILY, 12, "bold")
