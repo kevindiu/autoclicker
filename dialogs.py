@@ -10,6 +10,44 @@ from theme import UITheme
 # 次層級對話框模組
 # ==============================================================================
 
+def _create_dialog(app, title, w, h, resizable=False, minsize=None):
+    """建立統一風格的模態對話框 (Toplevel + 居中 + grab + 圖標)"""
+    dialog = tk.Toplevel(app)
+    dialog.title(title)
+    dialog.configure(bg=UITheme.BG_PANEL)
+    dialog.resizable(resizable, resizable)
+    dialog.attributes("-topmost", True)
+    dialog.transient(app)
+    dialog.grab_set()
+    app.apply_app_icon(dialog)
+
+    app.update_idletasks()
+    pos_x = app.winfo_x() + max(0, (app.winfo_width() - w) // 2)
+    pos_y = app.winfo_y() + max(0, (app.winfo_height() - h) // 2)
+    dialog.geometry(f"{w}x{h}+{pos_x}+{pos_y}")
+    if minsize:
+        dialog.minsize(*minsize)
+    return dialog
+
+def _add_dialog_buttons(dialog, on_ok, padx=16, pady=10, extra_left_buttons=None):
+    """建立統一的底部按鈕列 (確定 + 取消) 並綁定 Enter/Escape 快捷鍵"""
+    bf = tk.Frame(dialog, bg=UITheme.BG_PANEL, padx=padx, pady=pady)
+    bf.pack(fill="x")
+    if extra_left_buttons:
+        for btn_cfg in extra_left_buttons:
+            tk.Button(bf, **btn_cfg).pack(side="left", padx=(0, 4))
+    tk.Button(bf, text="✓ 確定儲存", width=10, bg=UITheme.ACCENT_BLUE, fg="#fff",
+             activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat",
+             font=UITheme.FONT_NORMAL_BOLD, padx=8, pady=4,
+             command=on_ok).pack(side="right", padx=(4, 0))
+    tk.Button(bf, text="✕ 取消", width=8, bg=UITheme.BTN_GRAY, fg="#fff",
+             activebackground=UITheme.BTN_GRAY_HOVER, relief="flat",
+             font=UITheme.FONT_NORMAL, padx=8, pady=4,
+             command=dialog.destroy).pack(side="right")
+    dialog.bind("<Return>", lambda e: on_ok())
+    dialog.bind("<Escape>", lambda e: dialog.destroy())
+    return bf
+
 def prompt_variable_dialog(app, edit_name=None):
     """彈出變數新增 / 修改對話框 (通用無 Emoji 標籤)"""
     is_edit = edit_name is not None
@@ -22,20 +60,7 @@ def prompt_variable_dialog(app, edit_name=None):
     type_display_map = {"coord": "[坐標]", "key": "[按鍵]", "wait": "[停頓]"}
     type_key_map = {"[坐標]": "coord", "[按鍵]": "key", "[停頓]": "wait", "坐標": "coord", "按鍵": "key", "停頓": "wait"}
 
-    dialog = tk.Toplevel(app)
-    dialog.title(title)
-    dialog.configure(bg=UITheme.BG_PANEL)
-    dialog.resizable(False, False)
-    dialog.attributes("-topmost", True)
-    dialog.transient(app)
-    dialog.grab_set()
-    app.apply_app_icon(dialog)
-
-    w, h = 380, 340
-    app.update_idletasks()
-    pos_x = app.winfo_x() + max(0, (app.winfo_width() - w) // 2)
-    pos_y = app.winfo_y() + max(0, (app.winfo_height() - h) // 2)
-    dialog.geometry(f"{w}x{h}+{pos_x}+{pos_y}")
+    dialog = _create_dialog(app, title, 380, 340)
 
     f_main = tk.Frame(dialog, bg=UITheme.BG_PANEL, padx=16, pady=12)
     f_main.pack(fill="both", expand=True)
@@ -209,39 +234,7 @@ def prompt_variable_dialog(app, edit_name=None):
         app.set_status(f"已儲存變數: {name}")
         dialog.destroy()
 
-    r_btns = tk.Frame(f_main, bg=UITheme.BG_PANEL)
-    r_btns.pack(fill="x", pady=(4, 0))
-
-    tk.Button(
-        r_btns,
-        text="✓ 確定儲存",
-        width=10,
-        bg=UITheme.ACCENT_BLUE,
-        fg="#fff",
-        activebackground=UITheme.ACCENT_BLUE_HOVER,
-        font=UITheme.FONT_NORMAL_BOLD,
-        relief="flat",
-        padx=8,
-        pady=4,
-        command=on_save
-    ).pack(side="right", padx=(4, 0))
-
-    tk.Button(
-        r_btns,
-        text="✕ 取消",
-        width=8,
-        bg=UITheme.BTN_GRAY,
-        fg="#fff",
-        activebackground=UITheme.BTN_GRAY_HOVER,
-        font=UITheme.FONT_NORMAL,
-        relief="flat",
-        padx=8,
-        pady=4,
-        command=dialog.destroy
-    ).pack(side="right")
-
-    dialog.bind("<Return>", lambda e: on_save())
-    dialog.bind("<Escape>", lambda e: dialog.destroy())
+    _add_dialog_buttons(dialog, on_save, padx=0, pady=(4, 0))
 
     if not is_edit:
         e_name.focus_set()
@@ -249,22 +242,8 @@ def prompt_variable_dialog(app, edit_name=None):
 
 def prompt_edit_combo_dialog(app, combo_step, step_idx=None):
     """彈出完整的組合子動作管理視窗 (支援在組合內移位、刪除、複製、修改、試跑與展開)"""
-    dialog = tk.Toplevel(app)
     combo_name = combo_step.get("name", "組合")
-    dialog.title(f"管理組合步驟: 【{combo_name}】")
-    dialog.configure(bg=UITheme.BG_PANEL)
-    dialog.resizable(True, True)
-    dialog.attributes("-topmost", True)
-    dialog.transient(app)
-    dialog.grab_set()
-    app.apply_app_icon(dialog)
-
-    w, h = 660, 520
-    app.update_idletasks()
-    pos_x = app.winfo_x() + max(0, (app.winfo_width() - w) // 2)
-    pos_y = app.winfo_y() + max(0, (app.winfo_height() - h) // 2)
-    dialog.geometry(f"{w}x{h}+{pos_x}+{pos_y}")
-    dialog.minsize(560, 420)
+    dialog = _create_dialog(app, f"管理組合步驟: 【{combo_name}】", 660, 520, resizable=True, minsize=(560, 420))
 
     working_actions = copy.deepcopy(combo_step.get("actions", []))
     modified = [False]
@@ -427,23 +406,14 @@ def prompt_edit_combo_dialog(app, combo_step, step_idx=None):
     tk.Button(f_btns, text="⎘ 複製", width=12, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_dup_sub).pack(fill="x", pady=2)
     tk.Button(f_btns, text="✕ 刪除", width=12, bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_del_sub).pack(fill="x", pady=(2, 6))
 
-    # 底部按鈕列 (確認 / 取消)
-    f_bot = tk.Frame(dialog, bg=UITheme.BG_PANEL, padx=12, pady=10)
-    f_bot.pack(fill="x")
-
     def on_save():
         combo_step["name"] = combo_name
         combo_step["actions"] = working_actions
         modified[0] = True
         dialog.destroy()
 
-    tk.Button(f_bot, text="✓ 確定儲存", width=12, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_NORMAL_BOLD, pady=4, command=on_save).pack(side="right", padx=(4, 0))
-    tk.Button(f_bot, text="✕ 取消", width=8, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_NORMAL, pady=4, command=dialog.destroy).pack(side="right")
-
     refresh_sub_list(select_idx=0 if working_actions else None)
-
-    dialog.bind("<Return>", lambda e: on_save())
-    dialog.bind("<Escape>", lambda e: dialog.destroy())
+    _add_dialog_buttons(dialog, on_save, padx=12)
     app.wait_window(dialog)
     return modified[0]
 
@@ -456,19 +426,7 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
     if atype == "combo":
         return prompt_edit_combo_dialog(app, action, step_idx=step_idx)
 
-    dialog = tk.Toplevel(app)
-    dialog.configure(bg=UITheme.BG_PANEL)
-    dialog.resizable(False, False)
-    dialog.attributes("-topmost", True)
-    dialog.transient(app)
-    dialog.grab_set()
-    app.apply_app_icon(dialog)
-
-    w, h = 350, 260
-    app.update_idletasks()
-    pos_x = app.winfo_x() + max(0, (app.winfo_width() - w) // 2)
-    pos_y = app.winfo_y() + max(0, (app.winfo_height() - h) // 2)
-    dialog.geometry(f"{w}x{h}+{pos_x}+{pos_y}")
+    dialog = _create_dialog(app, "", 350, 260)
 
     modified = [False]
     f = tk.Frame(dialog, bg=UITheme.BG_PANEL, pady=10)
@@ -655,13 +613,7 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
             modified[0] = True
             dialog.destroy()
 
-    bf = tk.Frame(dialog, bg=UITheme.BG_PANEL, padx=16, pady=10)
-    bf.pack(fill="x")
-    tk.Button(bf, text="✓ 確定儲存", width=10, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_NORMAL_BOLD, command=on_ok).pack(side="right", padx=(4, 0))
-    tk.Button(bf, text="✕ 取消", width=8, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_NORMAL, command=dialog.destroy).pack(side="right")
-
-    dialog.bind("<Return>", lambda e: on_ok())
-    dialog.bind("<Escape>", lambda e: dialog.destroy())
+    _add_dialog_buttons(dialog, on_ok)
 
     app.wait_window(dialog)
     return modified[0]
@@ -682,20 +634,7 @@ def prompt_edit_periodic_task(app, task=None):
     act_type = act.get("type", "call_combo" if state.combos else "key")
     act_var = act.get("var_name")
 
-    dialog = tk.Toplevel(app)
-    dialog.title(title)
-    dialog.configure(bg=UITheme.BG_PANEL)
-    dialog.resizable(False, False)
-    dialog.attributes("-topmost", True)
-    dialog.transient(app)
-    dialog.grab_set()
-    app.apply_app_icon(dialog)
-
-    w, h = 420, 460
-    app.update_idletasks()
-    pos_x = app.winfo_x() + max(0, (app.winfo_width() - w) // 2)
-    pos_y = app.winfo_y() + max(0, (app.winfo_height() - h) // 2)
-    dialog.geometry(f"{w}x{h}+{pos_x}+{pos_y}")
+    dialog = _create_dialog(app, title, 420, 460)
 
     result = [None]
     f_main = tk.Frame(dialog, bg=UITheme.BG_PANEL, padx=16, pady=12)
@@ -978,14 +917,11 @@ def prompt_edit_periodic_task(app, task=None):
         }
         dialog.destroy()
 
-    bf = tk.Frame(dialog, bg=UITheme.BG_PANEL, padx=16, pady=10)
-    bf.pack(fill="x")
-    tk.Button(bf, text="▶ 試跑動作", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, padx=6, command=do_test).pack(side="left")
-    tk.Button(bf, text="✓ 確定儲存", width=10, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_NORMAL_BOLD, command=on_ok).pack(side="right", padx=(4, 0))
-    tk.Button(bf, text="✕ 取消", width=8, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_NORMAL, command=dialog.destroy).pack(side="right")
-
-    dialog.bind("<Return>", lambda e: on_ok())
-    dialog.bind("<Escape>", lambda e: dialog.destroy())
+    _add_dialog_buttons(dialog, on_ok, extra_left_buttons=[
+        {"text": "▶ 試跑動作", "bg": UITheme.ACCENT_INDIGO, "fg": "#fff",
+         "activebackground": UITheme.ACCENT_INDIGO_HOVER, "relief": "flat",
+         "font": UITheme.FONT_SMALL_BOLD, "padx": 6, "command": do_test}
+    ])
 
     app.wait_window(dialog)
     return result[0]
