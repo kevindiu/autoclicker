@@ -842,7 +842,7 @@ def prompt_edit_periodic_task(app, task=None):
             elif v_type == "wait":
                 try:
                     sec = float(v_val)
-                except Exception:
+                except (ValueError, TypeError):
                     sec = 1.0
                 return {"type": "wait", "sec": sec, "var_name": v_name}
             else:

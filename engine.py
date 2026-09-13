@@ -106,8 +106,9 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
             finally:
                 try:
                     pyautogui.keyUp(key)
-                except Exception:
-                    pass
+                except Exception as e:
+                    if hasattr(app, "append_log"):
+                        app.append_log("警示", f"釋放前台按鍵 [{key}] 失敗: {e}")
                 with state.currently_held_keys_lock:
                     state.currently_held_keys.discard(("fg", key))
         var_info = f"【{var_name}】" if var_name else ""
@@ -123,8 +124,9 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
         if v_data and v_data.get("type") == "wait":
             try:
                 sec = float(v_data.get("value", sec))
-            except Exception:
-                pass
+            except (ValueError, TypeError):
+                if hasattr(app, "append_log"):
+                    app.append_log("警示", f"變數【{var_name}】等待秒數數值格式無效，使用預設值 {sec}s")
         var_info = f"【{var_name}】" if var_name else ""
         log_txt = f"{round_prefix}{parent_desc} {var_info}等待 {sec}s"
         app.set_status(log_txt)
@@ -192,7 +194,7 @@ def sync_periodic_timers(periodic_tasks_runtime, active_task_id=None):
         pt_id = pt.get("id") or f"pt_idx_{idx}"
         try:
             interval = float(pt.get("interval", 1.0))
-        except Exception:
+        except (ValueError, TypeError):
             interval = 1.0
         timers[pt_id] = {
             "last_run": pt.get("last_run", 0.0),
@@ -214,7 +216,7 @@ def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, 
             continue
         try:
             interval = float(pt.get("interval", 1.0))
-        except Exception:
+        except (ValueError, TypeError):
             interval = 1.0
         if interval <= 0:
             interval = 1.0
@@ -400,49 +402,54 @@ def macro_worker_loop(app):
 
 def test_run_execution_flow_worker(app):
     """一次性試跑整個掛機執行流程的背景工作函式"""
-    with state.steps_lock:
-        steps_copy = copy.deepcopy(state.steps)
-        combos_copy = copy.deepcopy(state.combos)
-        vars_copy = copy.deepcopy(state.variables)
+    try:
+        with state.steps_lock:
+            steps_copy = copy.deepcopy(state.steps)
+            combos_copy = copy.deepcopy(state.combos)
+            vars_copy = copy.deepcopy(state.variables)
 
-    for idx, step in enumerate(steps_copy):
-        if state.stop_event.is_set():
-            break
-        app.highlight_active_step(idx)
-        pfx = "[試跑流程] "
-        stype = step.get("type")
-        if stype == "combo":
-            c_name = step.get("name", "組合")
-            sub_actions = step.get("actions", [])
-            if not sub_actions:
-                app.set_status(f"[試跑流程] 步驟 #{idx+1} 組合 [{c_name}] 內無動作，跳過")
-                continue
-            for a_idx, act in enumerate(sub_actions):
-                if state.stop_event.is_set():
-                    return
-                app.highlight_active_step(idx, sub_idx=a_idx)
+        for idx, step in enumerate(steps_copy):
+            if state.stop_event.is_set():
+                break
+            app.highlight_active_step(idx)
+            pfx = "[試跑流程] "
+            stype = step.get("type")
+            if stype == "combo":
+                c_name = step.get("name", "組合")
+                sub_actions = step.get("actions", [])
+                if not sub_actions:
+                    app.set_status(f"[試跑流程] 步驟 #{idx+1} 組合 [{c_name}] 內無動作，跳過")
+                    continue
+                for a_idx, act in enumerate(sub_actions):
+                    if state.stop_event.is_set():
+                        return
+                    app.highlight_active_step(idx, sub_idx=a_idx)
+                    if not dispatch_action(
+                        app,
+                        act,
+                        f"[{c_name}#{a_idx+1}]",
+                        current_vars=vars_copy,
+                        current_combos=combos_copy,
+                        depth=0,
+                        visited_set={c_name},
+                        is_test=True,
+                        round_prefix=pfx
+                    ):
+                        return
+            else:
                 if not dispatch_action(
                     app,
-                    act,
-                    f"[{c_name}#{a_idx+1}]",
+                    step,
+                    f"步驟#{idx+1}",
                     current_vars=vars_copy,
                     current_combos=combos_copy,
                     depth=0,
-                    visited_set={c_name},
+                    visited_set=set(),
                     is_test=True,
                     round_prefix=pfx
                 ):
                     return
-        else:
-            if not dispatch_action(
-                app,
-                step,
-                f"步驟#{idx+1}",
-                current_vars=vars_copy,
-                current_combos=combos_copy,
-                depth=0,
-                visited_set=set(),
-                is_test=True,
-                round_prefix=pfx
-            ):
-                return
+    except Exception as e:
+        app.set_status(f"試跑流程異常: {e}")
+        if hasattr(app, "append_log"):
+            app.append_log("警示", f"✕ 試跑流程異常: {e}")

@@ -107,7 +107,7 @@ class VarTable(tk.Frame):
                 if total_h > 0:
                     frac = max(0.0, min(1.0, y / total_h))
                     self.canvas.yview_moveto(frac)
-            except Exception:
+            except (tk.TclError, ZeroDivisionError):
                 pass
 
     def selection_set(self, name):
@@ -169,7 +169,7 @@ class PeriodicTaskCardView(tk.Frame):
             for lbl in card_info.get("wrap_labels", []):
                 try:
                     lbl.config(wraplength=wrap_w)
-                except Exception:
+                except tk.TclError:
                     pass
 
     def _check_empty_state(self):
@@ -189,7 +189,7 @@ class PeriodicTaskCardView(tk.Frame):
             if self.empty_label:
                 try:
                     self.empty_label.destroy()
-                except Exception:
+                except tk.TclError:
                     pass
                 self.empty_label = None
 
@@ -197,7 +197,7 @@ class PeriodicTaskCardView(tk.Frame):
         for card_info in self.card_widgets:
             try:
                 card_info["frame"].destroy()
-            except Exception:
+            except tk.TclError:
                 pass
         self.card_widgets.clear()
         self.tasks.clear()
@@ -224,7 +224,7 @@ class PeriodicTaskCardView(tk.Frame):
         try:
             f_sec = float(interval)
             sec_str = f"{int(f_sec)}s" if f_sec.is_integer() else f"{f_sec}s"
-        except Exception:
+        except (ValueError, TypeError):
             sec_str = f"{interval}s"
 
         name = task.get("name", "").strip()
@@ -501,7 +501,7 @@ class PeriodicTaskCardView(tk.Frame):
             try:
                 f_sec = float(interval)
                 sec_str = f"{int(f_sec)}s" if f_sec.is_integer() else f"{f_sec}s"
-            except Exception:
+            except (ValueError, TypeError):
                 sec_str = f"{interval}s"
 
             lbl_int = c.get("lbl_int")

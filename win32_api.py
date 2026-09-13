@@ -77,7 +77,7 @@ class POINT(ctypes.Structure):
 if IS_WINDOWS:
     for fn in (lambda: ctypes.windll.shcore.SetProcessDpiAwareness(2), lambda: ctypes.windll.user32.SetProcessDPIAware()):
         try: fn(); break
-        except Exception: pass
+        except (AttributeError, OSError): pass
 
     user32 = ctypes.windll.user32
     user32.ScreenToClient.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
@@ -146,7 +146,7 @@ def emergency_release_all():
         try:
             user32.PostMessageW(state.target_hwnd, WM_LBUTTONUP, 0, 0)
             user32.PostMessageW(state.target_hwnd, WM_RBUTTONUP, 0, 0)
-        except Exception:
+        except (OSError, ctypes.ArgumentError):
             pass
 
     # 2. 釋放登記中的背景與前台按鍵
@@ -159,7 +159,7 @@ def emergency_release_all():
                 elif item[0] == "fg":
                     _, k = item
                     pyautogui.keyUp(k)
-            except Exception:
+            except (OSError, ctypes.ArgumentError, pyautogui.PyAutoGUIException, ValueError):
                 pass
         state.currently_held_keys.clear()
 
@@ -167,7 +167,7 @@ def emergency_release_all():
     try:
         pyautogui.mouseUp(button="left")
         pyautogui.mouseUp(button="right")
-    except Exception:
+    except (pyautogui.PyAutoGUIException, OSError, ValueError):
         pass
 
 def post_bg_click(hwnd, client_x, client_y, offset_x=0, offset_y=0, btn="left"):
@@ -188,7 +188,7 @@ def post_bg_click(hwnd, client_x, client_y, offset_x=0, offset_y=0, btn="left"):
     if safe_sleep(0.04):
         try:
             user32.PostMessageW(hwnd, up_msg, 0, lparam)
-        except Exception:
+        except (OSError, ctypes.ArgumentError):
             pass
     return cx, cy
 
@@ -202,7 +202,7 @@ def post_bg_key(hwnd, key_str):
             safe_sleep(0.06)
         finally:
             try: pyautogui.keyUp(key_str)
-            except Exception: pass
+            except (pyautogui.PyAutoGUIException, OSError, ValueError): pass
             with state.currently_held_keys_lock:
                 state.currently_held_keys.discard(("fg", key_str))
         return
@@ -211,7 +211,7 @@ def post_bg_key(hwnd, key_str):
         scan_code = 0
         try:
             scan_code = user32.MapVirtualKeyW(vk, 0)
-        except Exception:
+        except OSError:
             pass
         lparam_down = to_lparam(1 | (scan_code << 16))
         lparam_up = to_lparam(1 | (scan_code << 16) | KEY_RELEASE_LPARAM_MASK)
@@ -262,5 +262,5 @@ def force_bring_window_to_front(hwnd):
 
         user32.SetForegroundWindow(hwnd)
         user32.BringWindowToTop(hwnd)
-    except Exception:
+    except (OSError, AttributeError):
         pass

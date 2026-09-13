@@ -1,45 +1,174 @@
 import sys
+import copy
+import json
 import threading
+from contextlib import contextmanager
+
+
+class AppState:
+    """全域巨集運作與資料狀態封裝類別
+    
+    將所有原本散落在模組級的全域變數（編輯器草稿、背景執行期快照、執行緒鎖、事件旗標）
+    統一封裝於單一物件實例中，提供乾淨的狀態重設、單元測試隔離以及明確的屬性存取。
+    """
+    def __init__(self):
+        # 1. 編輯器草稿資料 (Draft Data)
+        self.combos = []
+        self.steps = []           # 主 UI 編輯器草稿 (Draft)
+        self.variables = {}       # 全域變數庫字典: {var_name: {"type": "coord"|"key"|"wait", ...}}
+        self.periodic_tasks = []  # 主 UI 定時任務草稿 (Draft)
+
+        # 2. 背景運行實例快照 (Active Runtime Snapshots)
+        self.active_steps = []    # 背景運行實例快照 (Active Snapshot)
+        self.active_combos = []   # 背景組合運行實例快照 (Active Combo Snapshot)
+        self.active_variables = {} # 背景變數運行實例快照 (Active Variables Snapshot)
+        self.active_periodic_tasks = [] # 背景定時任務運行實例快照 (Active Periodic Snapshot)
+
+        # 3. 執行期旗標與執行緒同步物件 (Flags & Thread Synchronization)
+        self.running_lock = threading.Lock()
+        self._running = False
+        self.is_testing = False
+        self.reload_requested = False
+        self.steps_lock = threading.Lock() # 保護 active_steps, active_combos, active_variables 與 active_periodic_tasks
+        self.stop_event = threading.Event()
+        self.target_hwnd = None
+        self.currently_held_keys = set()   # 追蹤當前被按下的按鍵，格式: ("bg", hwnd, vk) 或 ("fg", key_str)
+        self.currently_held_keys_lock = threading.Lock()
+        self.periodic_timers = {}          # 背景定時任務即時倒數計時器快照: {task_id: {"last_run": float, "interval": float, "enabled": bool, "is_active": bool}}
+        self.periodic_timers_lock = threading.Lock()
+
+    def is_running(self) -> bool:
+        """線程安全地檢查巨集是否處於運行狀態"""
+        with self.running_lock:
+            return self._running
+
+    def set_running(self, val: bool):
+        """線程安全地設定巨集運行狀態"""
+        with self.running_lock:
+            self._running = bool(val)
+
+    @property
+    def running(self) -> bool:
+        """線程安全之運行狀態屬性"""
+        return self.is_running()
+
+    @running.setter
+    def running(self, val: bool):
+        self.set_running(val)
+
+    def reset_drafts(self):
+        """清空主 UI 編輯器草稿資料"""
+        self.combos.clear()
+        self.steps.clear()
+        self.variables.clear()
+        self.periodic_tasks.clear()
+
+    def reset_runtime(self):
+        """重設背景執行階段狀態、快照與旗標"""
+        self.set_running(False)
+        self.is_testing = False
+        self.reload_requested = False
+        self.target_hwnd = None
+        self.stop_event.clear()
+        with self.steps_lock:
+            self.active_steps.clear()
+            self.active_combos.clear()
+            self.active_variables.clear()
+            self.active_periodic_tasks.clear()
+        with self.currently_held_keys_lock:
+            self.currently_held_keys.clear()
+        with self.periodic_timers_lock:
+            self.periodic_timers.clear()
+
+    def reset(self):
+        """完全重設狀態 (適用於單元測試環境隔離與全新載入)"""
+        self.reset_drafts()
+        self.reset_runtime()
+
+    def snapshot_active(self, reload_requested: bool = False):
+        """將當前編輯器草稿同步至背景執行快照 (執行緒安全)"""
+        with self.steps_lock:
+            self.active_steps = copy.deepcopy(self.steps)
+            self.active_combos = copy.deepcopy(self.combos)
+            self.active_variables = copy.deepcopy(self.variables)
+            self.active_periodic_tasks = copy.deepcopy(self.periodic_tasks)
+            self.reload_requested = reload_requested
+
+    def to_dict(self) -> dict:
+        """將編輯器草稿資料匯出為字典"""
+        return {
+            "variables": copy.deepcopy(self.variables),
+            "combos": copy.deepcopy(self.combos),
+            "steps": copy.deepcopy(self.steps),
+            "periodic_tasks": copy.deepcopy(self.periodic_tasks),
+        }
+
+    def load_dict(self, data: dict):
+        """從字典載入設定資料至編輯器草稿"""
+        self.variables.clear()
+        self.variables.update(copy.deepcopy(data.get("variables", {})))
+        self.combos.clear()
+        self.combos.extend(copy.deepcopy(data.get("combos", [])))
+        self.steps.clear()
+        self.steps.extend(copy.deepcopy(data.get("steps", [])))
+        self.periodic_tasks.clear()
+        self.periodic_tasks.extend(copy.deepcopy(data.get("periodic_tasks", [])))
+
+    def get_data_snapshot(self) -> str:
+        """獲取當前編輯器資料的序列化字串，用於精確比對未儲存變更"""
+        try:
+            return json.dumps({
+                "variables": self.variables,
+                "combos": self.combos,
+                "steps": self.steps,
+                "periodic_tasks": self.periodic_tasks,
+            }, sort_keys=True)
+        except (TypeError, ValueError):
+            return ""
+
 
 # ==============================================================================
-# 全域資料狀態與執行緒同步物件
+# 預設全域狀態單例與管理函式
 # ==============================================================================
-combos = []
-steps = []           # 主 UI 編輯器草稿 (Draft)
-variables = {}       # 全域變數庫字典: {var_name: {"type": "coord"|"key"|"wait", ...}}
-periodic_tasks = []  # 主 UI 定時任務草稿 (Draft)
-active_steps = []    # 背景運行實例快照 (Active Snapshot)
-active_combos = []   # 背景組合運行實例快照 (Active Combo Snapshot)
-active_variables = {} # 背景變數運行實例快照 (Active Variables Snapshot)
-active_periodic_tasks = [] # 背景定時任務運行實例快照 (Active Periodic Snapshot)
+app_state = AppState()
 
-running_lock = threading.Lock()
-_running = False
+def get_state() -> AppState:
+    """取得當前作用中的 AppState 實例"""
+    return app_state
 
-def is_running():
-    """線程安全地檢查巨集是否處於運行狀態"""
-    with running_lock:
-        return _running
+def set_state(new_state: AppState):
+    """設定當前作用中的 AppState 實例，並同步更新模組屬性字典"""
+    global app_state
+    if not isinstance(new_state, AppState):
+        raise TypeError("new_state 必須是 AppState 的實例")
+    app_state = new_state
+    _sync_module_dict(new_state)
 
-def set_running(val):
-    """線程安全地設定巨集運行狀態"""
-    global _running
-    with running_lock:
-        _running = bool(val)
+@contextmanager
+def use_state(temp_state: AppState):
+    """上下文管理器：在區塊內臨時切換為指定的 AppState 實例 (單元測試極為便利)"""
+    prev_state = app_state
+    set_state(temp_state)
+    try:
+        yield temp_state
+    finally:
+        set_state(prev_state)
 
-is_testing = False
-reload_requested = False
-steps_lock = threading.Lock() # 保護 active_steps, active_combos, active_variables 與 active_periodic_tasks
-stop_event = threading.Event()
-target_hwnd = None
-currently_held_keys = set()   # 追蹤當前被按下的按鍵，格式: ("bg", hwnd, vk) 或 ("fg", key_str)
-currently_held_keys_lock = threading.Lock()
-periodic_timers = {}          # 背景定時任務即時倒數計時器快照: {task_id: {"last_run": float, "interval": float, "enabled": bool, "is_active": bool}}
-periodic_timers_lock = threading.Lock()
+def is_running() -> bool:
+    """線程安全地檢查巨集是否處於運行狀態 (向後相容捷徑)"""
+    return app_state.is_running()
 
+def set_running(val: bool):
+    """線程安全地設定巨集運行狀態 (向後相容捷徑)"""
+    app_state.set_running(val)
+
+
+# ==============================================================================
+# 文字格式化輔助函數
+# ==============================================================================
 def format_action_summary(act, index=None, current_variables=None):
     """統一格式化動作或步驟的文字描述，採用 100% 跨平台相容的通用標籤與符號"""
-    var_dict = current_variables if current_variables is not None else variables
+    var_dict = current_variables if current_variables is not None else app_state.variables
     atype = act.get("type", "")
 
     var_name = act.get("var_name")
@@ -92,7 +221,7 @@ def format_periodic_task_summary(task, current_variables=None, max_name_len=18):
     try:
         f_sec = float(sec)
         sec_str = f"{int(f_sec)}s" if f_sec.is_integer() else f"{f_sec}s"
-    except Exception:
+    except (ValueError, TypeError):
         sec_str = f"{sec}s"
 
     name = task.get("name", "").strip()
@@ -123,17 +252,52 @@ def format_periodic_task_summary(task, current_variables=None, max_name_len=18):
     disp_desc = desc if len(desc) <= max_name_len else desc[:max_name_len - 1] + "…"
     return f"{st_icon} {sec_str} · {disp_desc}{start_str}"
 
+
 # ==============================================================================
-# 模組屬性包裝：使直接存取 state.running 的讀寫皆自動享有 running_lock 執行緒安全防護
+# 模組屬性包裝與向後相容橋接 (Module-level Proxy & Backward Compatibility)
 # ==============================================================================
+_STATE_PROXY_ATTRS = (
+    "combos", "steps", "variables", "periodic_tasks",
+    "active_steps", "active_combos", "active_variables", "active_periodic_tasks",
+    "running_lock", "steps_lock", "stop_event", "target_hwnd",
+    "is_testing", "reload_requested", "currently_held_keys",
+    "currently_held_keys_lock", "periodic_timers", "periodic_timers_lock"
+)
+
+def _sync_module_dict(state_obj: AppState):
+    """將 AppState 的屬性同步登記至模組層級字典，確保原有直接存取方式 100% 相容且高效"""
+    mod = sys.modules[__name__]
+    for attr in _STATE_PROXY_ATTRS:
+        mod.__dict__[attr] = getattr(state_obj, attr)
+
+# 初始化模組層級字典中的參照
+_sync_module_dict(app_state)
+
 class _StateModule(sys.modules[__name__].__class__):
     @property
     def running(self):
-        return is_running()
+        return app_state.running
 
     @running.setter
     def running(self, val):
-        set_running(val)
+        app_state.running = val
+
+    def __getattr__(self, name):
+        if hasattr(app_state, name):
+            return getattr(app_state, name)
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    def __setattr__(self, name, value):
+        if name in ("app_state", "__class__"):
+            super().__setattr__(name, value)
+        elif hasattr(app_state, name):
+            setattr(app_state, name, value)
+            if name in _STATE_PROXY_ATTRS:
+                self.__dict__[name] = value
+        else:
+            super().__setattr__(name, value)
+
+    def __dir__(self):
+        return sorted(set(super().__dir__() + dir(app_state)))
 
 sys.modules[__name__].__class__ = _StateModule
-

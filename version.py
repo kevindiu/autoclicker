@@ -28,7 +28,7 @@ def get_app_version():
                     v = f.read().strip()
                     if v:
                         return v
-        except Exception:
+        except (OSError, UnicodeDecodeError):
             pass
 
     # 2. 本地開發環境：自動直接讀取當前 git 最新 tag (例如 v7.1)
@@ -40,7 +40,7 @@ def get_app_version():
         ).strip()
         if out:
             return out
-    except Exception:
+    except (subprocess.SubprocessError, OSError):
         pass
 
     try:
@@ -51,7 +51,7 @@ def get_app_version():
         ).strip()
         if out:
             return out
-    except Exception:
+    except (subprocess.SubprocessError, OSError):
         pass
 
     # 3. 備用回退
