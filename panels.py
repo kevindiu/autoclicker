@@ -636,6 +636,7 @@ class RightPanel(tk.Frame):
             on_toggle=app.toggle_selected_periodic_task
         )
         self.periodic_listbox.pack(fill="both", expand=True)
+        self.periodic_task_view = self.periodic_listbox
 
         # 執行日誌面板
         f_log_panel = tk.LabelFrame(
@@ -732,6 +733,7 @@ class RightPanel(tk.Frame):
         """明確定義右欄面板所管理的公開 UI 控制項字典"""
         return {
             "step_listbox": getattr(self, "step_listbox", None),
+            "periodic_listbox": getattr(self, "periodic_listbox", None),
             "periodic_task_view": getattr(self, "periodic_task_view", None),
             "txt_log": getattr(self, "txt_log", None),
             "lbl_mouse_hud": getattr(self, "lbl_mouse_hud", None),
@@ -761,6 +763,9 @@ class RightPanel(tk.Frame):
 
     def get_periodic_listbox(self):
         return self.periodic_listbox
+
+    def get_periodic_task_view(self):
+        return self.periodic_task_view
 
     def get_txt_log(self):
         return self.txt_log

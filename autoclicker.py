@@ -3,7 +3,6 @@ import sys
 import time
 import copy
 import ctypes
-from ctypes import wintypes
 import threading
 import queue
 import pyautogui
@@ -18,16 +17,12 @@ from win32_api import (
     user32,
     POINT,
     WNDENUMPROC,
-    safe_sleep,
     emergency_release_all,
-    execute_click,
-    post_bg_key,
     force_bring_window_to_front,
     VK_SPACE,
     VK_ESCAPE,
     KEY_PRESSED_MASK
 )
-from widgets import VarTable, PeriodicTaskCardView
 from panels import LeftPanel, RightPanel
 import config_manager
 import dialogs

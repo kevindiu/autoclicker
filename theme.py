@@ -1,6 +1,5 @@
-import os
 import sys
-from version import get_window_title, BASE_WINDOW_TITLE, get_app_version, resource_path
+from version import get_window_title, BASE_WINDOW_TITLE, resource_path
 
 WINDOW_TITLE = get_window_title()
 CONFIG_EXT = ".shm"
