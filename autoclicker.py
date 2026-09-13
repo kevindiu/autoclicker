@@ -1039,18 +1039,26 @@ class App(tk.Tk):
         self.periodic_listbox.pack(fill="both", expand=True)
 
         # 執行日誌面板 (置於 PanedWindow 下方窗格，支援拖曳上方分隔條動態調整大小)
-        f_log_panel = tk.Frame(pw_right, bg=UITheme.BG_PANEL)
+        f_log_panel = tk.LabelFrame(
+            pw_right,
+            text=" 執行日誌 ",
+            bg=UITheme.BG_PANEL,
+            fg=UITheme.CYAN_TITLE,
+            font=UITheme.FONT_TITLE,
+            padx=4,
+            pady=4
+        )
 
-        # 執行日誌標題與控制列
+        # 執行日誌控制列 (最新 100 筆標註、自動滾動、清空按鈕)
         f_log_hdr = tk.Frame(f_log_panel, bg=UITheme.BG_PANEL)
-        f_log_hdr.pack(fill="x", pady=(2, 1))
+        f_log_hdr.pack(fill="x", pady=(0, 2))
 
         tk.Label(
             f_log_hdr,
-            text="📋 執行日誌 (最新 100 筆)",
+            text="最新 100 筆",
             bg=UITheme.BG_PANEL,
-            fg=UITheme.CYAN_SUB,
-            font=UITheme.FONT_SMALL_BOLD
+            fg=UITheme.TEXT_MUTED,
+            font=UITheme.FONT_SMALL
         ).pack(side="left")
 
         btn_clear_log = tk.Button(
