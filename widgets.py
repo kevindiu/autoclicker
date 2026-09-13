@@ -1,4 +1,7 @@
+import math
+import time
 import tkinter as tk
+import state
 from theme import UITheme
 
 # ==============================================================================
@@ -214,6 +217,8 @@ class PeriodicTaskCardView(tk.Frame):
         self._create_card(idx, task)
 
     def _create_card(self, idx, task):
+        task_id = task.get("id") or f"pt_idx_{idx}"
+        task["id"] = task_id
         enabled = task.get("enabled", True)
         interval = task.get("interval", 1.0)
         try:
@@ -289,10 +294,10 @@ class PeriodicTaskCardView(tk.Frame):
         lbl_status.pack(side="left", padx=(0, 4))
         lbl_status.bind("<Button-1>", lambda e, i=idx: self._on_toggle_click(i))
 
-        # 週期秒數標籤
+        # 週期秒數標籤 (初始顯示設定之循環間隔值)
         lbl_int = tk.Label(
             hdr,
-            text=f"⏱ {sec_str}",
+            text=f"⏱ 每 {sec_str}",
             bg="#0c4a6e",
             fg="#38bdf8",
             font=UITheme.FONT_SMALL_BOLD,
@@ -367,6 +372,8 @@ class PeriodicTaskCardView(tk.Frame):
 
         card_data = {
             "index": idx,
+            "id": task_id,
+            "task": task,
             "frame": card,
             "hdr": hdr,
             "lbl_status": lbl_status,
@@ -480,4 +487,61 @@ class PeriodicTaskCardView(tk.Frame):
 
     def yview(self, *args):
         return self.canvas.yview(*args)
+
+    def update_countdowns(self):
+        """實時刷新定時任務卡片的即時倒數與間隔設定值 (倒數 ＋ 間隔 BOTH 雙重展示)"""
+        with state.periodic_timers_lock:
+            timers = dict(state.periodic_timers)
+
+        is_running = state.running
+        for idx, c in enumerate(self.card_widgets):
+            task_id = c.get("id") or f"pt_idx_{idx}"
+            task = c.get("task", {})
+            interval = task.get("interval", 1.0)
+            try:
+                f_sec = float(interval)
+                sec_str = f"{int(f_sec)}s" if f_sec.is_integer() else f"{f_sec}s"
+            except Exception:
+                sec_str = f"{interval}s"
+
+            lbl_int = c.get("lbl_int")
+            if not lbl_int or not lbl_int.winfo_exists():
+                continue
+
+            enabled = c.get("enabled", True)
+            if not enabled:
+                target_text = f"⏱ 每 {sec_str}"
+                if lbl_int.cget("text") != target_text or lbl_int.cget("bg") != "#1e293b":
+                    lbl_int.config(text=target_text, bg="#1e293b", fg="#64748b")
+                continue
+
+            if not is_running or task_id not in timers:
+                target_text = f"⏱ 每 {sec_str}"
+                if lbl_int.cget("text") != target_text or lbl_int.cget("bg") != "#0c4a6e":
+                    lbl_int.config(text=target_text, bg="#0c4a6e", fg="#38bdf8")
+                continue
+
+            t_info = timers[task_id]
+            if t_info.get("is_active"):
+                target_text = f"⏱ 執行中 / 每 {sec_str}"
+                if lbl_int.cget("text") != target_text or lbl_int.cget("bg") != "#14532d":
+                    lbl_int.config(text=target_text, bg="#14532d", fg="#4ade80")
+                continue
+
+            last_run = t_info.get("last_run", 0.0)
+            int_val = t_info.get("interval", f_sec)
+            now = time.time()
+            elapsed = now - last_run
+            remaining = max(0.0, int_val - elapsed)
+
+            if int_val < 5.0 and not int_val.is_integer():
+                rem_str = f"{remaining:.1f}s"
+            else:
+                rem_str = f"{int(math.ceil(remaining))}s"
+
+            target_text = f"⏱ {rem_str} / 每 {sec_str}"
+            target_bg = "#0284c7" if remaining <= 1.0 else "#0c4a6e"
+            target_fg = "#ffffff" if remaining <= 1.0 else "#38bdf8"
+            if lbl_int.cget("text") != target_text or lbl_int.cget("bg") != target_bg:
+                lbl_int.config(text=target_text, bg=target_bg, fg=target_fg)
 

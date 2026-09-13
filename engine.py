@@ -185,13 +185,31 @@ def execute_single_action(app, act, desc):
     """執行單一動作（試跑用途）"""
     dispatch_action(app, act, desc, is_test=True)
 
+def sync_periodic_timers(periodic_tasks_runtime, active_task_id=None):
+    """線程安全地同步背景定時任務當前計時器快照至 state.periodic_timers 供 UI 即時倒數與設定值展示"""
+    timers = {}
+    for idx, pt in enumerate(periodic_tasks_runtime):
+        pt_id = pt.get("id") or f"pt_idx_{idx}"
+        try:
+            interval = float(pt.get("interval", 1.0))
+        except Exception:
+            interval = 1.0
+        timers[pt_id] = {
+            "last_run": pt.get("last_run", 0.0),
+            "interval": interval,
+            "enabled": pt.get("enabled", True),
+            "is_active": (pt_id == active_task_id)
+        }
+    with state.periodic_timers_lock:
+        state.periodic_timers = timers
+
 def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, current_combos, round_prefix=""):
     """檢查是否有已到期的定時任務；若有，安全依序執行並更新上次執行時間戳記"""
     if not periodic_tasks_runtime:
         return True
 
     now = time.time()
-    for pt in periodic_tasks_runtime:
+    for idx, pt in enumerate(periodic_tasks_runtime):
         if not pt.get("enabled", True):
             continue
         try:
@@ -206,10 +224,13 @@ def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, 
             if not state.running or state.stop_event.is_set():
                 return False
             task_name = pt.get("name", "").strip() or "定時任務"
+            pt_id = pt.get("id") or f"pt_idx_{idx}"
             act = pt.get("action", {})
             app.set_status(f"{round_prefix}[定時] {task_name}")
             if hasattr(app, "append_log"):
                 app.append_log("定時", f"{round_prefix}任務【{task_name}】到期觸發 (每 {interval}s)")
+
+            sync_periodic_timers(periodic_tasks_runtime, active_task_id=pt_id)
 
             # 統一透過 dispatch_action 執行
             ok = dispatch_action(
@@ -224,6 +245,7 @@ def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, 
                 round_prefix=round_prefix
             )
             pt["last_run"] = time.time()
+            sync_periodic_timers(periodic_tasks_runtime, active_task_id=None)
             if not ok:
                 return False
             if not safe_sleep(0.05):
@@ -243,6 +265,7 @@ def macro_worker_loop(app):
         # 若勾選「啟動時立即首發一次」，則設定 last_run 為 0，首度檢查時即觸發；否則設為 start_time，待滿 interval 秒後首發
         pt_copy["last_run"] = 0.0 if pt.get("run_on_start", False) else start_time
         periodic_tasks_runtime.append(pt_copy)
+    sync_periodic_timers(periodic_tasks_runtime)
 
     try:
         # 首輪開始前：若有設定「啟動時立即首發」的定時任務，先檢查執行一次
@@ -276,6 +299,7 @@ def macro_worker_loop(app):
                         pt_copy["last_run"] = 0.0 if pt.get("run_on_start", False) else now
                     new_runtime.append(pt_copy)
                 periodic_tasks_runtime = new_runtime
+                sync_periodic_timers(periodic_tasks_runtime)
                 msg = f"第 {round_idx} 輪: 已自動套用最新流程與定時任務！"
                 app.set_status(msg)
                 if hasattr(app, "append_log"):
@@ -366,6 +390,8 @@ def macro_worker_loop(app):
             app.append_log("警示", f"✕ 異常中斷: {e}")
     finally:
         state.running = False
+        with state.periodic_timers_lock:
+            state.periodic_timers.clear()
         emergency_release_all()
         app.set_running_ui(False)
         if hasattr(app, "append_log"):

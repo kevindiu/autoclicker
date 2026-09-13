@@ -20,6 +20,8 @@ stop_event = threading.Event()
 target_hwnd = None
 currently_held_keys = set()   # 追蹤當前被按下的按鍵，格式: ("bg", hwnd, vk) 或 ("fg", key_str)
 currently_held_keys_lock = threading.Lock()
+periodic_timers = {}          # 背景定時任務即時倒數計時器快照: {task_id: {"last_run": float, "interval": float, "enabled": bool, "is_active": bool}}
+periodic_timers_lock = threading.Lock()
 
 def format_action_summary(act, index=None, current_variables=None):
     """統一格式化動作或步驟的文字描述，採用 100% 跨平台相容的通用標籤與符號"""

@@ -250,6 +250,17 @@ class App(tk.Tk):
                 fn()
             except Exception:
                 pass
+
+        # 定時週期任務即時倒數與設定值更新 (每 200ms 刷新一次)
+        now_ts = time.time()
+        if now_ts - getattr(self, "_last_timer_ui_update", 0) >= 0.2:
+            self._last_timer_ui_update = now_ts
+            if hasattr(self, "periodic_listbox") and hasattr(self.periodic_listbox, "update_countdowns"):
+                try:
+                    self.periodic_listbox.update_countdowns()
+                except Exception:
+                    pass
+
         if not self.is_closing:
             self.after(50, self.poll_ui_queues)
 
@@ -306,7 +317,11 @@ class App(tk.Tk):
                 btn_text = "■ 停止試跑" if is_test else "■ 停止運行"
                 self.btn_toggle.config(text=btn_text, bg=UITheme.ACCENT_RED, activebackground=UITheme.ACCENT_RED_HOVER)
             else:
-                self.btn_toggle.config(text="▶ 開始循環執行", bg=UITheme.ACCENT_GREEN, activebackground=UITheme.ACCENT_GREEN_HOVER)
+                if hasattr(self, "periodic_listbox") and hasattr(self.periodic_listbox, "update_countdowns"):
+                    try:
+                        self.periodic_listbox.update_countdowns()
+                    except Exception:
+                        pass
                 if hasattr(self, "step_listbox") and self.step_listbox.winfo_exists():
                     last_idx = getattr(self, "last_active_step_idx", None)
                     if last_idx is not None and 0 <= last_idx < self.step_listbox.size():
@@ -1214,7 +1229,10 @@ class App(tk.Tk):
             state.steps.clear()
             state.steps.extend(data.get("steps", []))
             state.periodic_tasks.clear()
-            state.periodic_tasks.extend(data.get("periodic_tasks", []))
+            for p_idx, pt in enumerate(data.get("periodic_tasks", [])):
+                if not pt.get("id"):
+                    pt["id"] = f"pt_{int(time.time()*1000)}_{p_idx}"
+                state.periodic_tasks.append(pt)
 
             self.refresh_combo_list()
             self.refresh_combo_actions_list()
