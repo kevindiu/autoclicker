@@ -310,14 +310,7 @@ class App(tk.Tk):
                         self.periodic_listbox.update_countdowns()
                     except (tk.TclError, AttributeError):
                         pass
-                if hasattr(self, "step_listbox") and self.step_listbox.winfo_exists():
-                    last_idx = getattr(self, "last_active_step_idx", None)
-                    if last_idx is not None and 0 <= last_idx < self.step_listbox.size():
-                        try:
-                            self.step_listbox.itemconfigure(last_idx, background=UITheme.BG_DARK, foreground=UITheme.TEXT_MAIN)
-                        except tk.TclError:
-                            pass
-                    self.last_active_step_idx = None
+                self.clear_active_step_highlight()
         self.run_on_ui_thread(_u)
 
     def run_in_test_thread(self, task_name, task_fn):
@@ -484,8 +477,25 @@ class App(tk.Tk):
         self.after(150, poll_keys)
 
     # ======================= 主畫面執行步驟高亮跟隨 =======================
+    def clear_active_step_highlight(self):
+        """清除主畫面掛機流程清單中當前步驟的高亮狀態 (例如定時任務插隊執行期間或停止執行時)"""
+        def _clear():
+            if self.is_closing: return
+            if hasattr(self, "step_listbox") and self.step_listbox.winfo_exists():
+                last_idx = getattr(self, "last_active_step_idx", None)
+                if last_idx is not None and 0 <= last_idx < self.step_listbox.size():
+                    try:
+                        self.step_listbox.itemconfigure(last_idx, background=UITheme.BG_DARK, foreground=UITheme.TEXT_MAIN)
+                    except tk.TclError:
+                        pass
+                self.last_active_step_idx = None
+        self.run_on_ui_thread(_clear)
+
     def highlight_active_step(self, idx, sub_idx=None):
         """在主畫面清單中以獨立背景色高亮當前執行中的步驟，並根據設定自動滾動，絕不干擾使用者選取"""
+        if idx is None:
+            return self.clear_active_step_highlight()
+
         def _hl():
             if self.is_closing: return
             if not hasattr(self, "step_listbox") or not self.step_listbox.winfo_exists():

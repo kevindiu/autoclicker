@@ -237,6 +237,10 @@ def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, 
             if hasattr(app, "append_log"):
                 app.append_log("定時", f"{round_prefix}任務【{task_name}】到期觸發 (每 {interval}s)")
 
+            # 定時任務執行期間，清除掛機流程清單之高亮，避免使用者誤以為掛機步驟仍在執行
+            if hasattr(app, "clear_active_step_highlight"):
+                app.clear_active_step_highlight()
+
             sync_periodic_timers(periodic_tasks_runtime, active_task_id=pt_id)
 
             # 統一透過 dispatch_action 執行
@@ -474,3 +478,6 @@ def test_run_execution_flow_worker(app):
     except Exception as e:
         if hasattr(app, "append_log"):
             app.append_log("警示", f"✕ 試跑流程異常: {e}")
+    finally:
+        if hasattr(app, "clear_active_step_highlight"):
+            app.clear_active_step_highlight()

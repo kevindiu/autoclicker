@@ -258,16 +258,16 @@ class PeriodicTaskCardView(tk.Frame):
         border_col = "#2d3544" if enabled else "#23262d"
         wrap_w = max(100, self._current_width - 32)
 
-        # 外層卡片面板
+        # 外層卡片面板 (精緻緊湊排版)
         card = tk.Frame(
             self.body_frame,
             bg=card_bg,
             highlightthickness=1,
             highlightbackground=border_col,
-            padx=7,
-            pady=5
+            padx=6,
+            pady=3
         )
-        card.pack(fill="x", expand=True, padx=3, pady=2)
+        card.pack(fill="x", expand=True, padx=2, pady=1)
 
         # 頂部狀態列 (Badges + 序號)
         hdr = tk.Frame(card, bg=card_bg)
@@ -289,11 +289,11 @@ class PeriodicTaskCardView(tk.Frame):
             bg=st_bg,
             fg=st_fg,
             font=UITheme.FONT_SMALL_BOLD,
-            padx=5,
-            pady=1,
+            padx=4,
+            pady=0,
             cursor="hand2"
         )
-        lbl_status.pack(side="left", padx=(0, 4))
+        lbl_status.pack(side="left", padx=(0, 3))
         lbl_status.bind("<Button-1>", lambda e, i=idx: self._on_toggle_click(i))
 
         # 週期秒數標籤 (初始顯示設定之循環間隔值)
@@ -303,10 +303,10 @@ class PeriodicTaskCardView(tk.Frame):
             bg="#0c4a6e",
             fg="#38bdf8",
             font=UITheme.FONT_SMALL_BOLD,
-            padx=5,
-            pady=1
+            padx=4,
+            pady=0
         )
-        lbl_int.pack(side="left", padx=(0, 4))
+        lbl_int.pack(side="left", padx=(0, 3))
 
         # 首發標籤
         lbl_start = None
@@ -317,10 +317,10 @@ class PeriodicTaskCardView(tk.Frame):
                 bg="#3b0764",
                 fg="#c084fc",
                 font=UITheme.FONT_SMALL_BOLD,
-                padx=5,
-                pady=1
+                padx=4,
+                pady=0
             )
-            lbl_start.pack(side="left", padx=(0, 4))
+            lbl_start.pack(side="left", padx=(0, 3))
 
         # 序號標籤 (靠右)
         lbl_idx = tk.Label(
@@ -344,7 +344,7 @@ class PeriodicTaskCardView(tk.Frame):
             justify="left",
             wraplength=wrap_w
         )
-        lbl_title.pack(fill="x", expand=True, pady=(3, 1), anchor="w")
+        lbl_title.pack(fill="x", expand=True, pady=(1, 0), anchor="w")
 
         # 動作詳細副標題 (支援超出一行自動換行 wraplength)
         lbl_act = None
@@ -359,7 +359,7 @@ class PeriodicTaskCardView(tk.Frame):
                 justify="left",
                 wraplength=wrap_w
             )
-            lbl_act.pack(fill="x", expand=True, pady=(0, 1), anchor="w")
+            lbl_act.pack(fill="x", expand=True, pady=(0, 0), anchor="w")
 
         # 統整事件交互組件
         interactive_widgets = [card, hdr, lbl_int, lbl_idx, lbl_title]
