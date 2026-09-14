@@ -360,10 +360,10 @@ def macro_worker_loop():
     """背景巨集循環執行緒主迴圈"""
     round_idx = 1
     with state.app_state.steps_lock:
-        active_pts = copy.deepcopy(state.app_state.active_periodic_tasks)
-        current_steps = copy.deepcopy(state.app_state.active_steps)
-        current_combos = copy.deepcopy(state.app_state.active_combos)
-        current_variables = copy.deepcopy(state.app_state.active_variables)
+        active_pts = state.fast_deepcopy(state.app_state.active_periodic_tasks)
+        current_steps = state.fast_deepcopy(state.app_state.active_steps)
+        current_combos = state.fast_deepcopy(state.app_state.active_combos)
+        current_variables = state.fast_deepcopy(state.app_state.active_variables)
 
     start_time = time.time()
     periodic_tasks_runtime = []
@@ -401,10 +401,10 @@ def macro_worker_loop():
                 was_reloaded = state.app_state.reload_requested
                 if was_reloaded:
                     state.app_state.reload_requested = False
-                    current_steps = copy.deepcopy(state.app_state.active_steps)
-                    current_combos = copy.deepcopy(state.app_state.active_combos)
-                    current_variables = copy.deepcopy(state.app_state.active_variables)
-                    latest_pts = copy.deepcopy(state.app_state.active_periodic_tasks)
+                    current_steps = state.fast_deepcopy(state.app_state.active_steps)
+                    current_combos = state.fast_deepcopy(state.app_state.active_combos)
+                    current_variables = state.fast_deepcopy(state.app_state.active_variables)
+                    latest_pts = state.fast_deepcopy(state.app_state.active_periodic_tasks)
 
             if was_reloaded:
                 # 平滑套用熱更新，保留進行中定時任務的上次執行計時與輪次

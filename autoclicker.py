@@ -473,10 +473,9 @@ class App(tk.Tk):
         state.app_state.stop_event.clear()
         self.set_running_ui(True, is_test=True)
 
-        import copy
-        state.app_state.test_steps = copy.deepcopy(state.app_state.steps)
-        state.app_state.test_combos = copy.deepcopy(state.app_state.combos)
-        state.app_state.test_variables = copy.deepcopy(state.app_state.variables)
+        state.app_state.test_steps = state.fast_deepcopy(state.app_state.steps)
+        state.app_state.test_combos = state.fast_deepcopy(state.app_state.combos)
+        state.app_state.test_variables = state.fast_deepcopy(state.app_state.variables)
 
         def _worker():
             try:

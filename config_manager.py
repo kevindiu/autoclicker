@@ -71,10 +71,10 @@ def save_profile_file(name: str, target_state=None, ext=CONFIG_EXT, dir_path=_DE
         data = target_state.to_dict()
     else:
         data = {
-            "variables": copy.deepcopy(target_state.variables),
-            "combos": copy.deepcopy(target_state.combos),
-            "steps": copy.deepcopy(target_state.steps),
-            "periodic_tasks": copy.deepcopy(target_state.periodic_tasks)
+            "variables": state.fast_deepcopy(target_state.variables),
+            "combos": state.fast_deepcopy(target_state.combos),
+            "steps": state.fast_deepcopy(target_state.steps),
+            "periodic_tasks": state.fast_deepcopy(target_state.periodic_tasks)
         }
 
     try:
