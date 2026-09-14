@@ -240,84 +240,14 @@ class AppState:
 
 
 # ==============================================================================
-# 預設全域狀態單例與管理函式
+# 全域狀態解耦：請透過 Dependency Injection 將 AppState 實例傳遞給需要的元件
 # ==============================================================================
-app_state = AppState()
-
-def get_state() -> AppState:
-    """取得當前作用中的 AppState 實例"""
-    return app_state
-
-def set_state(new_state: AppState):
-    """設定當前作用中的 AppState 實例"""
-    global app_state
-    if not isinstance(new_state, AppState):
-        raise TypeError("new_state 必須是 AppState 的實例")
-    app_state = new_state
-
-@contextmanager
-def use_state(temp_state: AppState):
-    """上下文管理器：在區塊內臨時切換為指定的 AppState 實例 (單元測試極為便利)"""
-    prev_state = app_state
-    set_state(temp_state)
-    try:
-        yield temp_state
-    finally:
-        set_state(prev_state)
-
-def is_running() -> bool:
-    """線程安全地檢查巨集是否處於運行狀態 (向後相容捷徑)"""
-    return app_state.is_running()
-
-def set_running(val: bool):
-    """線程安全地設定巨集運行狀態 (向後相容捷徑)"""
-    app_state.set_running(val)
-
-def is_in_testing() -> bool:
-    """線程安全地檢查是否處於試跑狀態 (向後相容捷徑)"""
-    return app_state.is_in_testing()
-
-def set_testing(val: bool):
-    """線程安全地設定試跑狀態 (向後相容捷徑)"""
-    app_state.set_testing(val)
-
-def try_start_testing() -> tuple:
-    """原子操作：嘗試啟動試跑狀態 (向後相容捷徑)"""
-    return app_state.try_start_testing()
-
-def stop_testing():
-    """線程安全地停止試跑狀態 (向後相容捷徑)"""
-    app_state.stop_testing()
-
-def reset():
-    """完全重設當前全域狀態 (保證只進行原地修改，絕不重新賦值新物件)"""
-    app_state.reset()
-
-def get_data_snapshot(target_state=None) -> str:
-    """獲取資料快照字串 (向後相容捷徑，唯一委派至 AppState)"""
-    s = target_state if target_state is not None else app_state
-    if hasattr(s, "get_data_snapshot"):
-        return s.get_data_snapshot()
-    return app_state.get_data_snapshot()
-
-def has_unsaved_changes(last_saved_snapshot: str, target_state=None) -> bool:
-    """檢查是否有未儲存變更 (向後相容捷徑，唯一委派至 AppState)"""
-    s = target_state if target_state is not None else app_state
-    if hasattr(s, "has_unsaved_changes"):
-        return s.has_unsaved_changes(last_saved_snapshot)
-    return app_state.has_unsaved_changes(last_saved_snapshot)
-
-def __getattr__(name: str):
-    """向後相容模組層級屬性存取 (例如 state.variables, state.combos, state.steps 等)"""
-    if hasattr(app_state, name):
-        return getattr(app_state, name)
-    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
 # ==============================================================================
 # 文字格式化輔助函數
 # ==============================================================================
-def format_action_summary(act, index=None, current_variables=None):
+def format_action_summary(app_state: 'AppState', act, index=None, current_variables=None):
     """統一格式化動作或步驟的文字描述，採用 100% 跨平台相容的通用標籤與符號"""
     var_dict = current_variables if current_variables is not None else app_state.variables
     atype = act.get("type", "")

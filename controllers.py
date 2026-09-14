@@ -31,8 +31,8 @@ class BaseController:
 
     def trigger_hot_reload(self):
         """若巨集運行中，同步最新草稿至背景實例快照，並於下一輪自動生效"""
-        if state.is_running():
-            state.get_state().snapshot_active(reload_requested=True)
+        if self.app.app_state.is_running():
+            self.app.app_state.snapshot_active(reload_requested=True)
 
     def _move_list_item(self, lst, idx, delta, refresh_cb, item_name="項目"):
         if idx is None:
@@ -85,20 +85,20 @@ class BaseController:
             idx = self.app.get_selected_combo_idx()
             if idx is None:
                 return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先選取一個組合！")
-            actions = state.app_state.combos[idx].setdefault("actions", [])
+            actions = self.app.app_state.combos[idx].setdefault("actions", [])
             sel = self.app.get_selected_action_idx()
             ins = sel + 1 if sel is not None else len(actions)
             actions.insert(ins, action_dict)
             EventBus.emit(AppEvents.COMBO_ACTIONS_CHANGED, select_idx=ins)
             EventBus.emit(AppEvents.COMBOS_CHANGED, select_idx=idx)
-            self.sync_combo_actions_to_main_steps(state.app_state.combos[idx]["name"], actions)
+            self.sync_combo_actions_to_main_steps(self.app.app_state.combos[idx]["name"], actions)
             if success_msg:
                 EventBus.emit(AppEvents.STATUS_MESSAGE, success_msg)
             self.trigger_hot_reload()
             return ins
         else:
             ins = self.app.get_main_insert_index()
-            state.app_state.steps.insert(ins, action_dict)
+            self.app.app_state.steps.insert(ins, action_dict)
             EventBus.emit(AppEvents.STEPS_CHANGED, ins)
             if success_msg:
                 EventBus.emit(AppEvents.STATUS_MESSAGE, success_msg)
@@ -129,7 +129,7 @@ class VarController(BaseController):
         var_name = sel[0]
         if not messagebox.askyesno("刪除變數", f"請問是否確定刪除變數「{var_name}」？\n若已有動作引用此變數，執行時將自動回退至固定值。", parent=self.app):
             return
-        state.app_state.variables.pop(var_name, None)
+        self.app.app_state.variables.pop(var_name, None)
         self.trigger_hot_reload()
         EventBus.emit(AppEvents.VARS_CHANGED)
         EventBus.emit(AppEvents.COMBO_ACTIONS_CHANGED, )
@@ -141,19 +141,19 @@ class VarController(BaseController):
         if not sel:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先在常用變數庫點選要移動的變數！")
         sel_name = sel[0]
-        keys = list(state.app_state.variables.keys())
+        keys = list(self.app.app_state.variables.keys())
         if sel_name not in keys:
             return
         idx = keys.index(sel_name)
         target = idx + delta
         if 0 <= target < len(keys):
             keys[idx], keys[target] = keys[target], keys[idx]
-            new_vars = {k: state.app_state.variables[k] for k in keys}
-            state.app_state.variables.clear()
-            state.app_state.variables.update(new_vars)
-            with state.app_state.steps_lock:
-                state.app_state.active_variables = copy.deepcopy(state.app_state.variables)
-                state.app_state.reload_requested = True
+            new_vars = {k: self.app.app_state.variables[k] for k in keys}
+            self.app.app_state.variables.clear()
+            self.app.app_state.variables.update(new_vars)
+            with self.app.app_state.steps_lock:
+                self.app.app_state.active_variables = copy.deepcopy(self.app.app_state.variables)
+                self.app.app_state.reload_requested = True
             EventBus.emit(AppEvents.VARS_CHANGED, select_name=sel_name)
             direction = "上移" if delta < 0 else "下移"
             EventBus.emit(AppEvents.STATUS_MESSAGE, f"已將變數【{sel_name}】{direction}至 #{target+1}")
@@ -163,9 +163,9 @@ class VarController(BaseController):
 
     def _build_variable_action(self, var_name):
         """根據變數名稱與類型，組裝對應的動作字典與提示描述，若無效則回傳 (None, None)"""
-        if not var_name or var_name not in state.app_state.variables:
+        if not var_name or var_name not in self.app.app_state.variables:
             return None, None
-        v_info = state.app_state.variables[var_name]
+        v_info = self.app.app_state.variables[var_name]
         v_type = v_info.get("type", "coord")
         v_val = v_info.get("value")
 
@@ -236,7 +236,7 @@ class ComboController(BaseController):
         if not hasattr(self.app, "combo_listbox"):
             return None
         sel = self.app.combo_listbox.curselection()
-        return sel[0] if sel and 0 <= sel[0] < len(state.app_state.combos) else None
+        return sel[0] if sel and 0 <= sel[0] < len(self.app.app_state.combos) else None
 
     def on_combo_select(self, event=None):
         idx = self.get_selected_combo_idx()
@@ -247,7 +247,7 @@ class ComboController(BaseController):
                 self.app.combo_act_listbox.delete(0, tk.END)
             self.app._refresh_call_combo_dropdown()
             return
-        c = state.app_state.combos[idx]
+        c = self.app.app_state.combos[idx]
         self.app.var_combo_name.set(c["name"])
         if hasattr(self.app, "lbl_combo_editing"):
             self.app.lbl_combo_editing.config(text=f"【編輯: {c['name']}】")
@@ -257,17 +257,17 @@ class ComboController(BaseController):
     def add_new_combo(self):
         name = self.app.var_combo_name.get().strip()
         if not name:
-            count = len(state.app_state.combos) + 1
+            count = len(self.app.app_state.combos) + 1
             name = f"組合{count}"
-            while any(c["name"] == name for c in state.app_state.combos):
+            while any(c["name"] == name for c in self.app.app_state.combos):
                 count += 1
                 name = f"組合{count}"
-        elif any(c["name"] == name for c in state.app_state.combos):
+        elif any(c["name"] == name for c in self.app.app_state.combos):
             messagebox.showwarning("名稱重覆", f"組合名稱「{name}」已存在！請使用其他名稱。", parent=self.app)
             return
 
-        state.app_state.combos.append({"name": name, "actions": []})
-        EventBus.emit(AppEvents.COMBOS_CHANGED, select_idx=len(state.app_state.combos)-1)
+        self.app.app_state.combos.append({"name": name, "actions": []})
+        EventBus.emit(AppEvents.COMBOS_CHANGED, select_idx=len(self.app.app_state.combos)-1)
         EventBus.emit(AppEvents.STATUS_MESSAGE, f"已建立新組合: [{name}]")
         self.trigger_hot_reload()
 
@@ -275,15 +275,15 @@ class ComboController(BaseController):
         idx = self.get_selected_combo_idx()
         if idx is None:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先在左邊清單點選要複製的組合！")
-        orig = state.app_state.combos[idx]
+        orig = self.app.app_state.combos[idx]
         base_name = orig["name"]
         new_name = f"{base_name}_副本"
         count = 1
-        while any(c["name"] == new_name for c in state.app_state.combos):
+        while any(c["name"] == new_name for c in self.app.app_state.combos):
             count += 1
             new_name = f"{base_name}_副本{count}"
 
-        state.app_state.combos.insert(idx + 1, {"name": new_name, "actions": copy.deepcopy(orig.get("actions", []))})
+        self.app.app_state.combos.insert(idx + 1, {"name": new_name, "actions": copy.deepcopy(orig.get("actions", []))})
         EventBus.emit(AppEvents.COMBOS_CHANGED, select_idx=idx + 1)
         EventBus.emit(AppEvents.STATUS_MESSAGE, f"已複製組合 [{base_name}] 為 [{new_name}]")
         self.trigger_hot_reload()
@@ -296,23 +296,23 @@ class ComboController(BaseController):
         if not new_name:
             messagebox.showwarning("名稱錯誤", "組合名稱不能為空！", parent=self.app)
             return
-        old_name = state.app_state.combos[idx]["name"]
+        old_name = self.app.app_state.combos[idx]["name"]
         if new_name == old_name:
             EventBus.emit(AppEvents.STATUS_MESSAGE, f"組合名稱未變更: [{old_name}]")
             return
-        if any(c["name"] == new_name for c in state.app_state.combos):
+        if any(c["name"] == new_name for c in self.app.app_state.combos):
             messagebox.showwarning("名稱重覆", f"組合名稱「{new_name}」已存在！請使用其他名稱。", parent=self.app)
             return
 
-        state.app_state.combos[idx]["name"] = new_name
+        self.app.app_state.combos[idx]["name"] = new_name
 
-        for c in state.app_state.combos:
+        for c in self.app.app_state.combos:
             for act in c.get("actions", []):
                 if act.get("type") == "call_combo" and act.get("target_name") == old_name:
                     act["target_name"] = new_name
 
         sync_cnt = 0
-        for s in state.app_state.steps:
+        for s in self.app.app_state.steps:
             if s.get("type") == "call_combo" and s.get("target_name") == old_name:
                 s["target_name"] = new_name
                 sync_cnt += 1
@@ -334,12 +334,12 @@ class ComboController(BaseController):
         idx = self.get_selected_combo_idx()
         if idx is None:
             return
-        name = state.app_state.combos[idx]["name"]
-        act_cnt = len(state.app_state.combos[idx].get("actions", []))
+        name = self.app.app_state.combos[idx]["name"]
+        act_cnt = len(self.app.app_state.combos[idx].get("actions", []))
         if not messagebox.askyesno("刪除組合確認", f"確定要刪除組合【{name}】嗎？組合內的所有動作將會一併清除！", parent=self.app):
             return
-        del state.app_state.combos[idx]
-        new_sel = min(idx, len(state.app_state.combos) - 1) if state.app_state.combos else None
+        del self.app.app_state.combos[idx]
+        new_sel = min(idx, len(self.app.app_state.combos) - 1) if self.app.app_state.combos else None
         EventBus.emit(AppEvents.COMBOS_CHANGED, select_idx=new_sel)
         self.on_combo_select()
         EventBus.emit(AppEvents.STEPS_CHANGED, )
@@ -350,12 +350,12 @@ class ComboController(BaseController):
         idx = self.get_selected_combo_idx()
         if idx is None:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先在左邊選擇要加入的組合！")
-        c = state.app_state.combos[idx]
+        c = self.app.app_state.combos[idx]
         if not c.get("actions"):
             return EventBus.emit(AppEvents.STATUS_MESSAGE, f"組合 [{c['name']}] 內尚未加入任何動作！")
 
         ins = self.app.get_main_insert_index()
-        state.app_state.steps.insert(ins, {"type": "combo", "name": c["name"], "actions": copy.deepcopy(c["actions"])})
+        self.app.app_state.steps.insert(ins, {"type": "combo", "name": c["name"], "actions": copy.deepcopy(c["actions"])})
         EventBus.emit(AppEvents.STEPS_CHANGED, select_idx=ins)
         EventBus.emit(AppEvents.STATUS_MESSAGE, f"已將組合 [{c['name']}] 加入掛機流程 #{ins+1}")
         self.trigger_hot_reload()
@@ -366,7 +366,7 @@ class ComboController(BaseController):
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先在組合清單點選要移動的組合！")
         def _refresh(target):
             EventBus.emit(AppEvents.COMBOS_CHANGED, select_idx=target)
-        self._move_list_item(state.app_state.combos, c_idx, delta, _refresh, item_name="技能組合")
+        self._move_list_item(self.app.app_state.combos, c_idx, delta, _refresh, item_name="技能組合")
 
     # ================= 組合動作管理 =================
     def get_selected_action_idx(self):
@@ -377,7 +377,7 @@ class ComboController(BaseController):
 
     def sync_combo_actions_to_main_steps(self, combo_name, new_actions):
         sync_cnt = 0
-        for s in state.app_state.steps:
+        for s in self.app.app_state.steps:
             if s.get("type") == "combo" and s.get("name") == combo_name:
                 s["actions"] = copy.deepcopy(new_actions)
                 sync_cnt += 1
@@ -389,21 +389,21 @@ class ComboController(BaseController):
         a_idx = self.get_selected_action_idx()
         if c_idx is None or a_idx is None:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先選擇要試跑的組合動作！")
-        act = state.app_state.combos[c_idx]["actions"][a_idx]
+        act = self.app.app_state.combos[c_idx]["actions"][a_idx]
         self.app.run_in_test_thread(f"組合動作 #{a_idx+1}", lambda: self.app.execute_single_action(act, f"組合動作#{a_idx+1}"))
 
     def test_run_current_combo(self):
         c_idx = self.get_selected_combo_idx()
         if c_idx is None:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先選擇要試跑的組合！")
-        c = state.app_state.combos[c_idx]
+        c = self.app.app_state.combos[c_idx]
         sub_actions = c.get("actions", [])
         if not sub_actions:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, f"組合 [{c['name']}] 內無任何動作可試跑！")
 
         def _run():
             for a_idx, act in enumerate(sub_actions):
-                if state.app_state.stop_event.is_set():
+                if self.app.app_state.stop_event.is_set():
                     break
                 self.app.execute_single_action(act, f"[{c['name']}#{a_idx+1}]")
 
@@ -415,13 +415,13 @@ class ComboController(BaseController):
         if c_idx is None or a_idx is None:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先選擇組合動作！")
 
-        act = state.app_state.combos[c_idx]["actions"][a_idx]
-        curr_combo_name = state.app_state.combos[c_idx]["name"]
-        avail_combos = [c["name"] for c in state.app_state.combos if c["name"] != curr_combo_name]
+        act = self.app.app_state.combos[c_idx]["actions"][a_idx]
+        curr_combo_name = self.app.app_state.combos[c_idx]["name"]
+        avail_combos = [c["name"] for c in self.app.app_state.combos if c["name"] != curr_combo_name]
 
         if self.app.prompt_edit_action(act, available_combos=avail_combos):
             EventBus.emit(AppEvents.COMBO_ACTIONS_CHANGED, select_idx=a_idx)
-            self.sync_combo_actions_to_main_steps(state.app_state.combos[c_idx]["name"], state.app_state.combos[c_idx]["actions"])
+            self.sync_combo_actions_to_main_steps(self.app.app_state.combos[c_idx]["name"], self.app.app_state.combos[c_idx]["actions"])
             EventBus.emit(AppEvents.STATUS_MESSAGE, f"已成功更新組合動作 #{a_idx+1}")
             self.trigger_hot_reload()
 
@@ -430,10 +430,10 @@ class ComboController(BaseController):
         if c_idx is None:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先在左邊清單選取一個組合！")
         a_idx = self.get_selected_action_idx()
-        actions = state.app_state.combos[c_idx]["actions"]
+        actions = self.app.app_state.combos[c_idx]["actions"]
         def _refresh(target):
             EventBus.emit(AppEvents.COMBO_ACTIONS_CHANGED, select_idx=target)
-            self.sync_combo_actions_to_main_steps(state.app_state.combos[c_idx]["name"], actions)
+            self.sync_combo_actions_to_main_steps(self.app.app_state.combos[c_idx]["name"], actions)
         self._move_list_item(actions, a_idx, delta, _refresh, item_name="組合動作")
 
     def duplicate_combo_action(self):
@@ -441,11 +441,11 @@ class ComboController(BaseController):
         if c_idx is None:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先在左邊清單選取一個組合！")
         a_idx = self.get_selected_action_idx()
-        actions = state.app_state.combos[c_idx]["actions"]
+        actions = self.app.app_state.combos[c_idx]["actions"]
         def _refresh(target):
             EventBus.emit(AppEvents.COMBO_ACTIONS_CHANGED, select_idx=target)
             EventBus.emit(AppEvents.COMBOS_CHANGED, select_idx=c_idx)
-            self.sync_combo_actions_to_main_steps(state.app_state.combos[c_idx]["name"], actions)
+            self.sync_combo_actions_to_main_steps(self.app.app_state.combos[c_idx]["name"], actions)
         self._duplicate_list_item(actions, a_idx, _refresh, item_name="組合動作")
 
     def delete_combo_action(self):
@@ -453,23 +453,23 @@ class ComboController(BaseController):
         if c_idx is None:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先在左邊清單選取一個組合！")
         a_idx = self.get_selected_action_idx()
-        actions = state.app_state.combos[c_idx]["actions"]
+        actions = self.app.app_state.combos[c_idx]["actions"]
         def _refresh(target):
             EventBus.emit(AppEvents.COMBO_ACTIONS_CHANGED, select_idx=target)
             EventBus.emit(AppEvents.COMBOS_CHANGED, select_idx=c_idx)
-            self.sync_combo_actions_to_main_steps(state.app_state.combos[c_idx]["name"], actions)
+            self.sync_combo_actions_to_main_steps(self.app.app_state.combos[c_idx]["name"], actions)
         self._delete_list_item(actions, a_idx, _refresh, item_name="組合動作")
 
     def clear_combo_actions(self):
         c_idx = self.get_selected_combo_idx()
         if c_idx is None:
             return
-        actions = state.app_state.combos[c_idx].get("actions", [])
+        actions = self.app.app_state.combos[c_idx].get("actions", [])
         def _refresh(_):
             EventBus.emit(AppEvents.COMBO_ACTIONS_CHANGED)
             EventBus.emit(AppEvents.COMBOS_CHANGED, select_idx=c_idx)
-            self.sync_combo_actions_to_main_steps(state.app_state.combos[c_idx]["name"], [])
-        self._clear_list_items(actions, f"請問是否清空組合 [{state.app_state.combos[c_idx]['name']}] 的所有動作？", _refresh, "組合所有動作")
+            self.sync_combo_actions_to_main_steps(self.app.app_state.combos[c_idx]["name"], [])
+        self._clear_list_items(actions, f"請問是否清空組合 [{self.app.app_state.combos[c_idx]['name']}] 的所有動作？", _refresh, "組合所有動作")
 
     def combo_add_call_action(self):
         idx = self.get_selected_combo_idx()
@@ -478,7 +478,7 @@ class ComboController(BaseController):
         target_name = self.app.var_combo_to_call.get().strip()
         if not target_name:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先在下拉選單選擇要呼叫的組合！")
-        if target_name == state.app_state.combos[idx]["name"]:
+        if target_name == self.app.app_state.combos[idx]["name"]:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "不能在組合內呼叫自己！")
         self._insert_action_to_target({"type": "call_combo", "target_name": target_name}, is_combo=True, success_msg=f"已在組合加入呼叫: [{target_name}]")
 
@@ -488,12 +488,12 @@ class StepController(BaseController):
 
     def get_main_insert_index(self):
         if not hasattr(self.app, "step_listbox"):
-            return len(state.app_state.steps)
+            return len(self.app.app_state.steps)
         sel = self.app.step_listbox.curselection()
-        return sel[0] + 1 if sel else len(state.app_state.steps)
+        return sel[0] + 1 if sel else len(self.app.app_state.steps)
 
     def add_click_action(self, is_combo=False):
-        if state.is_running():
+        if self.app.app_state.is_running():
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "巨集正在循環執行中，為免干擾滑鼠瞄準，請先停止運行再取點！")
         if is_combo and self.app.get_selected_combo_idx() is None:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先選取一個組合！")
@@ -591,7 +591,7 @@ class StepController(BaseController):
         if not sel:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先在清單中選擇要試跑的主步驟！")
         idx = sel[0]
-        s = state.app_state.steps[idx]
+        s = self.app.app_state.steps[idx]
 
         def _run():
             if s.get("type") == "combo":
@@ -600,7 +600,7 @@ class StepController(BaseController):
                 if not sub_actions:
                     return EventBus.emit(AppEvents.STATUS_MESSAGE, f"組合 [{c_name}] 內無任何動作！")
                 for sub_idx, sub_act in enumerate(sub_actions):
-                    if state.app_state.stop_event.is_set():
+                    if self.app.app_state.stop_event.is_set():
                         break
                     self.app.execute_single_action(sub_act, f"[{c_name}#{sub_idx+1}]")
             else:
@@ -610,7 +610,7 @@ class StepController(BaseController):
 
     def test_run_execution_flow(self):
         """一次性試跑整個掛機執行流程（所有主步驟依序執行一輪）"""
-        if not state.app_state.steps:
+        if not self.app.app_state.steps:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "掛機流程清單內無任何步驟可試跑！")
         self.app.run_in_test_thread("掛機流程", lambda: engine.test_run_execution_flow_worker())
 
@@ -619,7 +619,7 @@ class StepController(BaseController):
         if not sel:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先在掛機流程選擇步驟！")
         idx = sel[0]
-        if self.app.prompt_edit_action(state.app_state.steps[idx], step_idx=idx):
+        if self.app.prompt_edit_action(self.app.app_state.steps[idx], step_idx=idx):
             EventBus.emit(AppEvents.STEPS_CHANGED, idx)
             EventBus.emit(AppEvents.STATUS_MESSAGE, f"已成功更新主步驟 #{idx+1}")
             self.trigger_hot_reload()
@@ -627,20 +627,20 @@ class StepController(BaseController):
     def move_main_step(self, delta):
         sel = self.app.step_listbox.curselection() if hasattr(self.app, "step_listbox") else None
         idx = sel[0] if sel else None
-        self._move_list_item(state.app_state.steps, idx, delta, lambda target: EventBus.emit(AppEvents.STEPS_CHANGED, select_idx=target), item_name="主步驟")
+        self._move_list_item(self.app.app_state.steps, idx, delta, lambda target: EventBus.emit(AppEvents.STEPS_CHANGED, select_idx=target), item_name="主步驟")
 
     def duplicate_main_step(self):
         sel = self.app.step_listbox.curselection() if hasattr(self.app, "step_listbox") else None
         idx = sel[0] if sel else None
-        self._duplicate_list_item(state.app_state.steps, idx, lambda target: EventBus.emit(AppEvents.STEPS_CHANGED, select_idx=target), item_name="主步驟")
+        self._duplicate_list_item(self.app.app_state.steps, idx, lambda target: EventBus.emit(AppEvents.STEPS_CHANGED, select_idx=target), item_name="主步驟")
 
     def delete_main_step(self):
         sel = self.app.step_listbox.curselection() if hasattr(self.app, "step_listbox") else None
         idx = sel[0] if sel else None
-        self._delete_list_item(state.app_state.steps, idx, lambda target: EventBus.emit(AppEvents.STEPS_CHANGED, select_idx=target), item_name="主步驟")
+        self._delete_list_item(self.app.app_state.steps, idx, lambda target: EventBus.emit(AppEvents.STEPS_CHANGED, select_idx=target), item_name="主步驟")
 
     def clear_main_steps(self):
-        self._clear_list_items(state.app_state.steps, "請問是否清空整個掛機流程？\n清空後未儲存的內容無法還原！", lambda _: EventBus.emit(AppEvents.STEPS_CHANGED), "掛機流程")
+        self._clear_list_items(self.app.app_state.steps, "請問是否清空整個掛機流程？\n清空後未儲存的內容無法還原！", lambda _: EventBus.emit(AppEvents.STEPS_CHANGED), "掛機流程")
 
 
 class PeriodicTaskController(BaseController):
@@ -649,8 +649,8 @@ class PeriodicTaskController(BaseController):
     def add_new_periodic_task(self):
         new_pt = dialogs.prompt_edit_periodic_task(self.app, task=None)
         if new_pt:
-            state.app_state.periodic_tasks.append(new_pt)
-            new_idx = len(state.app_state.periodic_tasks) - 1
+            self.app.app_state.periodic_tasks.append(new_pt)
+            new_idx = len(self.app.app_state.periodic_tasks) - 1
             EventBus.emit(AppEvents.PERIODIC_TASKS_CHANGED, new_idx)
             EventBus.emit(AppEvents.STATUS_MESSAGE, f"已新增定時任務：【{new_pt.get('name')}】(每 {new_pt.get('interval')} 秒)")
             self.trigger_hot_reload()
@@ -660,9 +660,9 @@ class PeriodicTaskController(BaseController):
         if not sel:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先在定時任務清單中選擇任務！")
         idx = sel[0]
-        updated_pt = dialogs.prompt_edit_periodic_task(self.app, task=state.app_state.periodic_tasks[idx])
+        updated_pt = dialogs.prompt_edit_periodic_task(self.app, task=self.app.app_state.periodic_tasks[idx])
         if updated_pt:
-            state.app_state.periodic_tasks[idx] = updated_pt
+            self.app.app_state.periodic_tasks[idx] = updated_pt
             EventBus.emit(AppEvents.PERIODIC_TASKS_CHANGED, idx)
             EventBus.emit(AppEvents.STATUS_MESSAGE, f"已更新定時任務 #{idx+1}：【{updated_pt.get('name')}】")
             self.trigger_hot_reload()
@@ -672,7 +672,7 @@ class PeriodicTaskController(BaseController):
         if not sel:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先在定時任務清單中選擇要開關的任務！")
         idx = sel[0]
-        pt = state.app_state.periodic_tasks[idx]
+        pt = self.app.app_state.periodic_tasks[idx]
         pt["enabled"] = not pt.get("enabled", True)
         st_text = "啟用" if pt["enabled"] else "停用"
         EventBus.emit(AppEvents.PERIODIC_TASKS_CHANGED, idx)
@@ -684,10 +684,10 @@ class PeriodicTaskController(BaseController):
         if not sel:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先在定時任務清單中選擇要複製的任務！")
         idx = sel[0]
-        copied_pt = copy.deepcopy(state.app_state.periodic_tasks[idx])
+        copied_pt = copy.deepcopy(self.app.app_state.periodic_tasks[idx])
         copied_pt["id"] = f"pt_{int(time.time()*1000)}_{uuid.uuid4().hex[:6]}"
         copied_pt["name"] = f"{copied_pt.get('name', '任務')}_副本"
-        state.app_state.periodic_tasks.insert(idx + 1, copied_pt)
+        self.app.app_state.periodic_tasks.insert(idx + 1, copied_pt)
         EventBus.emit(AppEvents.PERIODIC_TASKS_CHANGED, idx + 1)
         EventBus.emit(AppEvents.STATUS_MESSAGE, f"已複製定時任務至 #{idx+2}")
         self.trigger_hot_reload()
@@ -697,11 +697,11 @@ class PeriodicTaskController(BaseController):
         if not sel:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先在定時任務清單中選擇要刪除的任務！")
         idx = sel[0]
-        name = state.app_state.periodic_tasks[idx].get("name", "未命名")
+        name = self.app.app_state.periodic_tasks[idx].get("name", "未命名")
         if not messagebox.askyesno("刪除定時任務確認", f"確定要刪除定時任務【{name}】嗎？\n刪除後無法還原！", parent=self.app):
             return
-        del state.app_state.periodic_tasks[idx]
-        new_sel = min(idx, len(state.app_state.periodic_tasks) - 1) if state.app_state.periodic_tasks else None
+        del self.app.app_state.periodic_tasks[idx]
+        new_sel = min(idx, len(self.app.app_state.periodic_tasks) - 1) if self.app.app_state.periodic_tasks else None
         EventBus.emit(AppEvents.PERIODIC_TASKS_CHANGED, new_sel)
         EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"🗑 已刪除定時任務 #{idx+1}：【{name}】")
         self.trigger_hot_reload()
@@ -711,7 +711,7 @@ class PeriodicTaskController(BaseController):
         if not sel:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先在定時任務清單中選擇要試跑的任務！")
         idx = sel[0]
-        pt = state.app_state.periodic_tasks[idx]
+        pt = self.app.app_state.periodic_tasks[idx]
         t_name = pt.get("name", "定時任務")
         act = pt.get("action", {})
 

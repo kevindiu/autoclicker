@@ -74,18 +74,19 @@ class App(tk.Tk):
         self.var_window = tk.StringVar(value="未偵測到視窗")
 
         # 執行緒安全的快取設定 (避免子執行緒讀取 Tkinter Variable 引發 Tcl 鎖定或例外)
-        state.app_state.use_bg = True
+        self.app_state = state.AppState()
+        self.app_state.use_bg = True
         self.cached_use_rel = True
-        state.app_state.offset_x = 0
-        state.app_state.offset_y = 0
+        self.app_state.offset_x = 0
+        self.app_state.offset_y = 0
 
         self.var_use_bg.trace_add("write", lambda *a: setattr(self, "cached_use_bg", bool(self.var_use_bg.get())))
         self.var_use_rel.trace_add("write", lambda *a: setattr(self, "cached_use_rel", bool(self.var_use_rel.get())))
         def _update_offset(*a):
-            try: state.app_state.offset_x = int(self.var_offset_x.get() or 0)
-            except (ValueError, TypeError): state.app_state.offset_x = 0
-            try: state.app_state.offset_y = int(self.var_offset_y.get() or 0)
-            except (ValueError, TypeError): state.app_state.offset_y = 0
+            try: self.app_state.offset_x = int(self.var_offset_x.get() or 0)
+            except (ValueError, TypeError): self.app_state.offset_x = 0
+            try: self.app_state.offset_y = int(self.var_offset_y.get() or 0)
+            except (ValueError, TypeError): self.app_state.offset_y = 0
         self.var_offset_x.trace_add("write", _update_offset)
         self.var_offset_y.trace_add("write", _update_offset)
 
@@ -171,13 +172,13 @@ class App(tk.Tk):
 
     def get_current_data_snapshot(self):
         """獲取當前設定資料的序列化字串，用於精確對比是否有未儲存的變更"""
-        return state.get_data_snapshot()
+        return self.app_state.get_data_snapshot()
 
     def has_unsaved_changes(self):
         """檢查當前記憶體中的設定相較於最後儲存狀態是否有更新"""
         if not hasattr(self, "last_saved_snapshot") or not self.last_saved_snapshot:
             return False
-        return state.has_unsaved_changes(self.last_saved_snapshot)
+        return self.app_state.has_unsaved_changes(self.last_saved_snapshot)
 
     def _on_vars_changed(self, select_name=None):
         if not hasattr(self, "tree_vars"):
@@ -186,7 +187,7 @@ class App(tk.Tk):
             self.tree_vars.delete(item)
 
         type_display = {"coord": "[坐標]", "key": "[按鍵]", "wait": "[停頓]"}
-        for name, data in state.app_state.variables.items():
+        for name, data in self.app_state.variables.items():
             t_key = data.get("type", "coord")
             t_disp = type_display.get(t_key, t_key)
             val = data.get("value")
@@ -209,7 +210,7 @@ class App(tk.Tk):
         if select_name and hasattr(self.tree_vars, "select"):
             self.tree_vars.select(select_name)
 
-        var_names = list(state.app_state.variables.keys())
+        var_names = list(self.app_state.variables.keys())
         if hasattr(self, "cbo_combo_add_var"):
             self.cbo_combo_add_var["values"] = var_names
             if var_names:
@@ -230,10 +231,10 @@ class App(tk.Tk):
         if not hasattr(self, "combo_listbox"):
             return
         self.combo_listbox.delete(0, tk.END)
-        for i, c in enumerate(state.app_state.combos):
+        for i, c in enumerate(self.app_state.combos):
             act_count = len(c.get("actions", []))
             self.combo_listbox.insert(tk.END, f"{c['name']} ({act_count}動作)")
-        if select_idx is not None and 0 <= select_idx < len(state.app_state.combos):
+        if select_idx is not None and 0 <= select_idx < len(self.app_state.combos):
             self.combo_listbox.selection_set(select_idx)
             self.combo_ctrl.on_combo_select()
         else:
@@ -241,8 +242,8 @@ class App(tk.Tk):
 
     def _refresh_call_combo_dropdown(self):
         idx = self.combo_ctrl.get_selected_combo_idx()
-        curr_name = state.app_state.combos[idx]["name"] if idx is not None else None
-        avail = [c["name"] for c in state.app_state.combos if c["name"] != curr_name]
+        curr_name = self.app_state.combos[idx]["name"] if idx is not None else None
+        avail = [c["name"] for c in self.app_state.combos if c["name"] != curr_name]
         if hasattr(self, "cbo_call_combo"):
             self.cbo_call_combo["values"] = avail
             if avail:
@@ -251,7 +252,7 @@ class App(tk.Tk):
             else:
                 self.var_combo_to_call.set("")
 
-        all_combos = [c["name"] for c in state.app_state.combos]
+        all_combos = [c["name"] for c in self.app_state.combos]
         if hasattr(self, "cbo_step_call_combo"):
             self.cbo_step_call_combo["values"] = all_combos
             if all_combos:
@@ -267,7 +268,7 @@ class App(tk.Tk):
         idx = self.combo_ctrl.get_selected_combo_idx()
         if idx is None:
             return
-        actions = state.app_state.combos[idx].get("actions", [])
+        actions = self.app_state.combos[idx].get("actions", [])
         for i, act in enumerate(actions):
             self.combo_act_listbox.insert(tk.END, format_action_summary(act, index=i))
         if select_idx is not None and 0 <= select_idx < len(actions):
@@ -278,22 +279,22 @@ class App(tk.Tk):
         if not hasattr(self, "step_listbox"):
             return
         self.step_listbox.delete(0, tk.END)
-        for i, s in enumerate(state.app_state.steps):
+        for i, s in enumerate(self.app_state.steps):
             self.step_listbox.insert(tk.END, format_action_summary(s, index=i))
         last_idx = getattr(self, "last_active_step_idx", None)
-        if last_idx is not None and 0 <= last_idx < len(state.app_state.steps):
+        if last_idx is not None and 0 <= last_idx < len(self.app_state.steps):
             try:
                 self.step_listbox.itemconfigure(last_idx, background=UITheme.STEP_ACTIVE_BG, foreground=UITheme.STEP_ACTIVE_FG)
             except tk.TclError:
                 pass
-        if select_idx is not None and 0 <= select_idx < len(state.app_state.steps):
+        if select_idx is not None and 0 <= select_idx < len(self.app_state.steps):
             self.step_listbox.selection_set(select_idx)
             self.step_listbox.see(select_idx)
 
         # 空清單視覺引導 (Empty State Placeholder)
         lbl_empty = getattr(self, "lbl_empty_steps", None)
         if lbl_empty:
-            if len(state.app_state.steps) == 0:
+            if len(self.app_state.steps) == 0:
                 lbl_empty.place(relx=0.5, rely=0.5, anchor="center")
                 lbl_empty.lift()
             else:
@@ -303,9 +304,9 @@ class App(tk.Tk):
         if not hasattr(self, "periodic_listbox"):
             return
         self.periodic_listbox.delete(0, tk.END)
-        for pt in state.app_state.periodic_tasks:
+        for pt in self.app_state.periodic_tasks:
             self.periodic_listbox.insert(tk.END, pt)
-        if select_idx is not None and 0 <= select_idx < len(state.app_state.periodic_tasks):
+        if select_idx is not None and 0 <= select_idx < len(self.app_state.periodic_tasks):
             self.periodic_listbox.selection_set(select_idx)
             self.periodic_listbox.see(select_idx)
 
@@ -322,15 +323,15 @@ class App(tk.Tk):
                 return
             elif ans is True:
                 try:
-                    config_manager.save_profile_file(curr_profile, state.app_state, CONFIG_EXT)
+                    config_manager.save_profile_file(curr_profile, self.app_state, CONFIG_EXT)
                 except Exception as e:
                     if not messagebox.askyesno("儲存失敗", f"儲存失敗 ({e})，是否仍要強制退出？", parent=self):
                         return
 
         self.is_closing = True
-        state.set_running(False)
-        state.app_state.stop_event.set()
-        emergency_release_all()
+        self.app_state.set_running(False)
+        self.app_state.stop_event.set()
+        emergency_release_all(self.app_state)
         self.destroy()
 
     def toggle_topmost(self):
@@ -397,7 +398,7 @@ class App(tk.Tk):
                     self.append_log(LogTag.ALERT, f"定時任務倒數更新異常: {e}")
 
         # 動態輪詢間隔：有活動或運行/試跑時 50ms 高頻響應，空閒時 200ms 節能輪詢
-        is_active = bool(log_items) or (tasks_executed > 0) or state.is_running() or state.is_in_testing()
+        is_active = bool(log_items) or (tasks_executed > 0) or self.app_state.is_running() or self.app_state.is_in_testing()
         next_interval = 50 if is_active else 200
         if not self.is_closing:
             self.after(next_interval, self.poll_ui_queues)
@@ -468,36 +469,36 @@ class App(tk.Tk):
 
     def run_in_test_thread(self, task_name, task_fn):
         """統一的非同步試跑安全守衛與執行緒啟動器 (原子化狀態校驗與切換，杜絕 check-then-act 競態)"""
-        ok, reason = state.try_start_testing()
+        ok, reason = self.app_state.try_start_testing()
         if not ok:
             if reason == "running":
                 return self.set_status("巨集正在循環執行中，請先停止再試跑！")
             else:
                 return self.set_status("已有試跑任務正在執行中，請稍候！")
 
-        state.app_state.stop_event.clear()
+        self.app_state.stop_event.clear()
         self.set_running_ui(True, is_test=True)
 
-        state.app_state.test_steps = state.fast_deepcopy(state.app_state.steps)
-        state.app_state.test_combos = state.fast_deepcopy(state.app_state.combos)
-        state.app_state.test_variables = state.fast_deepcopy(state.app_state.variables)
+        self.app_state.test_steps = state.fast_deepcopy(self.app_state.steps)
+        self.app_state.test_combos = state.fast_deepcopy(self.app_state.combos)
+        self.app_state.test_variables = state.fast_deepcopy(self.app_state.variables)
 
         def _worker():
             try:
                 self.append_log("試跑", f"▶ 正在試跑: {task_name}")
                 task_fn()
-                if state.app_state.stop_event.is_set():
+                if self.app_state.stop_event.is_set():
                     self.append_log("試跑", f"⏹ {task_name} 試跑已手動中止！")
                 else:
                     self.append_log("試跑", f"✓ {task_name} 試跑完成！")
             except Exception as e:
                 self.append_log("警示", f"✕ {task_name} 試跑異常: {e}")
             finally:
-                state.app_state.test_steps.clear()
-                state.app_state.test_combos.clear()
-                state.app_state.test_variables.clear()
-                state.app_state.is_testing = False
-                emergency_release_all()
+                self.app_state.test_steps.clear()
+                self.app_state.test_combos.clear()
+                self.app_state.test_variables.clear()
+                self.app_state.is_testing = False
+                emergency_release_all(self.app_state)
                 self.set_running_ui(False)
 
         threading.Thread(target=_worker, daemon=True).start()
@@ -522,9 +523,9 @@ class App(tk.Tk):
 
             # 僅在游標位置變更或首度初始化時執行 Win32 ScreenToClient 轉換與 UI 渲染
             if is_moved or not hasattr(self, "_last_mouse_hud_text"):
-                if state.app_state.target_hwnd and getattr(self, "cached_use_rel", True) and user32:
+                if self.app_state.target_hwnd and getattr(self, "cached_use_rel", True) and user32:
                     pt = POINT(cur_raw[0], cur_raw[1])
-                    user32.ScreenToClient(state.app_state.target_hwnd, ctypes.byref(pt))
+                    user32.ScreenToClient(self.app_state.target_hwnd, ctypes.byref(pt))
                     new_text = f"游標實時坐標(相對): ({pt.x}, {pt.y})"
                 else:
                     new_text = f"游標實時坐標(螢幕): ({cur_raw[0]}, {cur_raw[1]})"
@@ -534,7 +535,7 @@ class App(tk.Tk):
 
             # 動態輪詢頻率休眠優化：
             # 若巨集穩定掛機中，將更新間隔拉長至 1000ms 節省 CPU 資源；游標移動時 200ms；靜止時 500ms。
-            if state.is_running() or state.is_in_testing():
+            if self.app_state.is_running() or self.app_state.is_in_testing():
                 next_interval = 1000
             elif is_moved:
                 next_interval = 200
@@ -563,10 +564,10 @@ class App(tk.Tk):
 
     def locate_target_window(self):
         """定位並閃爍目標遊戲視窗 (非同步背景閃爍，杜絕 UI 主執行緒凍結)"""
-        if not state.app_state.target_hwnd or not user32:
+        if not self.app_state.target_hwnd or not user32:
             return self.set_status("未綁定有效視窗，無法定位！")
 
-        hwnd = state.app_state.target_hwnd
+        hwnd = self.app_state.target_hwnd
         try:
             force_bring_window_to_front(hwnd)
             def _flash_worker():
@@ -586,13 +587,13 @@ class App(tk.Tk):
     # ======================= 取點防重入機制 + 頂部提示 =======================
     def capture_pos_space(self, on_finish, on_cancel=None, btn="left"):
         """無干擾 Hover 取點模式：頂部浮動 HUD，按 Space 確定，按 ESC 取消"""
-        if not state.app_state.target_hwnd:
+        if not self.app_state.target_hwnd:
             messagebox.showwarning("提示", "尚未綁定目標視窗，請先在上方選擇遊戲視窗！", parent=self)
             if on_cancel: on_cancel()
             return
 
         btn_cn = "右鍵" if btn == "right" else "左鍵"
-        force_bring_window_to_front(state.app_state.target_hwnd)
+        force_bring_window_to_front(self.app_state.target_hwnd)
         self.set_status(f"【設定{btn_cn}點擊】遊戲已置頂！請將滑鼠指住目標，按 [SPACE 空白鍵] 確定")
 
         banner = tk.Toplevel(self)
@@ -629,9 +630,9 @@ class App(tk.Tk):
                 return
 
             pos_x, pos_y = get_cursor_pos()
-            if state.app_state.target_hwnd and self.var_use_rel.get() and user32:
+            if self.app_state.target_hwnd and self.var_use_rel.get() and user32:
                 pt = POINT(int(pos_x), int(pos_y))
-                user32.ScreenToClient(state.app_state.target_hwnd, ctypes.byref(pt))
+                user32.ScreenToClient(self.app_state.target_hwnd, ctypes.byref(pt))
                 coord_desc = f"({pt.x}, {pt.y})"
                 rx, ry, rel = pt.x, pt.y, True
             else:
@@ -791,7 +792,7 @@ class App(tk.Tk):
             self.cbo_profile.current(0)
 
     def create_new_profile(self):
-        if state.is_running() or state.app_state.is_testing:
+        if self.app_state.is_running() or self.app_state.is_testing:
             return self.set_status("巨集正在執行或試跑中，請先停止再新建設定檔！")
         name = simpledialog.askstring("新建設定檔", "請輸入新設定檔名稱 (毋須輸入副檔名):", parent=self)
         if not name or not name.strip(): return
@@ -801,7 +802,7 @@ class App(tk.Tk):
             if not messagebox.askyesno("檔案覆蓋確認", f"設定檔「{name}」已存在！\n請問是否確認覆蓋原有設定？", parent=self):
                 return
         try:
-            config_manager.save_profile_file(name, state.app_state, CONFIG_EXT)
+            config_manager.save_profile_file(name, self.app_state, CONFIG_EXT)
             self.refresh_profiles(select_name=name)
             self.last_saved_snapshot = self.get_current_data_snapshot()
             self.set_status(f"已新建並儲存至 {fn}")
@@ -817,7 +818,7 @@ class App(tk.Tk):
             if not messagebox.askyesno("檔案覆蓋確認", f"請問是否確認覆蓋「{name}」的原有設定？", parent=self):
                 return self.set_status("已取消儲存")
         try:
-            config_manager.save_profile_file(name, state.app_state, CONFIG_EXT)
+            config_manager.save_profile_file(name, self.app_state, CONFIG_EXT)
             self.set_status(f"已成功儲存至 {fn}")
             self.refresh_profiles(select_name=name)
             self.last_saved_snapshot = self.get_current_data_snapshot()
@@ -826,14 +827,14 @@ class App(tk.Tk):
             self.append_log("警示", f"儲存設定檔失敗: {e}")
 
     def load_config(self):
-        if state.is_running() or state.app_state.is_testing:
+        if self.app_state.is_running() or self.app_state.is_testing:
             return self.set_status("巨集正在執行或試跑中，請先停止再載入設定檔！")
         name = self.var_profile_name.get().strip()
         if not name: return
         fn = f"{name}{CONFIG_EXT}"
         if not os.path.exists(fn): return self.set_status(f"找不到檔案：{fn}")
         try:
-            config_manager.load_profile_file(name, state.app_state, CONFIG_EXT)
+            config_manager.load_profile_file(name, self.app_state, CONFIG_EXT)
             self.refresh_variables_table()
             self.refresh_combo_list()
             self.refresh_combo_actions_list()
@@ -865,7 +866,7 @@ class App(tk.Tk):
     def refresh_window_dropdown(self):
         win_list = self.get_window_list()
         items, target_idx = [], 0
-        current_hwnd = state.app_state.target_hwnd
+        current_hwnd = self.app_state.target_hwnd
         found_target = False
         found_fallback = False
         fallback_idx = 0
@@ -883,23 +884,23 @@ class App(tk.Tk):
             target_idx = fallback_idx
 
         if not items:
-            items, state.app_state.target_hwnd = ["未偵測到任何視窗"], None
+            items, self.app_state.target_hwnd = ["未偵測到任何視窗"], None
         else:
-            state.app_state.target_hwnd = win_list[target_idx][0]
+            self.app_state.target_hwnd = win_list[target_idx][0]
 
         self.cbo_window["values"] = items
         self.cbo_window.current(target_idx)
-        if state.app_state.target_hwnd:
-            self.set_status(f"已綁定目標視窗 HWND: {state.app_state.target_hwnd}")
+        if self.app_state.target_hwnd:
+            self.set_status(f"已綁定目標視窗 HWND: {self.app_state.target_hwnd}")
 
     def on_window_select(self, event=None):
         val = self.var_window.get()
         if val and val.startswith("["):
             try:
-                state.app_state.target_hwnd = int(val.split("]")[0].replace("[", ""))
-                self.set_status(f"已綁定目標視窗 HWND: {state.app_state.target_hwnd}")
+                self.app_state.target_hwnd = int(val.split("]")[0].replace("[", ""))
+                self.set_status(f"已綁定目標視窗 HWND: {self.app_state.target_hwnd}")
             except (ValueError, IndexError) as e:
-                state.app_state.target_hwnd = None
+                self.app_state.target_hwnd = None
                 self.append_log("警示", f"視窗綁定解析失敗: {e}")
 
     # ==========================================================================
@@ -1106,17 +1107,17 @@ class App(tk.Tk):
             return
         self._last_toggle_time = now
 
-        with state.running_lock:
-            is_active = state.is_running() or state.app_state.is_testing
-            was_test = state.app_state.is_testing
+        with self.app_state.running_lock:
+            is_active = self.app_state.is_running() or self.app_state.is_testing
+            was_test = self.app_state.is_testing
             if is_active:
-                state.set_running(False)
-                state.app_state.is_testing = False
+                self.app_state.set_running(False)
+                self.app_state.is_testing = False
 
         if is_active:
-            state.app_state.stop_event.set()
+            self.app_state.stop_event.set()
             try:
-                emergency_release_all()
+                emergency_release_all(self.app_state)
             except Exception as e:
                 self.append_log("系統", f"釋放按鍵例外: {e}")
             self.set_running_ui(False)
@@ -1124,16 +1125,16 @@ class App(tk.Tk):
             self.set_status(msg)
             self.append_log("系統", f"⏹ 巨集{msg}")
         else:
-            has_enabled_periodic = any(pt.get("enabled", True) for pt in state.app_state.periodic_tasks)
-            if not state.app_state.steps and not has_enabled_periodic:
+            has_enabled_periodic = any(pt.get("enabled", True) for pt in self.app_state.periodic_tasks)
+            if not self.app_state.steps and not has_enabled_periodic:
                 return self.set_status("掛機流程清單與定時任務均為空，請先加入步驟或定時任務！")
-            state.get_state().snapshot_active(reload_requested=False)
-            state.app_state.stop_event.clear()
-            state.set_running(True)
+            self.app_state.snapshot_active(reload_requested=False)
+            self.app_state.stop_event.clear()
+            self.app_state.set_running(True)
             self.set_running_ui(True)
             self.set_status("循環運作中...")
             win_title = self.var_window.get() if hasattr(self, "var_window") else ""
-            mode_str = "後台模式" if state.app_state.use_bg else "前台模式"
+            mode_str = "後台模式" if self.app_state.use_bg else "前台模式"
             self.append_log("系統", f"▶ 巨集啟動 ({mode_str} | 目標: {win_title})")
             threading.Thread(target=self.macro_worker_loop, daemon=True).start()
 

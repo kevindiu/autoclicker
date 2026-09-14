@@ -183,15 +183,15 @@ VK_MAP = {
 # ==============================================================================
 # 動作執行與安全輔助函數
 # ==============================================================================
-def safe_sleep(seconds: float, stop_event: Optional[Any] = None) -> bool:
+def safe_sleep(app_state, seconds: float, stop_event: Optional[Any] = None) -> bool:
     """具備中止感知的安全等待 (支援微秒級自旋等待)
     
     :param seconds: 等待秒數
-    :param stop_event: 可選的中止事件，預設使用 state.app_state.stop_event
+    :param stop_event: 可選的中止事件，預設使用 app_state.stop_event
     :return: 若正常等待完畢回傳 True；若中途收到中止信號回傳 False
     """
     sec = max(0.0, float(seconds))
-    ev = stop_event if stop_event is not None else state.app_state.stop_event
+    ev = stop_event if stop_event is not None else app_state.stop_event
     if sec == 0:
         return not ev.is_set()
         
@@ -207,19 +207,19 @@ def safe_sleep(seconds: float, stop_event: Optional[Any] = None) -> bool:
     interrupted = ev.wait(timeout=sec)
     return not interrupted
 
-def emergency_release_all() -> None:
+def emergency_release_all(app_state) -> None:
     """全面釋放背景與前台的所有可能卡住的滑鼠與鍵盤狀態"""
     # 1. 釋放背景滑鼠
-    if state.app_state.target_hwnd and user32:
+    if app_state.target_hwnd and user32:
         try:
-            user32.PostMessageW(state.app_state.target_hwnd, WM_LBUTTONUP, 0, 0)
-            user32.PostMessageW(state.app_state.target_hwnd, WM_RBUTTONUP, 0, 0)
+            user32.PostMessageW(app_state.target_hwnd, WM_LBUTTONUP, 0, 0)
+            user32.PostMessageW(app_state.target_hwnd, WM_RBUTTONUP, 0, 0)
         except (OSError, ctypes.ArgumentError) as e:
             EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"Win32 API 例外 (釋放背景滑鼠): {e}")
 
     # 2. 釋放登記中的背景與前台按鍵
-    with state.app_state.currently_held_keys_lock:
-        for item in list(state.app_state.currently_held_keys):
+    with app_state.currently_held_keys_lock:
+        for item in list(app_state.currently_held_keys):
             try:
                 if item[0] == "bg" and user32:
                     _, h, vk = item
@@ -229,7 +229,7 @@ def emergency_release_all() -> None:
                     _get_pyautogui().keyUp(k)
             except Exception as e:
                 EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"例外 (釋放按鍵): {e}")
-        state.app_state.currently_held_keys.clear()
+        app_state.currently_held_keys.clear()
 
     # 3. 前台滑鼠防禦性釋放
     try:
@@ -238,7 +238,7 @@ def emergency_release_all() -> None:
     except Exception as e:
         EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"例外 (釋放前台滑鼠): {e}")
 
-def post_bg_click(hwnd: Any, client_x: int, client_y: int, offset_x: int = 0, offset_y: int = 0, btn: str = "left") -> Tuple[int, int]:
+def post_bg_click(app_state, hwnd: Any, client_x: int, client_y: int, offset_x: int = 0, offset_y: int = 0, btn: str = "left") -> Tuple[int, int]:
     """向指定視窗背景發送點擊訊息"""
     if not hwnd or not user32:
         _get_pyautogui().click(client_x, client_y, button=btn)
@@ -254,7 +254,7 @@ def post_bg_click(hwnd: Any, client_x: int, client_y: int, offset_x: int = 0, of
     user32.PostMessageW(hwnd, WM_MOUSEMOVE, 0, lparam)
     user32.PostMessageW(hwnd, down_msg, down_wparam, lparam)
     try:
-        safe_sleep(0.04)
+        safe_sleep(app_state, 0.04)
     finally:
         try:
             user32.PostMessageW(hwnd, up_msg, 0, lparam)
@@ -262,19 +262,19 @@ def post_bg_click(hwnd: Any, client_x: int, client_y: int, offset_x: int = 0, of
             EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"Win32 API 例外 (點擊): {e}")
     return cx, cy
 
-def post_bg_key(hwnd: Any, key_str: str) -> None:
+def post_bg_key(app_state, hwnd: Any, key_str: str) -> None:
     """向指定視窗背景發送按鍵按下與放開訊息"""
     if not hwnd or not user32:
-        with state.app_state.currently_held_keys_lock:
-            state.app_state.currently_held_keys.add(("fg", key_str))
+        with app_state.currently_held_keys_lock:
+            app_state.currently_held_keys.add(("fg", key_str))
         try:
             _get_pyautogui().keyDown(key_str)
-            safe_sleep(0.06)
+            safe_sleep(app_state, 0.06)
         finally:
             try: _get_pyautogui().keyUp(key_str)
             except Exception: pass
-            with state.app_state.currently_held_keys_lock:
-                state.app_state.currently_held_keys.discard(("fg", key_str))
+            with app_state.currently_held_keys_lock:
+                app_state.currently_held_keys.discard(("fg", key_str))
         return
 
     k_lower = key_str.lower()
@@ -298,22 +298,22 @@ def post_bg_key(hwnd: Any, key_str: str) -> None:
             EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"Win32 API 例外 (MapVirtualKeyW): {e}")
         lparam_down = to_lparam(1 | (scan_code << 16))
         lparam_up = to_lparam(1 | (scan_code << 16) | KEY_RELEASE_LPARAM_MASK)
-        with state.app_state.currently_held_keys_lock:
-            state.app_state.currently_held_keys.add(("bg", hwnd, vk))
+        with app_state.currently_held_keys_lock:
+            app_state.currently_held_keys.add(("bg", hwnd, vk))
         try:
             user32.PostMessageW(hwnd, WM_KEYDOWN, vk, lparam_down)
-            safe_sleep(0.06)
+            safe_sleep(app_state, 0.06)
         finally:
             try:
                 user32.PostMessageW(hwnd, WM_KEYUP, vk, lparam_up)
             except (OSError, ctypes.ArgumentError) as e:
                 EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"Win32 API 例外 (KeyUp): {e}")
-            with state.app_state.currently_held_keys_lock:
-                state.app_state.currently_held_keys.discard(("bg", hwnd, vk))
+            with app_state.currently_held_keys_lock:
+                app_state.currently_held_keys.discard(("bg", hwnd, vk))
 
-def execute_click(x: int, y: int, is_rel: bool, use_bg: bool, off_x: int, off_y: int, btn: str = "left", target_hwnd: Optional[Any] = None) -> str:
+def execute_click(app_state, x: int, y: int, is_rel: bool, use_bg: bool, off_x: int, off_y: int, btn: str = "left", target_hwnd: Optional[Any] = None) -> str:
     """統一派發前台或背景點擊 (保證後台與前台模式均精準套用偏差校正)"""
-    hwnd = target_hwnd if target_hwnd is not None else state.app_state.target_hwnd
+    hwnd = target_hwnd if target_hwnd is not None else app_state.target_hwnd
     btn_cn = "右鍵" if btn == "right" else "左鍵"
     if use_bg:
         if not is_rel and hwnd and user32:

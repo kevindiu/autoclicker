@@ -76,7 +76,7 @@ def dialog_hidden(dialog):
 
 def start_dialog_capture(dialog, app, on_finish_coord, btn="left"):
     """輔助函式：隱藏對話框進行太空鍵取點，取點完成或取消時自動恢復對話框顯示與焦點"""
-    if state.is_running():
+    if app.app_state.is_running():
         app.set_status("巨集正在循環執行中，為免干擾滑鼠瞄準，請先停止運行再取點！")
         return
     try:
@@ -118,7 +118,7 @@ def prompt_variable_dialog(app, edit_name=None):
     is_edit = edit_name is not None
     title = f"修改變數: {edit_name}" if is_edit else "新增變數"
 
-    orig_data = state.app_state.variables.get(edit_name, {}) if is_edit else {}
+    orig_data = app.app_state.variables.get(edit_name, {}) if is_edit else {}
     orig_type = orig_data.get("type", "coord")
     orig_val = orig_data.get("value", {})
 
@@ -243,7 +243,7 @@ def prompt_variable_dialog(app, edit_name=None):
         if not name:
             messagebox.showerror("錯誤", "變數名稱不可為空！", parent=dialog)
             return
-        if not is_edit and name in state.app_state.variables:
+        if not is_edit and name in app.app_state.variables:
             messagebox.showerror("錯誤", f"變數「{name}」已存在！請使用其他名稱。", parent=dialog)
             return
 
@@ -277,7 +277,7 @@ def prompt_variable_dialog(app, edit_name=None):
         else:
             return
 
-        state.app_state.variables[name] = {"type": type_key, "value": val}
+        app.app_state.variables[name] = {"type": type_key, "value": val}
         app.trigger_hot_reload()
         app.refresh_variables_table()
         app.refresh_combo_actions_list()
@@ -313,10 +313,10 @@ def prompt_edit_combo_dialog(app, combo_step, step_idx=None):
             messagebox.showwarning("提示", "此組合內沒有任何子動作可展開！", parent=dialog)
             return
         if messagebox.askyesno("展開確認", f"確定要將組合 【{combo_name}】 的 {len(working_actions)} 個子動作直接展開為掛機流程中的獨立步驟嗎？\n\n展開後每一步均可直接在流程清單中自由移動、修改與刪除。", parent=dialog):
-            if step_idx is not None and 0 <= step_idx < len(state.app_state.steps):
-                del state.app_state.steps[step_idx]
+            if step_idx is not None and 0 <= step_idx < len(app.app_state.steps):
+                del app.app_state.steps[step_idx]
                 for offset, act in enumerate(working_actions):
-                    state.app_state.steps.insert(step_idx + offset, copy.deepcopy(act))
+                    app.app_state.steps.insert(step_idx + offset, copy.deepcopy(act))
                 app.update_step_list(select_idx=step_idx)
                 app.set_status(f"已將組合 [{combo_name}] 展開為 {len(working_actions)} 個獨立步驟")
                 app.trigger_hot_reload()
@@ -340,14 +340,14 @@ def prompt_edit_combo_dialog(app, combo_step, step_idx=None):
     r2 = tk.Frame(f_top, bg=UITheme.BG_PANEL)
     r2.pack(fill="x", pady=(4, 0))
     tk.Label(r2, text="載入組合庫範本:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 4))
-    tpl_names = [c["name"] for c in state.app_state.combos]
+    tpl_names = [c["name"] for c in app.app_state.combos]
     var_tpl = tk.StringVar(value=combo_name if combo_name in tpl_names else (tpl_names[0] if tpl_names else ""))
     cbo_tpl = ttk.Combobox(r2, textvariable=var_tpl, values=tpl_names, width=16, state="readonly")
     cbo_tpl.pack(side="left", padx=2)
 
     def do_load_tpl():
         chosen = var_tpl.get().strip()
-        matched = next((c for c in state.app_state.combos if c["name"] == chosen), None)
+        matched = next((c for c in app.app_state.combos if c["name"] == chosen), None)
         if matched:
             nonlocal combo_name
             combo_name = matched["name"]
@@ -491,7 +491,7 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
         var_btn = tk.StringVar(value=curr_btn)
         var_rel = [action.get("rel", True)]
 
-        coord_vars = [k for k, v in state.app_state.variables.items() if v.get("type") == "coord"]
+        coord_vars = [k for k, v in app.app_state.variables.items() if v.get("type") == "coord"]
         opt_vars = ["(不引用 / 固定坐標)"] + coord_vars
         curr_var = action.get("var_name", "")
         var_ref = tk.StringVar(value=curr_var if curr_var in coord_vars else "(不引用 / 固定坐標)")
@@ -502,8 +502,8 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
 
         def on_ref_change(event=None):
             chosen = var_ref.get()
-            if chosen in state.app_state.variables:
-                v_val = state.app_state.variables[chosen].get("value", {})
+            if chosen in app.app_state.variables:
+                v_val = app.app_state.variables[chosen].get("value", {})
                 if isinstance(v_val, dict):
                     var_x.set(str(v_val.get("x", 0)))
                     var_y.set(str(v_val.get("y", 0)))
@@ -559,7 +559,7 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
     elif atype == "key":
         dialog.title("修改按鍵")
         var_k = tk.StringVar(value=str(action.get("key", "f1")))
-        key_vars = [k for k, v in state.app_state.variables.items() if v.get("type") == "key"]
+        key_vars = [k for k, v in app.app_state.variables.items() if v.get("type") == "key"]
         opt_vars = ["(不引用 / 固定按鍵)"] + key_vars
         curr_var = action.get("var_name", "")
         var_ref = tk.StringVar(value=curr_var if curr_var in key_vars else "(不引用 / 固定按鍵)")
@@ -570,8 +570,8 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
 
         def on_ref_change(event=None):
             chosen = var_ref.get()
-            if chosen in state.app_state.variables:
-                var_k.set(str(state.app_state.variables[chosen].get("value", "")))
+            if chosen in app.app_state.variables:
+                var_k.set(str(app.app_state.variables[chosen].get("value", "")))
         cbo_ref.bind("<<ComboboxSelected>>", on_ref_change)
 
         tk.Label(f, text="按鍵名稱:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL).grid(row=1, column=0, padx=6, pady=6, sticky="e")
@@ -596,7 +596,7 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
     elif atype == "wait":
         dialog.title("修改停頓時間")
         var_w = tk.StringVar(value=str(action.get("sec", 1.0)))
-        wait_vars = [k for k, v in state.app_state.variables.items() if v.get("type") == "wait"]
+        wait_vars = [k for k, v in app.app_state.variables.items() if v.get("type") == "wait"]
         opt_vars = ["(不引用 / 固定秒數)"] + wait_vars
         curr_var = action.get("var_name", "")
         var_ref = tk.StringVar(value=curr_var if curr_var in wait_vars else "(不引用 / 固定秒數)")
@@ -607,8 +607,8 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
 
         def on_ref_change(event=None):
             chosen = var_ref.get()
-            if chosen in state.app_state.variables:
-                var_w.set(str(state.app_state.variables[chosen].get("value", "")))
+            if chosen in app.app_state.variables:
+                var_w.set(str(app.app_state.variables[chosen].get("value", "")))
         cbo_ref.bind("<<ComboboxSelected>>", on_ref_change)
 
         tk.Label(f, text="等待秒數:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL).grid(row=1, column=0, padx=6, pady=6, sticky="e")
@@ -635,7 +635,7 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
         dialog.title("修改呼叫目標組合")
         curr_tgt = action.get("target_name", "")
         var_c = tk.StringVar(value=curr_tgt)
-        combos_list = available_combos or [c["name"] for c in state.app_state.combos]
+        combos_list = available_combos or [c["name"] for c in app.app_state.combos]
         tk.Label(f, text="目標組合:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL).grid(row=0, column=0, padx=6, pady=10, sticky="e")
         cbo = ttk.Combobox(f, textvariable=var_c, values=combos_list, width=14, state="readonly")
         cbo.grid(row=0, column=1, padx=6, pady=10)
@@ -671,7 +671,7 @@ def prompt_edit_periodic_task(app, task=None):
     init_run_on_start = orig_task.get("run_on_start", False)
 
     act = orig_task.get("action", {})
-    act_type = act.get("type", "call_combo" if state.app_state.combos else "key")
+    act_type = act.get("type", "call_combo" if app.app_state.combos else "key")
     act_var = act.get("var_name")
 
     dialog = _create_dialog(app, title, 430, 495)
@@ -776,10 +776,10 @@ def prompt_edit_periodic_task(app, task=None):
     f_dynamic.pack(fill="both", expand=True, pady=4)
 
     # 各類型對應變數
-    combos_list = [c["name"] for c in state.app_state.combos]
+    combos_list = [c["name"] for c in app.app_state.combos]
     var_combo = tk.StringVar(value=act.get("target_name") or (combos_list[0] if combos_list else ""))
 
-    vars_list = list(state.app_state.variables.keys())
+    vars_list = list(app.app_state.variables.keys())
     var_var_name = tk.StringVar(value=act_var or (vars_list[0] if vars_list else ""))
 
     var_key = tk.StringVar(value=str(act.get("key", "f1")))
@@ -800,7 +800,7 @@ def prompt_edit_periodic_task(app, task=None):
             row = tk.Frame(f_dynamic, bg=UITheme.BG_PANEL)
             row.pack(fill="x", pady=6)
             tk.Label(row, text="目標組合:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(4, 6))
-            c_vals = [c["name"] for c in state.app_state.combos]
+            c_vals = [c["name"] for c in app.app_state.combos]
             if not c_vals:
                 tk.Label(row, text="(目前技能組合庫中無組合，請先建立組合)", bg=UITheme.BG_PANEL, fg=UITheme.ACCENT_RED, font=UITheme.FONT_SMALL).pack(side="left")
             else:
@@ -813,7 +813,7 @@ def prompt_edit_periodic_task(app, task=None):
             row = tk.Frame(f_dynamic, bg=UITheme.BG_PANEL)
             row.pack(fill="x", pady=4)
             tk.Label(row, text="目標變數:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(4, 6))
-            v_vals = list(state.app_state.variables.keys())
+            v_vals = list(app.app_state.variables.keys())
             if not v_vals:
                 tk.Label(row, text="(目前無任何變數，請先於變數庫建立)", bg=UITheme.BG_PANEL, fg=UITheme.ACCENT_RED, font=UITheme.FONT_SMALL).pack(side="left")
             else:
@@ -827,8 +827,8 @@ def prompt_edit_periodic_task(app, task=None):
 
                 def _update_var_preview(e=None):
                     v_name = var_var_name.get()
-                    if v_name in state.app_state.variables:
-                        v_info = state.app_state.variables[v_name]
+                    if v_name in app.app_state.variables:
+                        v_info = app.app_state.variables[v_name]
                         v_type = v_info.get("type", "")
                         v_val = v_info.get("value", "")
                         lbl_preview.config(text=f"變數型態: [{v_type}]  數值: {v_val}")
@@ -892,10 +892,10 @@ def prompt_edit_periodic_task(app, task=None):
             return {"type": "call_combo", "target_name": tgt}
         elif cat == "[引用全域變數]":
             v_name = var_var_name.get().strip()
-            if not v_name or v_name not in state.app_state.variables:
+            if not v_name or v_name not in app.app_state.variables:
                 messagebox.showerror("錯誤", "請先選擇有效的全域變數！", parent=dialog)
                 return None
-            v_info = state.app_state.variables[v_name]
+            v_info = app.app_state.variables[v_name]
             v_type = v_info.get("type", "key")
             v_val = v_info.get("value", {})
             if v_type == "coord":
