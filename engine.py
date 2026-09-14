@@ -209,7 +209,7 @@ def sync_periodic_timers(periodic_tasks_runtime, active_task_id=None):
     with state.periodic_timers_lock:
         state.periodic_timers = timers
 
-def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, current_combos, round_prefix=""):
+def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, current_combos, round_prefix="", next_step_idx=None):
     """檢查是否有已到期的定時任務；若有，安全依序執行並更新上次執行時間戳記"""
     if not periodic_tasks_runtime:
         return True
@@ -238,8 +238,11 @@ def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, 
                 app.append_log("定時", f"{round_prefix}任務【{task_name}】到期觸發 (每 {interval}s)")
 
             # 定時任務執行期間：
-            # 1. 清除掛機流程清單之高亮，避免使用者誤以為掛機步驟仍在執行
-            if hasattr(app, "clear_active_step_highlight"):
+            # 1. 若有指定下一動 (next_step_idx)，在主畫面流程清單中以待命暖金色標記即將接續執行的動作，
+            #    讓使用者一眼看清定時任務完結後會執行邊個動作；否則清除高亮
+            if next_step_idx is not None and hasattr(app, "highlight_pending_step"):
+                app.highlight_pending_step(next_step_idx)
+            elif hasattr(app, "clear_active_step_highlight"):
                 app.clear_active_step_highlight()
 
             # 2. 高亮當前執行的定時任務卡片
@@ -292,7 +295,8 @@ def macro_worker_loop(app):
         with state.steps_lock:
             init_vars = copy.deepcopy(state.active_variables)
             init_combos = copy.deepcopy(state.active_combos)
-        if not check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, init_vars, init_combos, round_prefix="啟動首發: "):
+        first_next_idx = 0 if state.active_steps else None
+        if not check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, init_vars, init_combos, round_prefix="啟動首發: ", next_step_idx=first_next_idx):
             return
 
         while state.is_running() and not state.stop_event.is_set():
@@ -406,11 +410,13 @@ def macro_worker_loop(app):
                     break
 
                 # 當前步驟或 COMBO 已完全執行結束！安全檢查並執行到期的定時任務
-                if not check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_variables, current_combos, round_prefix=pfx):
+                next_step = (idx + 1) if (idx + 1 < len(current_steps)) else 0
+                if not check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_variables, current_combos, round_prefix=pfx, next_step_idx=next_step):
                     break
 
             # 輪次銜接時亦進行一次定時任務檢查
-            if not check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_variables, current_combos, round_prefix=f"第 {round_idx} 輪結束: "):
+            next_step = 0 if current_steps else None
+            if not check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_variables, current_combos, round_prefix=f"第 {round_idx} 輪結束: ", next_step_idx=next_step):
                 break
 
             round_idx += 1

@@ -519,6 +519,31 @@ class App(tk.Tk):
                     pass
         self.run_on_ui_thread(_hl)
 
+    def highlight_pending_step(self, idx):
+        """在主畫面掛機流程清單中以待命色 (琥珀暖金) 標記即將在定時任務後接續執行的下一動作"""
+        def _pending():
+            if self.is_closing: return
+            if not hasattr(self, "step_listbox") or not self.step_listbox.winfo_exists():
+                return
+            lb = self.step_listbox
+            lb_sz = lb.size()
+            last_idx = getattr(self, "last_active_step_idx", None)
+            if last_idx is not None and 0 <= last_idx < lb_sz and last_idx != idx:
+                try:
+                    lb.itemconfigure(last_idx, background=UITheme.BG_DARK, foreground=UITheme.TEXT_MAIN)
+                except tk.TclError:
+                    pass
+
+            if 0 <= idx < lb_sz:
+                try:
+                    # 採用待命接續樣式：暖金琥珀色 (#451a03 底 + #fbbf24 字)，一眼看清定時任務結束後下一動跑哪一步！
+                    lb.itemconfigure(idx, background="#451a03", foreground="#fbbf24")
+                    self.last_active_step_idx = idx
+                    lb.see(idx)
+                except tk.TclError:
+                    pass
+        self.run_on_ui_thread(_pending)
+
     def highlight_active_periodic_task(self, idx):
         """在主畫面右側定時任務卡片清單中以專屬執行狀態 (翠綠光暈/深綠底) 高亮當前執行的定時任務"""
         def _hl():
