@@ -241,19 +241,28 @@ def format_periodic_task_summary(task, current_variables=None, max_name_len=18):
     """格式化定時週期任務的顯示字串 (簡短俐落，支援長名稱智能縮略，避免溢出抖動)"""
     enabled = task.get("enabled", True)
     st_icon = "[✓]" if enabled else "[✕]"
-    sec = task.get("interval", 1.0)
-    try:
-        f_sec = float(sec)
-        sec_str = f"{int(f_sec)}s" if f_sec.is_integer() else f"{f_sec}s"
-    except (ValueError, TypeError):
-        sec_str = f"{sec}s"
+    
+    t_mode = task.get("trigger_mode", "interval")
+    if t_mode == "round":
+        try:
+            r_val = int(task.get("round_interval", 1))
+        except (ValueError, TypeError):
+            r_val = 1
+        trigger_str = f"每{r_val}輪"
+    else:
+        sec = task.get("interval", 1.0)
+        try:
+            f_sec = float(sec)
+            trigger_str = f"{int(f_sec)}s" if f_sec.is_integer() else f"{f_sec}s"
+        except (ValueError, TypeError):
+            trigger_str = f"{sec}s"
 
     name = task.get("name", "").strip()
     start_str = " (首)" if task.get("run_on_start", False) else ""
 
     if name:
         disp_name = name if len(name) <= max_name_len else name[:max_name_len - 1] + "…"
-        return f"{st_icon} {sec_str} · {disp_name}{start_str}"
+        return f"{st_icon} {trigger_str} · {disp_name}{start_str}"
 
     act = task.get("action", {})
     var_name = act.get("var_name")
@@ -274,7 +283,7 @@ def format_periodic_task_summary(task, current_variables=None, max_name_len=18):
         desc = f"[{atype}]"
 
     disp_desc = desc if len(desc) <= max_name_len else desc[:max_name_len - 1] + "…"
-    return f"{st_icon} {sec_str} · {disp_desc}{start_str}"
+    return f"{st_icon} {trigger_str} · {disp_desc}{start_str}"
 
 
 # ==============================================================================

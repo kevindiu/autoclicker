@@ -632,7 +632,9 @@ def prompt_edit_periodic_task(app, task=None):
     orig_task = copy.deepcopy(task) if is_edit else {}
     task_id = orig_task.get("id") or f"pt_{int(time.time()*1000)}_{uuid.uuid4().hex[:6]}"
     init_name = orig_task.get("name", "")
+    init_trigger_mode = orig_task.get("trigger_mode", "interval")
     init_interval = str(orig_task.get("interval", 30.0))
+    init_round_interval = str(orig_task.get("round_interval", 5))
     init_enabled = orig_task.get("enabled", True)
     init_run_on_start = orig_task.get("run_on_start", False)
 
@@ -640,7 +642,7 @@ def prompt_edit_periodic_task(app, task=None):
     act_type = act.get("type", "call_combo" if state.combos else "key")
     act_var = act.get("var_name")
 
-    dialog = _create_dialog(app, title, 420, 460)
+    dialog = _create_dialog(app, title, 430, 495)
 
     result = [None]
     f_main = tk.Frame(dialog, bg=UITheme.BG_PANEL, padx=16, pady=12)
@@ -658,14 +660,53 @@ def prompt_edit_periodic_task(app, task=None):
     e_name = tk.Entry(r1, textvariable=var_name, bg=UITheme.BG_INPUT, fg="#fff", font=UITheme.FONT_NORMAL, relief="flat")
     e_name.pack(side="left", fill="x", expand=True)
 
-    # 執行間隔 (秒)
+    # 觸發模式 (按時間秒數 vs 按循環輪次)
+    r_mode = tk.Frame(f_base, bg=UITheme.BG_PANEL)
+    r_mode.pack(fill="x", pady=2)
+    tk.Label(r_mode, text="觸發模式:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL_BOLD, width=8, anchor="e").pack(side="left", padx=(0, 6))
+    var_trigger_mode = tk.StringVar(value=init_trigger_mode)
+
+    # 觸發間隔輸入框與單位標籤
     r2 = tk.Frame(f_base, bg=UITheme.BG_PANEL)
     r2.pack(fill="x", pady=2)
-    tk.Label(r2, text="觸發間隔:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL_BOLD, width=8, anchor="e").pack(side="left", padx=(0, 6))
+    lbl_trigger_title = tk.Label(r2, text="觸發間隔:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL_BOLD, width=8, anchor="e")
+    lbl_trigger_title.pack(side="left", padx=(0, 6))
+
     var_interval = tk.StringVar(value=init_interval)
-    e_interval = tk.Entry(r2, textvariable=var_interval, width=8, bg=UITheme.BG_INPUT, fg="#fff", font=UITheme.FONT_NORMAL, relief="flat")
-    e_interval.pack(side="left", padx=(0, 4))
-    tk.Label(r2, text="秒 (例如: 30 或 2.5)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(side="left")
+    var_round = tk.StringVar(value=init_round_interval)
+    e_trigger_val = tk.Entry(r2, textvariable=var_interval, width=8, bg=UITheme.BG_INPUT, fg="#fff", font=UITheme.FONT_NORMAL, relief="flat")
+    e_trigger_val.pack(side="left", padx=(0, 4))
+    lbl_unit_hint = tk.Label(r2, text="秒 (例如: 30 或 2.5)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL)
+    lbl_unit_hint.pack(side="left")
+
+    def _on_mode_change():
+        m = var_trigger_mode.get()
+        if m == "round":
+            lbl_trigger_title.config(text="觸發輪數:")
+            e_trigger_val.config(textvariable=var_round)
+            lbl_unit_hint.config(text="輪 (例如: 每 5 輪循環執行一次)")
+        else:
+            lbl_trigger_title.config(text="觸發秒數:")
+            e_trigger_val.config(textvariable=var_interval)
+            lbl_unit_hint.config(text="秒 (例如: 30 或 2.5)")
+
+    rb_int = tk.Radiobutton(
+        r_mode, text="⏱ 按時間間隔 (秒)", value="interval", variable=var_trigger_mode,
+        bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MAIN, selectcolor=UITheme.BG_INPUT,
+        activebackground=UITheme.BG_PANEL, activeforeground=UITheme.TEXT_MAIN,
+        font=UITheme.FONT_SMALL, command=_on_mode_change
+    )
+    rb_int.pack(side="left", padx=(0, 8))
+
+    rb_rnd = tk.Radiobutton(
+        r_mode, text="🔄 按循環輪次 (輪)", value="round", variable=var_trigger_mode,
+        bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MAIN, selectcolor=UITheme.BG_INPUT,
+        activebackground=UITheme.BG_PANEL, activeforeground=UITheme.TEXT_MAIN,
+        font=UITheme.FONT_SMALL, command=_on_mode_change
+    )
+    rb_rnd.pack(side="left")
+
+    _on_mode_change()
 
     # 啟用與啟動時立即首發
     r3 = tk.Frame(f_base, bg=UITheme.BG_PANEL)
@@ -889,13 +930,26 @@ def prompt_edit_periodic_task(app, task=None):
         app.execute_single_action(built_act, f"[試跑定時動作]")
 
     def on_ok():
-        try:
-            interval_val = float(var_interval.get().strip())
-            if interval_val <= 0:
-                raise ValueError
-        except ValueError:
-            messagebox.showerror("錯誤", "執行間隔必須輸入大於 0 的秒數！", parent=dialog)
-            return
+        trigger_mode = var_trigger_mode.get()
+        interval_val = 1.0
+        round_val = 1
+
+        if trigger_mode == "round":
+            try:
+                round_val = int(var_round.get().strip())
+                if round_val < 1:
+                    raise ValueError
+            except ValueError:
+                messagebox.showerror("錯誤", "觸發輪數必須輸入大於等於 1 的整數（例如每 5 輪）！", parent=dialog)
+                return
+        else:
+            try:
+                interval_val = float(var_interval.get().strip())
+                if interval_val <= 0:
+                    raise ValueError
+            except ValueError:
+                messagebox.showerror("錯誤", "執行間隔必須輸入大於 0 的秒數！", parent=dialog)
+                return
 
         built_act = build_action_dict()
         if not built_act:
@@ -903,22 +957,25 @@ def prompt_edit_periodic_task(app, task=None):
 
         name_val = var_name.get().strip()
         if not name_val:
+            prefix = f"每{round_val}輪" if trigger_mode == "round" else "定時"
             if built_act.get("type") == "call_combo":
-                name_val = f"定時_{built_act.get('target_name', '組合')}"
+                name_val = f"{prefix}_{built_act.get('target_name', '組合')}"
             elif built_act.get("var_name"):
-                name_val = f"定時_{built_act.get('var_name')}"
+                name_val = f"{prefix}_{built_act.get('var_name')}"
             elif built_act.get("type") == "key":
-                name_val = f"定時按鍵_{built_act.get('key', '').upper()}"
+                name_val = f"{prefix}按鍵_{built_act.get('key', '').upper()}"
             elif built_act.get("type") == "click":
                 btn_str = "右鍵" if built_act.get("btn") == "right" else "左鍵"
-                name_val = f"定時點擊_{btn_str}"
+                name_val = f"{prefix}點擊_{btn_str}"
             else:
-                name_val = "定時任務"
+                name_val = f"{prefix}任務"
 
         result[0] = {
             "id": task_id,
             "name": name_val,
+            "trigger_mode": trigger_mode,
             "interval": interval_val,
+            "round_interval": round_val,
             "enabled": var_enabled.get(),
             "run_on_start": var_start.get(),
             "action": built_act

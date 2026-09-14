@@ -244,12 +244,28 @@ class PeriodicTaskCardView(tk.Frame):
         task_id = task.get("id") or f"pt_idx_{idx}"
         task["id"] = task_id
         enabled = task.get("enabled", True)
-        interval = task.get("interval", 1.0)
-        try:
-            f_sec = float(interval)
-            sec_str = f"{int(f_sec)}s" if f_sec.is_integer() else f"{f_sec}s"
-        except (ValueError, TypeError):
-            sec_str = f"{interval}s"
+        trigger_mode = task.get("trigger_mode", "interval")
+
+        if trigger_mode == "round":
+            try:
+                r_int = int(task.get("round_interval", 1))
+            except (ValueError, TypeError):
+                r_int = 1
+            if r_int < 1:
+                r_int = 1
+            badge_text = f"🔄 每 {r_int} 輪"
+            badge_bg = "#3b0764"
+            badge_fg = "#c084fc"
+        else:
+            interval = task.get("interval", 1.0)
+            try:
+                f_sec = float(interval)
+                sec_str = f"{int(f_sec)}s" if f_sec.is_integer() else f"{f_sec}s"
+            except (ValueError, TypeError):
+                sec_str = f"{interval}s"
+            badge_text = f"⏱ 每 {sec_str}"
+            badge_bg = "#0c4a6e"
+            badge_fg = "#38bdf8"
 
         name = task.get("name", "").strip()
         run_on_start = task.get("run_on_start", False)
@@ -318,26 +334,26 @@ class PeriodicTaskCardView(tk.Frame):
         lbl_status.pack(side="left", padx=(0, 3))
         lbl_status.bind("<Button-1>", lambda e, i=idx: self._on_toggle_click(i))
 
-        # 週期秒數標籤 (初始顯示設定之循環間隔值)
+        # 週期設定標籤 (初始顯示設定之循環間隔值，支援秒數 ⏱ 與輪次 🔄)
         lbl_int = tk.Label(
             hdr,
-            text=f"⏱ 每 {sec_str}",
-            bg="#0c4a6e",
-            fg="#38bdf8",
+            text=badge_text,
+            bg=badge_bg,
+            fg=badge_fg,
             font=UITheme.FONT_SMALL_BOLD,
             padx=4,
             pady=0
         )
         lbl_int.pack(side="left", padx=(0, 3))
 
-        # 首發標籤
+        # 首發標籤 (高亮琥珀金色，突顯啟動首發)
         lbl_start = None
         if run_on_start:
             lbl_start = tk.Label(
                 hdr,
                 text="⚡ 首發",
-                bg="#3b0764",
-                fg="#c084fc",
+                bg="#78350f",
+                fg="#fbbf24",
                 font=UITheme.FONT_SMALL_BOLD,
                 padx=4,
                 pady=0
@@ -563,51 +579,91 @@ class PeriodicTaskCardView(tk.Frame):
         for idx, c in enumerate(self.card_widgets):
             task_id = c.get("id") or f"pt_idx_{idx}"
             task = c.get("task", {})
-            interval = task.get("interval", 1.0)
-            try:
-                f_sec = float(interval)
-                sec_str = f"{int(f_sec)}s" if f_sec.is_integer() else f"{f_sec}s"
-            except (ValueError, TypeError):
-                sec_str = f"{interval}s"
-
+            trigger_mode = task.get("trigger_mode", "interval")
             lbl_int = c.get("lbl_int")
             if not lbl_int or not lbl_int.winfo_exists():
                 continue
 
             enabled = c.get("enabled", True)
-            if not enabled:
-                target_text = f"⏱ 每 {sec_str}"
-                if lbl_int.cget("text") != target_text or lbl_int.cget("bg") != "#1e293b":
-                    lbl_int.config(text=target_text, bg="#1e293b", fg="#64748b")
-                continue
 
-            if not is_running or task_id not in timers:
-                target_text = f"⏱ 每 {sec_str}"
-                if lbl_int.cget("text") != target_text or lbl_int.cget("bg") != "#0c4a6e":
-                    lbl_int.config(text=target_text, bg="#0c4a6e", fg="#38bdf8")
-                continue
+            if trigger_mode == "round":
+                try:
+                    r_int = int(task.get("round_interval", 1))
+                except (ValueError, TypeError):
+                    r_int = 1
+                if r_int < 1:
+                    r_int = 1
+                base_text = f"🔄 每 {r_int} 輪"
 
-            t_info = timers[task_id]
-            if t_info.get("is_active"):
-                target_text = f"⏱ 執行中 / 每 {sec_str}"
-                if lbl_int.cget("text") != target_text or lbl_int.cget("bg") != "#14532d":
-                    lbl_int.config(text=target_text, bg="#14532d", fg="#4ade80")
-                continue
+                if not enabled:
+                    if lbl_int.cget("text") != base_text or lbl_int.cget("bg") != "#1e293b":
+                        lbl_int.config(text=base_text, bg="#1e293b", fg="#64748b")
+                    continue
 
-            last_run = t_info.get("last_run", 0.0)
-            int_val = t_info.get("interval", f_sec)
-            now = time.time()
-            elapsed = now - last_run
-            remaining = max(0.0, int_val - elapsed)
+                if not is_running or task_id not in timers:
+                    if lbl_int.cget("text") != base_text or lbl_int.cget("bg") != "#3b0764":
+                        lbl_int.config(text=base_text, bg="#3b0764", fg="#c084fc")
+                    continue
 
-            if int_val < 5.0 and not int_val.is_integer():
-                rem_str = f"{remaining:.1f}s"
+                t_info = timers[task_id]
+                if t_info.get("is_active"):
+                    target_text = f"🔄 執行中 / 每 {r_int} 輪"
+                    if lbl_int.cget("text") != target_text or lbl_int.cget("bg") != "#14532d":
+                        lbl_int.config(text=target_text, bg="#14532d", fg="#4ade80")
+                    continue
+
+                cur_r = t_info.get("current_round", 1)
+                last_r = t_info.get("last_run_round", 0)
+                cur_display_r = max(1, cur_r)
+                rem = max(0, r_int - (cur_display_r - last_r))
+
+                target_text = f"🔄 剩 {rem} 輪 / 每 {r_int} 輪"
+                target_bg = "#6b21a8" if rem == 0 else "#3b0764"
+                target_fg = "#ffffff" if rem == 0 else "#c084fc"
+                if lbl_int.cget("text") != target_text or lbl_int.cget("bg") != target_bg:
+                    lbl_int.config(text=target_text, bg=target_bg, fg=target_fg)
+
             else:
-                rem_str = f"{int(math.ceil(remaining))}s"
+                interval = task.get("interval", 1.0)
+                try:
+                    f_sec = float(interval)
+                    sec_str = f"{int(f_sec)}s" if f_sec.is_integer() else f"{f_sec}s"
+                except (ValueError, TypeError):
+                    sec_str = f"{interval}s"
 
-            target_text = f"⏱ {rem_str} / 每 {sec_str}"
-            target_bg = "#0284c7" if remaining <= 1.0 else "#0c4a6e"
-            target_fg = "#ffffff" if remaining <= 1.0 else "#38bdf8"
-            if lbl_int.cget("text") != target_text or lbl_int.cget("bg") != target_bg:
-                lbl_int.config(text=target_text, bg=target_bg, fg=target_fg)
+                base_text = f"⏱ 每 {sec_str}"
+
+                if not enabled:
+                    if lbl_int.cget("text") != base_text or lbl_int.cget("bg") != "#1e293b":
+                        lbl_int.config(text=base_text, bg="#1e293b", fg="#64748b")
+                    continue
+
+                if not is_running or task_id not in timers:
+                    if lbl_int.cget("text") != base_text or lbl_int.cget("bg") != "#0c4a6e":
+                        lbl_int.config(text=base_text, bg="#0c4a6e", fg="#38bdf8")
+                    continue
+
+                t_info = timers[task_id]
+                if t_info.get("is_active"):
+                    target_text = f"⏱ 執行中 / 每 {sec_str}"
+                    if lbl_int.cget("text") != target_text or lbl_int.cget("bg") != "#14532d":
+                        lbl_int.config(text=target_text, bg="#14532d", fg="#4ade80")
+                    continue
+
+                last_run = t_info.get("last_run", 0.0)
+                int_val = t_info.get("interval", f_sec)
+                now = time.time()
+                elapsed = now - last_run
+                remaining = max(0.0, int_val - elapsed)
+
+                if int_val < 5.0 and not int_val.is_integer():
+                    rem_str = f"{remaining:.1f}s"
+                else:
+                    rem_str = f"{int(math.ceil(remaining))}s"
+
+                target_text = f"⏱ {rem_str} / 每 {sec_str}"
+                target_bg = "#0284c7" if remaining <= 1.0 else "#0c4a6e"
+                target_fg = "#ffffff" if remaining <= 1.0 else "#38bdf8"
+                if lbl_int.cget("text") != target_text or lbl_int.cget("bg") != target_bg:
+                    lbl_int.config(text=target_text, bg=target_bg, fg=target_fg)
 

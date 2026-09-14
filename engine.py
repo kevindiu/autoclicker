@@ -191,7 +191,7 @@ def execute_single_action(app, act, desc):
     """執行單一動作（試跑用途）"""
     dispatch_action(app, act, desc, is_test=True)
 
-def sync_periodic_timers(periodic_tasks_runtime, active_task_id=None):
+def sync_periodic_timers(periodic_tasks_runtime, active_task_id=None, current_round=0):
     """線程安全地同步背景定時任務當前計時器快照至 state.periodic_timers 供 UI 即時倒數與設定值展示"""
     timers = {}
     for idx, pt in enumerate(periodic_tasks_runtime):
@@ -200,33 +200,76 @@ def sync_periodic_timers(periodic_tasks_runtime, active_task_id=None):
             interval = float(pt.get("interval", 1.0))
         except (ValueError, TypeError):
             interval = 1.0
+        try:
+            round_interval = int(pt.get("round_interval", 1))
+        except (ValueError, TypeError):
+            round_interval = 1
         timers[pt_id] = {
+            "trigger_mode": pt.get("trigger_mode", "interval"),
             "last_run": pt.get("last_run", 0.0),
             "interval": interval,
+            "round_interval": round_interval,
+            "last_run_round": pt.get("last_run_round", 0),
+            "current_round": current_round,
             "enabled": pt.get("enabled", True),
             "is_active": (pt_id == active_task_id)
         }
     with state.periodic_timers_lock:
         state.periodic_timers = timers
 
-def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, current_combos, round_prefix="", next_step_idx=None):
-    """檢查是否有已到期的定時任務；若有，安全依序執行並更新上次執行時間戳記"""
+def check_and_run_due_periodic_tasks(
+    app,
+    periodic_tasks_runtime,
+    current_vars,
+    current_combos,
+    round_prefix="",
+    next_step_idx=None,
+    current_round=0,
+    is_round_end=False,
+    is_startup=False
+):
+    """檢查是否有已到期的定時任務（支援時間間隔與循環輪次雙觸發模式）；若有，安全依序執行並更新時間/輪次戳記"""
     if not periodic_tasks_runtime:
         return True
 
     for idx, pt in enumerate(periodic_tasks_runtime):
         if not pt.get("enabled", True):
             continue
-        try:
-            interval = float(pt.get("interval", 1.0))
-        except (ValueError, TypeError):
-            interval = 1.0
-        if interval <= 0:
-            interval = 1.0
 
-        now = time.time()
-        last_run = pt.get("last_run", 0.0)
-        if now - last_run >= interval:
+        trigger_mode = pt.get("trigger_mode", "interval")
+        is_due = False
+
+        if is_startup:
+            # 啟動時首發判定
+            if pt.get("run_on_start", False):
+                is_due = True
+        elif trigger_mode == "round":
+            # 輪次觸發模式：僅在每輪結束 (is_round_end=True) 時檢查
+            if is_round_end:
+                try:
+                    round_interval = int(pt.get("round_interval", 1))
+                except (ValueError, TypeError):
+                    round_interval = 1
+                if round_interval < 1:
+                    round_interval = 1
+                last_run_round = pt.get("last_run_round", 0)
+                if current_round - last_run_round >= round_interval:
+                    is_due = True
+        else:
+            # 時間觸發模式：按時間戳記判定
+            try:
+                interval = float(pt.get("interval", 1.0))
+            except (ValueError, TypeError):
+                interval = 1.0
+            if interval <= 0:
+                interval = 1.0
+
+            now = time.time()
+            last_run = pt.get("last_run", 0.0)
+            if now - last_run >= interval:
+                is_due = True
+
+        if is_due:
             if not state.is_running() or state.stop_event.is_set():
                 return False
             if IS_WINDOWS and state.target_hwnd and not is_window_alive(state.target_hwnd):
@@ -234,8 +277,14 @@ def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, 
             task_name = pt.get("name", "").strip() or "定時任務"
             pt_id = pt.get("id") or f"pt_idx_{idx}"
             act = pt.get("action", {})
+
             if hasattr(app, "append_log"):
-                app.append_log("定時", f"{round_prefix}任務【{task_name}】到期觸發 (每 {interval}s)")
+                if trigger_mode == "round" and not is_startup:
+                    round_interval = pt.get("round_interval", 1)
+                    app.append_log("定時", f"{round_prefix}任務【{task_name}】達到第 {current_round} 輪觸發 (每 {round_interval} 輪)")
+                else:
+                    interval = pt.get("interval", 1.0)
+                    app.append_log("定時", f"{round_prefix}任務【{task_name}】到期觸發 (每 {interval}s)")
 
             # 定時任務執行期間：
             # 1. 若有指定下一動 (next_step_idx)，在主畫面流程清單中以待命暖金色標記即將接續執行的動作，
@@ -249,7 +298,7 @@ def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, 
             if hasattr(app, "highlight_active_periodic_task"):
                 app.highlight_active_periodic_task(idx)
 
-            sync_periodic_timers(periodic_tasks_runtime, active_task_id=pt_id)
+            sync_periodic_timers(periodic_tasks_runtime, active_task_id=pt_id, current_round=current_round)
 
             try:
                 # 統一透過 dispatch_action 執行
@@ -268,7 +317,9 @@ def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, 
                 if hasattr(app, "clear_active_periodic_task_highlight"):
                     app.clear_active_periodic_task_highlight()
             pt["last_run"] = time.time()
-            sync_periodic_timers(periodic_tasks_runtime, active_task_id=None)
+            if trigger_mode == "round":
+                pt["last_run_round"] = current_round
+            sync_periodic_timers(periodic_tasks_runtime, active_task_id=None, current_round=current_round)
             if not ok:
                 return False
             if not safe_sleep(0.05):
@@ -287,8 +338,9 @@ def macro_worker_loop(app):
         pt_copy = copy.deepcopy(pt)
         # 若勾選「啟動時立即首發一次」，則設定 last_run 為 0，首度檢查時即觸發；否則設為 start_time，待滿 interval 秒後首發
         pt_copy["last_run"] = 0.0 if pt.get("run_on_start", False) else start_time
+        pt_copy["last_run_round"] = 0
         periodic_tasks_runtime.append(pt_copy)
-    sync_periodic_timers(periodic_tasks_runtime)
+    sync_periodic_timers(periodic_tasks_runtime, current_round=0)
 
     try:
         # 首輪開始前：若有設定「啟動時立即首發」的定時任務，先檢查執行一次
@@ -296,7 +348,17 @@ def macro_worker_loop(app):
             init_vars = copy.deepcopy(state.active_variables)
             init_combos = copy.deepcopy(state.active_combos)
         first_next_idx = 0 if state.active_steps else None
-        if not check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, init_vars, init_combos, round_prefix="啟動首發: ", next_step_idx=first_next_idx):
+        if not check_and_run_due_periodic_tasks(
+            app,
+            periodic_tasks_runtime,
+            init_vars,
+            init_combos,
+            round_prefix="啟動首發: ",
+            next_step_idx=first_next_idx,
+            current_round=0,
+            is_round_end=False,
+            is_startup=True
+        ):
             return
 
         while state.is_running() and not state.stop_event.is_set():
@@ -317,20 +379,24 @@ def macro_worker_loop(app):
                     latest_pts = copy.deepcopy(state.active_periodic_tasks)
 
             if was_reloaded:
-                # 平滑套用熱更新，保留進行中定時任務的上次執行計時
-                existing_timers = {pt.get("id"): pt.get("last_run") for pt in periodic_tasks_runtime if pt.get("id")}
+                # 平滑套用熱更新，保留進行中定時任務的上次執行計時與輪次
+                existing_timers = {
+                    pt.get("id"): (pt.get("last_run"), pt.get("last_run_round", 0))
+                    for pt in periodic_tasks_runtime if pt.get("id")
+                }
                 new_runtime = []
                 now = time.time()
                 for pt in latest_pts:
                     pt_copy = copy.deepcopy(pt)
                     pt_id = pt_copy.get("id")
                     if pt_id in existing_timers:
-                        pt_copy["last_run"] = existing_timers[pt_id]
+                        pt_copy["last_run"], pt_copy["last_run_round"] = existing_timers[pt_id]
                     else:
                         pt_copy["last_run"] = 0.0 if pt.get("run_on_start", False) else now
+                        pt_copy["last_run_round"] = round_idx
                     new_runtime.append(pt_copy)
                 periodic_tasks_runtime = new_runtime
-                sync_periodic_timers(periodic_tasks_runtime)
+                sync_periodic_timers(periodic_tasks_runtime, current_round=round_idx)
                 msg = f"第 {round_idx} 輪: 已自動套用最新流程與定時任務！"
                 if hasattr(app, "append_log"):
                     app.append_log("系統", f"⚡ {msg}")
@@ -345,7 +411,7 @@ def macro_worker_loop(app):
 
             if not current_steps:
                 # 若主流程為空但有啟用的定時任務，進行待命定時輪詢
-                if not check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_variables, current_combos, round_prefix=""):
+                if not check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_variables, current_combos, round_prefix="", current_round=round_idx, is_round_end=False):
                     break
                 if not safe_sleep(0.1):
                     break
@@ -353,6 +419,7 @@ def macro_worker_loop(app):
 
             if hasattr(app, "append_log"):
                 app.append_log("系統", f"--- 開始第 {round_idx} 輪循環 ---")
+            sync_periodic_timers(periodic_tasks_runtime, current_round=round_idx)
 
             for idx, step in enumerate(current_steps):
                 if not state.is_running() or state.stop_event.is_set():
@@ -409,14 +476,14 @@ def macro_worker_loop(app):
                 if not step_ok or not state.is_running() or state.stop_event.is_set():
                     break
 
-                # 當前步驟或 COMBO 已完全執行結束！安全檢查並執行到期的定時任務
+                # 當前步驟或 COMBO 已完全執行結束！安全檢查並執行到期的定時任務（非每輪結束，僅 interval 任務判定）
                 next_step = (idx + 1) if (idx + 1 < len(current_steps)) else 0
-                if not check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_variables, current_combos, round_prefix=pfx, next_step_idx=next_step):
+                if not check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_variables, current_combos, round_prefix=pfx, next_step_idx=next_step, current_round=round_idx, is_round_end=False):
                     break
 
-            # 輪次銜接時亦進行一次定時任務檢查
+            # 輪次銜接時亦進行一次定時任務檢查（is_round_end=True，round 與 interval 任務皆判定）
             next_step = 0 if current_steps else None
-            if not check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_variables, current_combos, round_prefix=f"第 {round_idx} 輪結束: ", next_step_idx=next_step):
+            if not check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_variables, current_combos, round_prefix=f"第 {round_idx} 輪結束: ", next_step_idx=next_step, current_round=round_idx, is_round_end=True):
                 break
 
             round_idx += 1
