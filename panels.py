@@ -471,8 +471,6 @@ class RightPanel(tk.Frame):
         self.lbl_mouse_hud = tk.Label(bot, text="● 游標實時坐標: (0, 0)", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_NORMAL_BOLD)
         self.lbl_mouse_hud.pack(fill="x", pady=(0, 2))
 
-        self.lbl_status = None
-
         # 鎖定大小之開始/停止按鈕容器 (嚴格鎖定 46px 高度)
         f_btn_wrap = tk.Frame(bot, height=46, bg=UITheme.BG_PANEL)
         f_btn_wrap.pack(fill="x", pady=(2, 0))
@@ -750,7 +748,6 @@ class RightPanel(tk.Frame):
             "periodic_task_view": getattr(self, "periodic_task_view", None),
             "txt_log": getattr(self, "txt_log", None),
             "lbl_mouse_hud": getattr(self, "lbl_mouse_hud", None),
-            "lbl_status": getattr(self, "lbl_status", None),
             "btn_toggle": getattr(self, "btn_toggle", None),
             "cbo_step_call_combo": getattr(self, "cbo_step_call_combo", None),
             "cbo_step_add_var": getattr(self, "cbo_step_add_var", None),
@@ -786,9 +783,6 @@ class RightPanel(tk.Frame):
 
     def get_txt_log(self):
         return self.txt_log
-
-    def get_lbl_status(self):
-        return self.lbl_status
 
     def get_lbl_mouse_hud(self):
         return self.lbl_mouse_hud

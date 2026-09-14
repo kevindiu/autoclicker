@@ -91,7 +91,6 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
         msg = execute_click(x, y, is_rel, use_bg, off_x, off_y, btn=btn)
         var_info = f"【{var_name}】" if var_name else ""
         log_txt = f"{round_prefix}{parent_desc} {var_info}{msg}"
-        app.set_status(log_txt)
         if hasattr(app, "append_log"):
             app.append_log(log_tag, log_txt)
         if not safe_sleep(0.12):
@@ -120,7 +119,6 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
                     state.currently_held_keys.discard(("fg", key))
         var_info = f"【{var_name}】" if var_name else ""
         mode_tag = " (後台)" if use_bg else " (前台)"
-        app.set_status(f"{round_prefix}{parent_desc} {var_info}按鍵 [{key.upper()}]")
         if hasattr(app, "append_log"):
             app.append_log(log_tag, f"{round_prefix}{parent_desc} {var_info}按鍵 [{key.upper()}]{mode_tag}")
         if not safe_sleep(0.10):
@@ -139,7 +137,6 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
                     app.append_log("警示", f"變數【{var_name}】等待秒數數值格式無效，使用預設值 {sec}s")
         var_info = f"【{var_name}】" if var_name else ""
         log_txt = f"{round_prefix}{parent_desc} {var_info}等待 {sec}s"
-        app.set_status(log_txt)
         if hasattr(app, "append_log"):
             app.append_log(log_tag, log_txt)
         if not safe_sleep(sec):
@@ -151,13 +148,11 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
             return True
         if depth >= 10:
             warn_msg = f"{round_prefix}呼叫 [{tgt_name}] 超過深度上限"
-            app.set_status(warn_msg)
             if hasattr(app, "append_log"):
                 app.append_log("警示", warn_msg)
             return True
         if tgt_name in visited_set:
             warn_msg = f"{round_prefix}循環呼叫 [{tgt_name}]，自動跳過"
-            app.set_status(warn_msg)
             if hasattr(app, "append_log"):
                 app.append_log("警示", warn_msg)
             return True
@@ -187,7 +182,6 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
                     return False
         else:
             warn_msg = f"{round_prefix}找不到被呼叫的組合 [{tgt_name}]"
-            app.set_status(warn_msg)
             if hasattr(app, "append_log"):
                 app.append_log("警示", warn_msg)
 
@@ -240,7 +234,6 @@ def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, 
             task_name = pt.get("name", "").strip() or "定時任務"
             pt_id = pt.get("id") or f"pt_idx_{idx}"
             act = pt.get("action", {})
-            app.set_status(f"{round_prefix}[定時] {task_name}")
             if hasattr(app, "append_log"):
                 app.append_log("定時", f"{round_prefix}任務【{task_name}】到期觸發 (每 {interval}s)")
 
@@ -292,7 +285,6 @@ def macro_worker_loop(app):
         while state.is_running() and not state.stop_event.is_set():
             if IS_WINDOWS and state.target_hwnd and not is_window_alive(state.target_hwnd):
                 msg = "目標遊戲視窗已關閉或崩潰，巨集已自動安全停止！"
-                app.set_status(msg)
                 if hasattr(app, "append_log"):
                     app.append_log("警示", f"✕ {msg}")
                 state.set_running(False)
@@ -323,14 +315,12 @@ def macro_worker_loop(app):
                 periodic_tasks_runtime = new_runtime
                 sync_periodic_timers(periodic_tasks_runtime)
                 msg = f"第 {round_idx} 輪: 已自動套用最新流程與定時任務！"
-                app.set_status(msg)
                 if hasattr(app, "append_log"):
                     app.append_log("系統", f"⚡ {msg}")
 
             has_enabled_periodic = any(pt.get("enabled", True) for pt in periodic_tasks_runtime)
             if not current_steps and not has_enabled_periodic:
                 msg = "掛機流程清單與定時任務均為空，巨集已自動停止！"
-                app.set_status(msg)
                 if hasattr(app, "append_log"):
                     app.append_log("警示", msg)
                 state.set_running(False)
@@ -353,7 +343,6 @@ def macro_worker_loop(app):
 
                 if IS_WINDOWS and state.target_hwnd and not is_window_alive(state.target_hwnd):
                     msg = "目標遊戲視窗已關閉或崩潰，巨集已自動安全停止！"
-                    app.set_status(msg)
                     if hasattr(app, "append_log"):
                         app.append_log("警示", f"✕ {msg}")
                     state.set_running(False)
@@ -415,7 +404,6 @@ def macro_worker_loop(app):
             if not safe_sleep(0.05):
                 break
     except Exception as e:
-        app.set_status(f"異常中斷: {e}")
         if hasattr(app, "append_log"):
             app.append_log("警示", f"✕ 異常中斷: {e}")
     finally:
@@ -441,7 +429,6 @@ def test_run_execution_flow_worker(app):
                 break
             if IS_WINDOWS and state.target_hwnd and not is_window_alive(state.target_hwnd):
                 msg = "目標遊戲視窗已關閉，試跑流程中止！"
-                app.set_status(msg)
                 if hasattr(app, "append_log"):
                     app.append_log("警示", f"✕ {msg}")
                 break
@@ -452,7 +439,8 @@ def test_run_execution_flow_worker(app):
                 c_name = step.get("name", "組合")
                 sub_actions = step.get("actions", [])
                 if not sub_actions:
-                    app.set_status(f"[試跑流程] 步驟 #{idx+1} 組合 [{c_name}] 內無動作，跳過")
+                    if hasattr(app, "append_log"):
+                        app.append_log("試跑", f"[試跑流程] 步驟 #{idx+1} 組合 [{c_name}] 內無動作，跳過")
                     continue
                 for a_idx, act in enumerate(sub_actions):
                     if state.stop_event.is_set():
@@ -484,6 +472,5 @@ def test_run_execution_flow_worker(app):
                 ):
                     return
     except Exception as e:
-        app.set_status(f"試跑流程異常: {e}")
         if hasattr(app, "append_log"):
             app.append_log("警示", f"✕ 試跑流程異常: {e}")

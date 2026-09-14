@@ -142,7 +142,6 @@ class App(tk.Tk):
         self.track_mouse_live()
 
         # 執行緒安全的 UI 通訊佇列
-        self.status_queue = queue.Queue()
         self.ui_task_queue = queue.Queue()
         self.poll_ui_queues()
 
@@ -201,15 +200,6 @@ class App(tk.Tk):
     def poll_ui_queues(self):
         """定期由主執行緒消費背景執行緒發送的 UI 更新事件 (批次摺疊更新，避免頻繁渲染)"""
         if self.is_closing: return
-        last_msg = None
-        try:
-            while True:
-                last_msg = self.status_queue.get_nowait()
-        except queue.Empty:
-            pass
-        lbl_status = getattr(self, "lbl_status", None)
-        if last_msg is not None and lbl_status and lbl_status.winfo_exists():
-            lbl_status.config(text=f"● 狀態: {last_msg}")
 
         # 批次消費執行日誌佇列 (嚴格維持最新 200 筆)
         log_items = []
@@ -283,21 +273,17 @@ class App(tk.Tk):
                 pass
 
     def set_status(self, msg):
-        """執行緒安全地更新狀態列訊息 (無狀態列標籤時安全略過)"""
-        if not self.is_closing:
-            try:
-                lbl_status = getattr(self, "lbl_status", None)
-                if not lbl_status:
-                    return
-                s_msg = str(msg).strip()
-                if len(s_msg) > 52:
-                    s_msg = s_msg[:50] + "..."
-                if threading.current_thread() is threading.main_thread() and lbl_status.winfo_exists():
-                    lbl_status.config(text=f"● 狀態: {s_msg}")
-                else:
-                    self.status_queue.put(s_msg)
-            except (queue.Full, tk.TclError, AttributeError):
-                pass
+        """將狀態與操作回饋訊息統一寫入執行日誌，杜絕訊息被靜默丟棄"""
+        if not self.is_closing and msg:
+            s_msg = str(msg).strip()
+            if any(w in s_msg for w in ("失敗", "異常", "錯誤", "請先", "未綁定", "找不到", "無法")):
+                tag = "警示"
+            elif "試跑" in s_msg:
+                tag = "試跑"
+            else:
+                tag = "系統"
+            self.append_log(tag, s_msg)
+        return msg
 
     def run_on_ui_thread(self, fn):
         """在主執行緒安全執行 UI 變更回調"""
@@ -347,17 +333,13 @@ class App(tk.Tk):
 
         def _worker():
             try:
-                self.set_status(f"正在試跑 {task_name}...")
                 self.append_log("試跑", f"▶ 正在試跑: {task_name}")
                 task_fn()
                 if state.stop_event.is_set():
-                    self.set_status(f"{task_name} 試跑已手動中止！")
                     self.append_log("試跑", f"⏹ {task_name} 試跑已手動中止！")
                 else:
-                    self.set_status(f"{task_name} 試跑完成！")
                     self.append_log("試跑", f"✓ {task_name} 試跑完成！")
             except Exception as e:
-                self.set_status(f"{task_name} 試跑異常: {e}")
                 self.append_log("警示", f"✕ {task_name} 試跑異常: {e}")
             finally:
                 state.is_testing = False
@@ -421,7 +403,6 @@ class App(tk.Tk):
             threading.Thread(target=_flash_worker, daemon=True).start()
             self.set_status(f"已定位並閃爍視窗 HWND: {hwnd}")
         except Exception as e:
-            self.set_status(f"定位失敗: {e}")
             self.append_log("警示", f"視窗定位失敗: {e}")
 
     # ======================= 取點防重入機制 + 頂部提示 =======================
@@ -756,7 +737,6 @@ class App(tk.Tk):
         self.refresh_variables_table()
         self.refresh_combo_actions_list()
         self.update_step_list()
-        self.set_status(f"已刪除變數: {var_name}")
         self.append_log("系統", f"🗑 已刪除變數：【{var_name}】")
 
     def move_variable(self, delta):
@@ -984,7 +964,6 @@ class App(tk.Tk):
         self.refresh_combo_list(select_idx=new_sel)
         self.on_combo_select()
         self.update_step_list()
-        self.set_status(f"已刪除組合 [{name}]")
         self.append_log("系統", f"🗑 已刪除技能組合【{name}】（內含 {act_cnt} 個動作）")
         self.trigger_hot_reload()
 
@@ -1100,7 +1079,6 @@ class App(tk.Tk):
         if isinstance(removed_item, dict):
             item_desc = f": {format_action_summary(removed_item)}"
 
-        self.set_status(f"已刪除{item_name} #{idx+1}{item_desc}")
         self.append_log("系統", f"🗑 已移除{item_name} #{idx+1}{item_desc}")
         self.trigger_hot_reload()
 
@@ -1110,7 +1088,6 @@ class App(tk.Tk):
             cnt = len(lst)
             lst.clear()
             refresh_cb(None)
-            self.set_status(f"已清空{status_msg}")
             self.append_log("系統", f"🗑 已清空{status_msg}（共移除 {cnt} 個步驟/動作）")
             self.trigger_hot_reload()
 
@@ -1443,7 +1420,6 @@ class App(tk.Tk):
         del state.periodic_tasks[idx]
         new_sel = min(idx, len(state.periodic_tasks) - 1) if state.periodic_tasks else None
         self.update_periodic_list(new_sel)
-        self.set_status(f"已刪除定時任務：【{name}】")
         self.append_log("系統", f"🗑 已刪除定時任務 #{idx+1}：【{name}】")
         self.trigger_hot_reload()
 
