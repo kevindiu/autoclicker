@@ -1,14 +1,20 @@
 import time
 import ctypes
 from ctypes import wintypes
-import pyautogui
 from typing import Optional, Tuple, Any
 
 import state
 from events import EventBus, AppEvents
 
-pyautogui.FAILSAFE = False
-pyautogui.PAUSE = 0.0
+_pyautogui_instance = None
+def _get_pyautogui():
+    global _pyautogui_instance
+    if _pyautogui_instance is None:
+        import pyautogui
+        pyautogui.FAILSAFE = False
+        pyautogui.PAUSE = 0.0
+        _pyautogui_instance = pyautogui
+    return _pyautogui_instance
 
 # ==============================================================================
 # Win32 底層 API 封裝與溢位防護
@@ -147,8 +153,7 @@ def get_cursor_pos() -> Tuple[int, int]:
         pt = POINT()
         user32.GetCursorPos(ctypes.byref(pt))
         return (pt.x, pt.y)
-    import pyautogui
-    pos = pyautogui.position()
+    pos = _get_pyautogui().position()
     return (int(pos.x), int(pos.y))
 
 VK_MAP = {
@@ -223,22 +228,22 @@ def emergency_release_all() -> None:
                     user32.PostMessageW(h, WM_KEYUP, vk, to_lparam(KEY_RELEASE_DEFAULT_LPARAM))
                 elif item[0] == "fg":
                     _, k = item
-                    pyautogui.keyUp(k)
+                    _get_pyautogui().keyUp(k)
             except Exception as e:
                 EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"例外 (釋放按鍵): {e}")
         state.app_state.currently_held_keys.clear()
 
     # 3. 前台滑鼠防禦性釋放
     try:
-        pyautogui.mouseUp(button="left")
-        pyautogui.mouseUp(button="right")
+        _get_pyautogui().mouseUp(button="left")
+        _get_pyautogui().mouseUp(button="right")
     except Exception as e:
         EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"例外 (釋放前台滑鼠): {e}")
 
 def post_bg_click(hwnd: Any, client_x: int, client_y: int, offset_x: int = 0, offset_y: int = 0, btn: str = "left") -> Tuple[int, int]:
     """向指定視窗背景發送點擊訊息"""
     if not IS_WINDOWS or not hwnd or not user32:
-        pyautogui.click(client_x, client_y, button=btn)
+        _get_pyautogui().click(client_x, client_y, button=btn)
         return int(client_x), int(client_y)
     cx, cy = int(client_x) + offset_x, int(client_y) + offset_y
     lparam = to_lparam(((int(cy) & 0xFFFF) << 16) | (int(cx) & 0xFFFF))
@@ -265,11 +270,11 @@ def post_bg_key(hwnd: Any, key_str: str) -> None:
         with state.app_state.currently_held_keys_lock:
             state.app_state.currently_held_keys.add(("fg", key_str))
         try:
-            pyautogui.keyDown(key_str)
+            _get_pyautogui().keyDown(key_str)
             safe_sleep(0.06)
         finally:
-            try: pyautogui.keyUp(key_str)
-            except (pyautogui.PyAutoGUIException, OSError, ValueError): pass
+            try: _get_pyautogui().keyUp(key_str)
+            except Exception: pass
             with state.app_state.currently_held_keys_lock:
                 state.app_state.currently_held_keys.discard(("fg", key_str))
         return
@@ -325,9 +330,9 @@ def execute_click(x: int, y: int, is_rel: bool, use_bg: bool, off_x: int, off_y:
         if is_rel and IS_WINDOWS and hwnd and user32:
             pt = POINT(target_x, target_y)
             user32.ClientToScreen(hwnd, ctypes.byref(pt))
-            pyautogui.click(pt.x, pt.y, button=btn)
+            _get_pyautogui().click(pt.x, pt.y, button=btn)
             return f"前台追蹤{btn_cn} ({pt.x},{pt.y})"
-        pyautogui.click(target_x, target_y, button=btn)
+        _get_pyautogui().click(target_x, target_y, button=btn)
         return f"前台{btn_cn} ({target_x},{target_y})"
 
 def force_bring_window_to_front(hwnd: Any) -> None:

@@ -6,7 +6,6 @@ import copy
 import ctypes
 import threading
 import queue
-import pyautogui
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 

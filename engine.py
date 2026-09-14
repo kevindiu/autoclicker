@@ -1,6 +1,5 @@
 import copy
 import time
-import pyautogui
 from typing import Optional, Set, Dict, List, Tuple
 
 import constants
@@ -60,11 +59,13 @@ def _handle_key(act, parent_desc, current_vars, current_combos, depth, visited_s
         with state.app_state.currently_held_keys_lock:
             state.app_state.currently_held_keys.add(("fg", key))
         try:
+            import pyautogui
             pyautogui.keyDown(key)
             if not safe_sleep(constants.SLEEP_KEY_FG):
                 return False
         finally:
             try:
+                import pyautogui
                 pyautogui.keyUp(key)
             except Exception as e:
                 EventBus.emit(AppEvents.LOG_MESSAGE, "警示", f"釋放前台按鍵 [{key}] 失敗: {e}")
