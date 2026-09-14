@@ -757,6 +757,7 @@ class App(tk.Tk):
         self.refresh_combo_actions_list()
         self.update_step_list()
         self.set_status(f"已刪除變數: {var_name}")
+        self.append_log("系統", f"🗑 已刪除變數：【{var_name}】")
 
     def move_variable(self, delta):
         sel = self.tree_vars.selection()
@@ -975,6 +976,7 @@ class App(tk.Tk):
         idx = self.get_selected_combo_idx()
         if idx is None: return
         name = state.combos[idx]["name"]
+        act_cnt = len(state.combos[idx].get("actions", []))
         if not messagebox.askyesno("刪除組合確認", f"確定要刪除組合【{name}】嗎？組合內的所有動作將會一併清除！", parent=self):
             return
         del state.combos[idx]
@@ -983,6 +985,7 @@ class App(tk.Tk):
         self.on_combo_select()
         self.update_step_list()
         self.set_status(f"已刪除組合 [{name}]")
+        self.append_log("系統", f"🗑 已刪除技能組合【{name}】（內含 {act_cnt} 個動作）")
         self.trigger_hot_reload()
 
     def add_combo_to_main_steps(self):
@@ -1088,18 +1091,27 @@ class App(tk.Tk):
     def _delete_list_item(self, lst, idx, refresh_cb, item_name="項目"):
         if idx is None or not (0 <= idx < len(lst)):
             return self.set_status(f"請先在清單點選要刪除的{item_name}！")
+        removed_item = lst[idx]
         del lst[idx]
         new_sel = min(idx, len(lst) - 1) if lst else None
         refresh_cb(new_sel)
-        self.set_status(f"已刪除{item_name}")
+
+        item_desc = ""
+        if isinstance(removed_item, dict):
+            item_desc = f": {format_action_summary(removed_item)}"
+
+        self.set_status(f"已刪除{item_name} #{idx+1}{item_desc}")
+        self.append_log("系統", f"🗑 已移除{item_name} #{idx+1}{item_desc}")
         self.trigger_hot_reload()
 
     def _clear_list_items(self, lst, confirm_msg, refresh_cb, status_msg):
         if not lst: return self.set_status(f"{status_msg}本來就是空的")
         if messagebox.askyesno("清空確認", confirm_msg, parent=self):
+            cnt = len(lst)
             lst.clear()
             refresh_cb(None)
             self.set_status(f"已清空{status_msg}")
+            self.append_log("系統", f"🗑 已清空{status_msg}（共移除 {cnt} 個步驟/動作）")
             self.trigger_hot_reload()
 
     def _insert_action_to_target(self, action_dict, is_combo=False, success_msg=""):
@@ -1300,6 +1312,15 @@ class App(tk.Tk):
             self.step_listbox.selection_set(select_idx)
             self.step_listbox.see(select_idx)
 
+        # 空清單視覺引導 (Empty State Placeholder)
+        lbl_empty = getattr(self, "lbl_empty_steps", None)
+        if lbl_empty:
+            if len(state.steps) == 0:
+                lbl_empty.place(relx=0.5, rely=0.5, anchor="center")
+                lbl_empty.lift()
+            else:
+                lbl_empty.place_forget()
+
     def test_run_selected_main_step(self):
         sel = self.step_listbox.curselection()
         if not sel:
@@ -1423,6 +1444,7 @@ class App(tk.Tk):
         new_sel = min(idx, len(state.periodic_tasks) - 1) if state.periodic_tasks else None
         self.update_periodic_list(new_sel)
         self.set_status(f"已刪除定時任務：【{name}】")
+        self.append_log("系統", f"🗑 已刪除定時任務 #{idx+1}：【{name}】")
         self.trigger_hot_reload()
 
     def test_run_selected_periodic_task(self):

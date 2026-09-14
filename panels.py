@@ -576,6 +576,18 @@ class RightPanel(tk.Frame):
         )
         self.step_listbox.pack(side="left", fill="both", expand=True)
 
+        self.lbl_empty_steps = tk.Label(
+            self.step_listbox,
+            text="📋 尚無掛機步驟\n\n點擊上方「+ 瞄準取點」\n或雙擊左側組合加入步驟",
+            bg=UITheme.BG_DARK,
+            fg="#64748b",
+            font=UITheme.FONT_SMALL,
+            justify="center",
+            cursor="arrow"
+        )
+        self.lbl_empty_steps.bind("<Button-1>", lambda e: self.step_listbox.selection_clear(0, tk.END))
+        self.lbl_empty_steps.place(relx=0.5, rely=0.5, anchor="center")
+
         def _on_step_list_click(event):
             idx = self.step_listbox.nearest(event.y)
             bbox = self.step_listbox.bbox(idx)
@@ -734,6 +746,7 @@ class RightPanel(tk.Frame):
         """明確定義右欄面板所管理的公開 UI 控制項字典"""
         return {
             "step_listbox": getattr(self, "step_listbox", None),
+            "lbl_empty_steps": getattr(self, "lbl_empty_steps", None),
             "periodic_listbox": getattr(self, "periodic_listbox", None),
             "periodic_task_view": getattr(self, "periodic_task_view", None),
             "txt_log": getattr(self, "txt_log", None),
@@ -762,6 +775,9 @@ class RightPanel(tk.Frame):
     # ======================= 公開組件存取 API =======================
     def get_step_listbox(self):
         return self.step_listbox
+
+    def get_lbl_empty_steps(self):
+        return getattr(self, "lbl_empty_steps", None)
 
     def get_periodic_listbox(self):
         return self.periodic_listbox
