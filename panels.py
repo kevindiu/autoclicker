@@ -469,10 +469,9 @@ class RightPanel(tk.Frame):
         bot.pack(side="bottom", fill="x", pady=(2, 0))
 
         self.lbl_mouse_hud = tk.Label(bot, text="● 游標實時坐標: (0, 0)", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_NORMAL_BOLD)
-        self.lbl_mouse_hud.pack(fill="x", pady=(0, 1))
+        self.lbl_mouse_hud.pack(fill="x", pady=(0, 2))
 
-        self.lbl_status = tk.Label(bot, text="● 狀態: 已就緒", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL)
-        self.lbl_status.pack(fill="x", pady=(0, 2))
+        self.lbl_status = None
 
         # 鎖定大小之開始/停止按鈕容器 (嚴格鎖定 46px 高度)
         f_btn_wrap = tk.Frame(bot, height=46, bg=UITheme.BG_PANEL)
