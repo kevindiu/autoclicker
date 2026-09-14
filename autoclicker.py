@@ -211,7 +211,7 @@ class App(tk.Tk):
         if last_msg is not None and lbl_status and lbl_status.winfo_exists():
             lbl_status.config(text=f"● 狀態: {last_msg}")
 
-        # 批次消費執行日誌佇列 (嚴格維持最新 100 筆)
+        # 批次消費執行日誌佇列 (嚴格維持最新 200 筆)
         log_items = []
         try:
             while True:
@@ -226,7 +226,7 @@ class App(tk.Tk):
                     self.txt_log.insert(tk.END, f"[{t_str}] ", "time")
                     self.txt_log.insert(tk.END, f"[{tag}] ", f"tag_{tag}")
                     self.txt_log.insert(tk.END, f"{text}\n", f"text_{tag}")
-                    if self.log_count >= 100:
+                    if self.log_count >= 200:
                         self.txt_log.delete("1.0", "2.0")
                     else:
                         self.log_count += 1
