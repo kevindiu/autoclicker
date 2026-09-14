@@ -148,6 +148,11 @@ class PeriodicTaskCardView(tk.Frame):
         self.bind_mousewheel(self)
         self.bind_mousewheel(self.canvas)
         self.bind_mousewheel(self.body_frame)
+
+        # 點擊空白處（畫布、卡片外容器或自身背景）時自動取消選取
+        self.bind("<Button-1>", lambda e: self.clear_selection(), add="+")
+        self.canvas.bind("<Button-1>", lambda e: self.clear_selection(), add="+")
+        self.body_frame.bind("<Button-1>", lambda e: self.clear_selection(), add="+")
         self._check_empty_state()
 
     def bind_mousewheel(self, widget):
@@ -186,7 +191,7 @@ class PeriodicTaskCardView(tk.Frame):
                     cursor="arrow"
                 )
                 self.empty_label.place(relx=0.5, rely=0.5, anchor="center")
-                self.empty_label.bind("<Button-1>", lambda e: self.select(None))
+                self.empty_label.bind("<Button-1>", lambda e: self.clear_selection(), add="+")
                 self.bind_mousewheel(self.empty_label)
         else:
             if self.empty_label:
@@ -428,15 +433,27 @@ class PeriodicTaskCardView(tk.Frame):
             self.on_double_click()
 
     def select(self, idx):
-        if not (0 <= idx < len(self.card_widgets)):
+        if idx is None or not (0 <= idx < len(self.card_widgets)):
+            self.clear_selection()
             return
-        if self.selected_idx is not None and 0 <= self.selected_idx < len(self.card_widgets):
+        if self.selected_idx is not None and 0 <= self.selected_idx < len(self.card_widgets) and self.selected_idx != idx:
             old = self.card_widgets[self.selected_idx]
             self._apply_card_style(old, is_selected=False, is_active=(self.active_task_idx == self.selected_idx))
 
         self.selected_idx = idx
         curr = self.card_widgets[idx]
         self._apply_card_style(curr, is_selected=True, is_active=(self.active_task_idx == idx))
+
+    def clear_selection(self):
+        """取消當前選取的定時任務卡片（選取清空）"""
+        if self.selected_idx is not None and 0 <= self.selected_idx < len(self.card_widgets):
+            old = self.card_widgets[self.selected_idx]
+            self._apply_card_style(old, is_selected=False, is_active=(self.active_task_idx == self.selected_idx))
+        self.selected_idx = None
+
+    def selection_clear(self, first=0, last=None):
+        """相容 Listbox 的 selection_clear API，取消選取"""
+        self.clear_selection()
 
     def _apply_card_style(self, card_info, is_selected=False, is_active=False):
         if is_active:

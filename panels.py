@@ -647,6 +647,10 @@ class RightPanel(tk.Frame):
         )
         self.periodic_listbox.pack(fill="both", expand=True)
         self.periodic_task_view = self.periodic_listbox
+        f_list_pt.bind("<Button-1>", lambda e: self.periodic_listbox.selection_clear(), add="+")
+        f_pt.bind("<Button-1>", lambda e: self.periodic_listbox.selection_clear(), add="+")
+        f_pt_hdr.bind("<Button-1>", lambda e: self.periodic_listbox.selection_clear(), add="+")
+        lbl_pt_hint.bind("<Button-1>", lambda e: self.periodic_listbox.selection_clear(), add="+")
 
         # 執行日誌面板
         f_log_panel = tk.LabelFrame(
