@@ -173,6 +173,21 @@ class App(tk.Tk):
             return False
         return state.has_unsaved_changes(self.last_saved_snapshot)
 
+    def _on_vars_changed(self, select_name=None):
+        self.var_ctrl.refresh_variables_table(select_name)
+        
+    def _on_combos_changed(self, select_idx=None):
+        self.combo_ctrl.refresh_combo_list(select_idx)
+        
+    def _on_combo_actions_changed(self, select_idx=None):
+        self.combo_ctrl.refresh_combo_actions_list(select_idx)
+        
+    def _on_steps_changed(self, select_idx=None):
+        self.step_ctrl.update_step_list(select_idx)
+        
+    def _on_periodic_tasks_changed(self, select_idx=None):
+        self.periodic_ctrl.update_periodic_list(select_idx)
+
     def on_close(self):
         """主視窗關閉事件處理 (若有未儲存之變更則提示使用者儲存)"""
         if self.has_unsaved_changes():
