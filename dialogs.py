@@ -699,7 +699,7 @@ def prompt_edit_periodic_task(app, task=None):
     rb_int.pack(side="left", padx=(0, 8))
 
     rb_rnd = tk.Radiobutton(
-        r_mode, text="🔄 按循環輪次 (輪)", value="round", variable=var_trigger_mode,
+        r_mode, text="↻ 按循環輪次 (輪)", value="round", variable=var_trigger_mode,
         bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MAIN, selectcolor=UITheme.BG_INPUT,
         activebackground=UITheme.BG_PANEL, activeforeground=UITheme.TEXT_MAIN,
         font=UITheme.FONT_SMALL, command=_on_mode_change
