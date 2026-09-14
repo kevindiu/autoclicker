@@ -24,12 +24,29 @@ def _create_dialog(app, title, w, h, resizable=False, minsize=None):
     dialog.grab_set()
     app.apply_app_icon(dialog)
 
-    app.update_idletasks()
-    pos_x = app.winfo_x() + max(0, (app.winfo_width() - w) // 2)
-    pos_y = app.winfo_y() + max(0, (app.winfo_height() - h) // 2)
-    dialog.geometry(f"{w}x{h}+{pos_x}+{pos_y}")
-    if minsize:
-        dialog.minsize(*minsize)
+    dialog.withdraw()  # 隱藏視窗直到計算好大小並置中
+
+    def _center():
+        dialog.update_idletasks()
+        calc_w = w if w else dialog.winfo_reqwidth()
+        calc_h = h if h else dialog.winfo_reqheight()
+        
+        pos_x = app.winfo_x() + max(0, (app.winfo_width() - calc_w) // 2)
+        pos_y = app.winfo_y() + max(0, (app.winfo_height() - calc_h) // 2)
+        
+        if w and h:
+            dialog.geometry(f"{w}x{h}+{pos_x}+{pos_y}")
+        else:
+            dialog.geometry(f"+{pos_x}+{pos_y}")
+            
+        if minsize:
+            dialog.minsize(*minsize)
+        elif w:
+            dialog.minsize(w, 100)
+            
+        dialog.deiconify()
+
+    dialog.after_idle(_center)
     return dialog
 
 def restore_dialog(dialog):
@@ -108,7 +125,7 @@ def prompt_variable_dialog(app, edit_name=None):
     type_display_map = {"coord": "[坐標]", "key": "[按鍵]", "wait": "[停頓]"}
     type_key_map = {"[坐標]": "coord", "[按鍵]": "key", "[停頓]": "wait", "坐標": "coord", "按鍵": "key", "停頓": "wait"}
 
-    dialog = _create_dialog(app, title, 380, 360)
+    dialog = _create_dialog(app, title, 380, None)
 
     f_main = tk.Frame(dialog, bg=UITheme.BG_PANEL, padx=16, pady=12)
     f_main.pack(fill="both", expand=True)
