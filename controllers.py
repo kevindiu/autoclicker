@@ -612,7 +612,7 @@ class StepController(BaseController):
         """一次性試跑整個掛機執行流程（所有主步驟依序執行一輪）"""
         if not state.app_state.steps:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "掛機流程清單內無任何步驟可試跑！")
-        self.app.run_in_test_thread("掛機流程", lambda: engine.test_run_execution_flow_worker(self.app))
+        self.app.run_in_test_thread("掛機流程", lambda: engine.test_run_execution_flow_worker())
 
     def edit_selected_main_step(self):
         sel = self.app.step_listbox.curselection() if hasattr(self.app, "step_listbox") else None

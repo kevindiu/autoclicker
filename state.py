@@ -62,6 +62,12 @@ class AppState:
         self._running = False
         self._is_testing = False
         self.reload_requested = False
+        
+        # 4. 運行環境設定 (Runtime Configuration)
+        self.use_bg = True
+        self.offset_x = 0
+        self.offset_y = 0
+
         self.steps_lock = threading.Lock() # 保護 active_steps, active_combos, active_variables 與 active_periodic_tasks
         self.stop_event = threading.Event()
         self.target_hwnd = None

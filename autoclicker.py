@@ -75,18 +75,18 @@ class App(tk.Tk):
         self.var_window = tk.StringVar(value="未偵測到視窗")
 
         # 執行緒安全的快取設定 (避免子執行緒讀取 Tkinter Variable 引發 Tcl 鎖定或例外)
-        self.cached_use_bg = True
+        state.app_state.use_bg = True
         self.cached_use_rel = True
-        self.cached_offset_x = 0
-        self.cached_offset_y = 0
+        state.app_state.offset_x = 0
+        state.app_state.offset_y = 0
 
         self.var_use_bg.trace_add("write", lambda *a: setattr(self, "cached_use_bg", bool(self.var_use_bg.get())))
         self.var_use_rel.trace_add("write", lambda *a: setattr(self, "cached_use_rel", bool(self.var_use_rel.get())))
         def _update_offset(*a):
-            try: self.cached_offset_x = int(self.var_offset_x.get() or 0)
-            except (ValueError, TypeError): self.cached_offset_x = 0
-            try: self.cached_offset_y = int(self.var_offset_y.get() or 0)
-            except (ValueError, TypeError): self.cached_offset_y = 0
+            try: state.app_state.offset_x = int(self.var_offset_x.get() or 0)
+            except (ValueError, TypeError): state.app_state.offset_x = 0
+            try: state.app_state.offset_y = int(self.var_offset_y.get() or 0)
+            except (ValueError, TypeError): state.app_state.offset_y = 0
         self.var_offset_x.trace_add("write", _update_offset)
         self.var_offset_y.trace_add("write", _update_offset)
 
@@ -1076,7 +1076,7 @@ class App(tk.Tk):
         )
 
     def execute_single_action(self, act, desc):
-        engine.execute_single_action(self, act, desc)
+        engine.execute_single_action(act, desc)
 
     # ======================= 主執行引擎 =======================
     def toggle_run(self):
@@ -1104,12 +1104,12 @@ class App(tk.Tk):
             self.set_running_ui(True)
             self.set_status("循環運作中...")
             win_title = self.var_window.get() if hasattr(self, "var_window") else ""
-            mode_str = "後台模式" if self.cached_use_bg else "前台模式"
+            mode_str = "後台模式" if state.app_state.use_bg else "前台模式"
             self.append_log("系統", f"▶ 巨集啟動 ({mode_str} | 目標: {win_title})")
             threading.Thread(target=self.macro_worker_loop, daemon=True).start()
 
     def macro_worker_loop(self):
-        engine.macro_worker_loop(self)
+        engine.macro_worker_loop()
 
 
 if __name__ == "__main__":
