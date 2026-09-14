@@ -541,6 +541,7 @@ def macro_worker_loop() -> None:
         
         completed = round_idx - 1 if round_idx > 1 else (1 if round_idx == 1 and not state.app_state.stop_event.is_set() else 0)
         EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"⏹ 巨集循環結束 (累計運行 {completed} 輪)")
+        EventBus.emit(AppEvents.MACRO_STOPPED)
 
 def test_run_execution_flow_worker():
     """一次性試跑整個掛機執行流程的背景工作函式"""
@@ -596,3 +597,4 @@ def test_run_execution_flow_worker():
         EventBus.emit(AppEvents.LOG_MESSAGE, "警示", f"✕ 試跑流程異常: {e}")
     finally:
         EventBus.emit(AppEvents.CLEAR_HIGHLIGHT_STEP)
+        EventBus.emit(AppEvents.MACRO_STOPPED)

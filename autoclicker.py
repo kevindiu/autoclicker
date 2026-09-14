@@ -146,6 +146,7 @@ class App(tk.Tk):
         EventBus.subscribe(AppEvents.HIGHLIGHT_PENDING_STEP, self.highlight_pending_step)
         EventBus.subscribe(AppEvents.HIGHLIGHT_PERIODIC_TASK, self.highlight_active_periodic_task)
         EventBus.subscribe(AppEvents.CLEAR_HIGHLIGHT_PERIODIC_TASK, self.clear_active_periodic_task_highlight)
+        EventBus.subscribe(AppEvents.MACRO_STOPPED, self._on_macro_stopped)
 
         self.refresh_window_dropdown()
         self.refresh_profiles()
@@ -743,6 +744,10 @@ class App(tk.Tk):
             if hasattr(self, "periodic_listbox") and hasattr(self.periodic_listbox, "clear_active_highlight"):
                 self.periodic_listbox.clear_active_highlight()
         self.run_on_ui_thread(_clear)
+
+    def _on_macro_stopped(self):
+        """當背景巨集因故中止時，同步更新 UI 狀態"""
+        self.set_running_ui(False)
 
     # ======================= 次層級對話框委派 =======================
     def prompt_edit_combo_dialog(self, combo_step, step_idx=None):
