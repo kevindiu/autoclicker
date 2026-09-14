@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import time
+import copy
 import uuid
 import state
 from theme import CONFIG_EXT
@@ -41,36 +42,58 @@ def ensure_default_profile(ext=CONFIG_EXT, dir_path=_DEFAULT_DIR):
                 json.dump({"variables": {}, "combos": [], "steps": [], "periodic_tasks": []}, f, ensure_ascii=False, indent=2)
             os.replace(temp_fn, fn)
         except OSError:
-            pass
+            if os.path.exists(temp_fn):
+                try:
+                    os.remove(temp_fn)
+                except OSError:
+                    pass
 
-def save_profile_file(name: str, target_state=None, ext=CONFIG_EXT, dir_path=_DEFAULT_DIR, **kwargs) -> str:
-    """將狀態資料儲存為 .shm 設定檔 (採用暫存檔 + 原子替換保護，防止寫入中斷損毀)"""
+def _resolve_target_state(target_state=None, **kwargs):
+    """解析並返回正確的 AppState 實例，相容傳入 None、模組 state、或自定義 AppState"""
     if target_state is None and "app_state" in kwargs:
         target_state = kwargs["app_state"]
     if target_state is None:
-        target_state = state.app_state
+        return state.app_state
+    if hasattr(target_state, "app_state"):
+        return target_state.app_state
+    return target_state
+
+def save_profile_file(name: str, target_state=None, ext=CONFIG_EXT, dir_path=_DEFAULT_DIR, **kwargs) -> str:
+    """將狀態資料儲存為 .shm 設定檔 (採用暫存檔 + 原子替換保護，防止寫入中斷損毀)"""
+    target_state = _resolve_target_state(target_state, **kwargs)
     safe_name = sanitize_profile_name(name)
     if not safe_name:
         raise ValueError("無效的設定檔名稱！")
     fn = os.path.join(dir_path, f"{safe_name}{ext}")
     temp_fn = os.path.join(dir_path, f"{safe_name}{ext}.tmp")
-    data = {
-        "variables": target_state.variables,
-        "combos": target_state.combos,
-        "steps": target_state.steps,
-        "periodic_tasks": target_state.periodic_tasks
-    }
-    with open(temp_fn, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    os.replace(temp_fn, fn)
+
+    if hasattr(target_state, "to_dict"):
+        data = target_state.to_dict()
+    else:
+        data = {
+            "variables": copy.deepcopy(target_state.variables),
+            "combos": copy.deepcopy(target_state.combos),
+            "steps": copy.deepcopy(target_state.steps),
+            "periodic_tasks": copy.deepcopy(target_state.periodic_tasks)
+        }
+
+    try:
+        with open(temp_fn, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(temp_fn, fn)
+    except Exception:
+        if os.path.exists(temp_fn):
+            try:
+                os.remove(temp_fn)
+            except OSError:
+                pass
+        raise
+
     return fn
 
 def load_profile_file(name: str, target_state=None, ext=CONFIG_EXT, dir_path=_DEFAULT_DIR, **kwargs) -> dict:
     """從 .shm 設定檔載入設定資料，並自動補齊缺失之欄位與 ID (具備 null 值防禦)"""
-    if target_state is None and "app_state" in kwargs:
-        target_state = kwargs["app_state"]
-    if target_state is None:
-        target_state = state.app_state
+    target_state = _resolve_target_state(target_state, **kwargs)
     safe_name = sanitize_profile_name(name)
     fn = os.path.join(dir_path, f"{safe_name}{ext}")
     if not os.path.exists(fn):
@@ -78,6 +101,9 @@ def load_profile_file(name: str, target_state=None, ext=CONFIG_EXT, dir_path=_DE
 
     with open(fn, "r", encoding="utf-8") as f:
         data = json.load(f)
+
+    if not isinstance(data, dict):
+        raise ValueError(f"設定檔格式錯誤 (非 JSON 物件)：{fn}")
 
     target_state.variables.clear()
     target_state.variables.update(data.get("variables") or {})
@@ -95,4 +121,3 @@ def load_profile_file(name: str, target_state=None, ext=CONFIG_EXT, dir_path=_DE
         target_state.periodic_tasks.append(pt)
 
     return data
-

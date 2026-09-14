@@ -197,13 +197,13 @@ class AppState:
     def load_dict(self, data: dict):
         """從字典載入設定資料至編輯器草稿"""
         self.variables.clear()
-        self.variables.update(copy.deepcopy(data.get("variables", {})))
+        self.variables.update(copy.deepcopy(data.get("variables") or {}))
         self.combos.clear()
-        self.combos.extend(copy.deepcopy(data.get("combos", [])))
+        self.combos.extend(copy.deepcopy(data.get("combos") or []))
         self.steps.clear()
-        self.steps.extend(copy.deepcopy(data.get("steps", [])))
+        self.steps.extend(copy.deepcopy(data.get("steps") or []))
         self.periodic_tasks.clear()
-        self.periodic_tasks.extend(copy.deepcopy(data.get("periodic_tasks", [])))
+        self.periodic_tasks.extend(copy.deepcopy(data.get("periodic_tasks") or []))
 
     def get_data_snapshot(self) -> str:
         """獲取當前編輯器資料的序列化字串，用於精確比對未儲存變更"""
@@ -291,6 +291,12 @@ def has_unsaved_changes(last_saved_snapshot: str, target_state=None) -> bool:
     if hasattr(s, "has_unsaved_changes"):
         return s.has_unsaved_changes(last_saved_snapshot)
     return app_state.has_unsaved_changes(last_saved_snapshot)
+
+def __getattr__(name: str):
+    """向後相容模組層級屬性存取 (例如 state.variables, state.combos, state.steps 等)"""
+    if hasattr(app_state, name):
+        return getattr(app_state, name)
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
 # ==============================================================================

@@ -128,19 +128,12 @@ class App(tk.Tk):
 
         self.build_left_panel()
         self.build_right_panel()
-        self.refresh_window_dropdown()
-        self.refresh_profiles()
-        self.load_config()
-        self.last_saved_snapshot = self.get_current_data_snapshot()
-        self.refresh_variables_table()
-        self.update_periodic_list()
-        self.track_mouse_live()
 
         # 執行緒安全的 UI 通訊佇列
         self.ui_task_queue = queue.Queue()
         self.poll_ui_queues()
 
-        # EventBus Subscriptions
+        # EventBus Subscriptions (必須在 load_config 前註冊，確保初始載入事件能正確觸發 UI 更新)
         EventBus.subscribe(AppEvents.VARS_CHANGED, self._on_vars_changed)
         EventBus.subscribe(AppEvents.COMBOS_CHANGED, self._on_combos_changed)
         EventBus.subscribe(AppEvents.COMBO_ACTIONS_CHANGED, self._on_combo_actions_changed)
@@ -153,6 +146,14 @@ class App(tk.Tk):
         EventBus.subscribe(AppEvents.HIGHLIGHT_PENDING_STEP, self.highlight_pending_step)
         EventBus.subscribe(AppEvents.HIGHLIGHT_PERIODIC_TASK, self.highlight_active_periodic_task)
         EventBus.subscribe(AppEvents.CLEAR_HIGHLIGHT_PERIODIC_TASK, self.clear_active_periodic_task_highlight)
+
+        self.refresh_window_dropdown()
+        self.refresh_profiles()
+        self.load_config()
+        self.last_saved_snapshot = self.get_current_data_snapshot()
+        self.refresh_variables_table()
+        self.update_periodic_list()
+        self.track_mouse_live()
 
     def apply_app_icon(self, target=None):
         """為指定視窗 (預設為主視窗) 套用應用程式圖示 (支援 Windows .ico 與通用 .png)"""
@@ -321,7 +322,7 @@ class App(tk.Tk):
                 return
             elif ans is True:
                 try:
-                    config_manager.save_profile_file(curr_profile, state, CONFIG_EXT)
+                    config_manager.save_profile_file(curr_profile, state.app_state, CONFIG_EXT)
                 except Exception as e:
                     if not messagebox.askyesno("儲存失敗", f"儲存失敗 ({e})，是否仍要強制退出？", parent=self):
                         return
@@ -792,7 +793,7 @@ class App(tk.Tk):
             if not messagebox.askyesno("檔案覆蓋確認", f"設定檔「{name}」已存在！\n請問是否確認覆蓋原有設定？", parent=self):
                 return
         try:
-            config_manager.save_profile_file(name, state, CONFIG_EXT)
+            config_manager.save_profile_file(name, state.app_state, CONFIG_EXT)
             self.refresh_profiles(select_name=name)
             self.last_saved_snapshot = self.get_current_data_snapshot()
             self.set_status(f"已新建並儲存至 {fn}")
@@ -808,7 +809,7 @@ class App(tk.Tk):
             if not messagebox.askyesno("檔案覆蓋確認", f"請問是否確認覆蓋「{name}」的原有設定？", parent=self):
                 return self.set_status("已取消儲存")
         try:
-            config_manager.save_profile_file(name, state, CONFIG_EXT)
+            config_manager.save_profile_file(name, state.app_state, CONFIG_EXT)
             self.set_status(f"已成功儲存至 {fn}")
             self.refresh_profiles(select_name=name)
             self.last_saved_snapshot = self.get_current_data_snapshot()
@@ -824,7 +825,7 @@ class App(tk.Tk):
         fn = f"{name}{CONFIG_EXT}"
         if not os.path.exists(fn): return self.set_status(f"找不到檔案：{fn}")
         try:
-            config_manager.load_profile_file(name, state, CONFIG_EXT)
+            config_manager.load_profile_file(name, state.app_state, CONFIG_EXT)
             self.refresh_variables_table()
             self.refresh_combo_list()
             self.refresh_combo_actions_list()
