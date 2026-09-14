@@ -10,6 +10,8 @@ from theme import CONFIG_EXT
 # 負責 .shm 設定檔之檔案列表讀取、資料序列化儲存、載入與 Schema 向後相容補齊
 # ==============================================================================
 
+_DEFAULT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 def sanitize_profile_name(name: str) -> str:
     """過濾 Windows 與常見作業系統之非法檔名字元"""
     s = name.strip()
@@ -17,14 +19,14 @@ def sanitize_profile_name(name: str) -> str:
         s = s.replace(ch, "")
     return s.strip()
 
-def get_profile_files(ext=CONFIG_EXT, dir_path=".") -> list:
+def get_profile_files(ext=CONFIG_EXT, dir_path=_DEFAULT_DIR) -> list:
     """獲取指定目錄下所有設定檔名稱列表 (已去除副檔名並排序)"""
     try:
         return sorted([f[:-len(ext)] for f in os.listdir(dir_path) if f.endswith(ext)])
     except OSError:
         return []
 
-def ensure_default_profile(ext=CONFIG_EXT, dir_path="."):
+def ensure_default_profile(ext=CONFIG_EXT, dir_path=_DEFAULT_DIR):
     """若無任何設定檔則建立預設 default 設定檔 (原子寫入)"""
     fn = os.path.join(dir_path, f"default{ext}")
     if not os.path.exists(fn):
@@ -36,7 +38,7 @@ def ensure_default_profile(ext=CONFIG_EXT, dir_path="."):
         except OSError:
             pass
 
-def save_profile_file(name: str, app_state=None, ext=CONFIG_EXT, dir_path=".") -> str:
+def save_profile_file(name: str, app_state=None, ext=CONFIG_EXT, dir_path=_DEFAULT_DIR) -> str:
     """將狀態資料儲存為 .shm 設定檔 (採用暫存檔 + 原子替換保護，防止寫入中斷損毀)"""
     target_state = app_state if app_state is not None else state
     safe_name = sanitize_profile_name(name)
@@ -55,7 +57,7 @@ def save_profile_file(name: str, app_state=None, ext=CONFIG_EXT, dir_path=".") -
     os.replace(temp_fn, fn)
     return fn
 
-def load_profile_file(name: str, app_state=None, ext=CONFIG_EXT, dir_path=".") -> dict:
+def load_profile_file(name: str, app_state=None, ext=CONFIG_EXT, dir_path=_DEFAULT_DIR) -> dict:
     """從 .shm 設定檔載入設定資料，並自動補齊缺失之欄位與 ID (具備 null 值防禦)"""
     target_state = app_state if app_state is not None else state
     safe_name = sanitize_profile_name(name)
