@@ -636,7 +636,7 @@ class App(tk.Tk):
                 rx, ry, rel = pt.x, pt.y, True
             else:
                 coord_desc = f"({pos_x}, {pos_y})"
-                rx, ry, rel = pos.x, pos.y, False
+                rx, ry, rel = pos_x, pos_y, False
 
             lbl_hud.config(text=f"【設定{btn_cn}點擊】滑鼠指住目標 -> 按 [SPACE 空白鍵] 確定！(坐標: {coord_desc} | ESC 取消)")
 

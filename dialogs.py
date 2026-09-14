@@ -108,7 +108,7 @@ def prompt_variable_dialog(app, edit_name=None):
     type_display_map = {"coord": "[坐標]", "key": "[按鍵]", "wait": "[停頓]"}
     type_key_map = {"[坐標]": "coord", "[按鍵]": "key", "[停頓]": "wait", "坐標": "coord", "按鍵": "key", "停頓": "wait"}
 
-    dialog = _create_dialog(app, title, 380, 340)
+    dialog = _create_dialog(app, title, 380, 360)
 
     f_main = tk.Frame(dialog, bg=UITheme.BG_PANEL, padx=16, pady=12)
     f_main.pack(fill="both", expand=True)
@@ -129,12 +129,12 @@ def prompt_variable_dialog(app, edit_name=None):
     tk.Label(r_type, text="變數種類:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL_BOLD, width=8, anchor="e").pack(side="left", padx=(0, 8))
     curr_type_disp = type_display_map.get(orig_type, "[坐標]")
     var_type = tk.StringVar(value=curr_type_disp)
-    cbo_type = ttk.Combobox(r_type, textvariable=var_type, values=["[坐標]", "[按鍵]", "[停頓]"], state="readonly" if not is_edit else "disabled", font=UITheme.FONT_NORMAL)
+    cbo_type = ttk.Combobox(r_type, textvariable=var_type, values=["[坐標]", "[按鍵]", "[停頓]"], state="readonly", font=UITheme.FONT_NORMAL)
     cbo_type.pack(side="left", fill="x", expand=True)
 
     # 數值動態容器
     f_val_box = tk.LabelFrame(f_main, text=" 數值設定 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=10, pady=8)
-    f_val_box.pack(fill="both", expand=True, pady=(0, 10))
+    f_val_box.pack(fill="x", pady=(0, 10))
 
     if orig_type == "coord" and isinstance(orig_val, dict):
         init_x = str(orig_val.get("x", 0))
