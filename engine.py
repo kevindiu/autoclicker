@@ -237,24 +237,33 @@ def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, 
             if hasattr(app, "append_log"):
                 app.append_log("定時", f"{round_prefix}任務【{task_name}】到期觸發 (每 {interval}s)")
 
-            # 定時任務執行期間，清除掛機流程清單之高亮，避免使用者誤以為掛機步驟仍在執行
+            # 定時任務執行期間：
+            # 1. 清除掛機流程清單之高亮，避免使用者誤以為掛機步驟仍在執行
             if hasattr(app, "clear_active_step_highlight"):
                 app.clear_active_step_highlight()
 
+            # 2. 高亮當前執行的定時任務卡片
+            if hasattr(app, "highlight_active_periodic_task"):
+                app.highlight_active_periodic_task(idx)
+
             sync_periodic_timers(periodic_tasks_runtime, active_task_id=pt_id)
 
-            # 統一透過 dispatch_action 執行
-            ok = dispatch_action(
-                app,
-                act,
-                f"[定時:{task_name}]",
-                current_vars=current_vars,
-                current_combos=current_combos,
-                depth=0,
-                visited_set=set(),
-                is_test=False,
-                round_prefix=round_prefix
-            )
+            try:
+                # 統一透過 dispatch_action 執行
+                ok = dispatch_action(
+                    app,
+                    act,
+                    f"[定時:{task_name}]",
+                    current_vars=current_vars,
+                    current_combos=current_combos,
+                    depth=0,
+                    visited_set=set(),
+                    is_test=False,
+                    round_prefix=round_prefix
+                )
+            finally:
+                if hasattr(app, "clear_active_periodic_task_highlight"):
+                    app.clear_active_periodic_task_highlight()
             pt["last_run"] = time.time()
             sync_periodic_timers(periodic_tasks_runtime, active_task_id=None)
             if not ok:

@@ -571,7 +571,10 @@ class RightPanel(tk.Frame):
             font=UITheme.FONT_NORMAL,
             exportselection=False
         )
+        sc_step = tk.Scrollbar(f_list_s, orient="vertical", command=self.step_listbox.yview)
+        sc_step.pack(side="right", fill="y")
         self.step_listbox.pack(side="left", fill="both", expand=True)
+        self.step_listbox.config(yscrollcommand=sc_step.set)
 
         self.lbl_empty_steps = tk.Label(
             self.step_listbox,
@@ -595,9 +598,6 @@ class RightPanel(tk.Frame):
         self.step_listbox.bind("<Button-1>", _on_step_list_click)
         self.step_listbox.bind("<Double-Button-1>", lambda e: app.edit_selected_main_step())
         f_list_s.bind("<Button-1>", lambda e: self.step_listbox.selection_clear(0, tk.END))
-        sc_step = tk.Scrollbar(f_list_s, orient="vertical", command=self.step_listbox.yview)
-        sc_step.pack(side="right", fill="y")
-        self.step_listbox.config(yscrollcommand=sc_step.set)
 
         # 2-B. 右側：定時週期任務清單
         f_pt = tk.LabelFrame(f_middle_split, text=" 定時週期任務 ", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_TITLE, padx=4, pady=4)

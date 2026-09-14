@@ -311,6 +311,7 @@ class App(tk.Tk):
                     except (tk.TclError, AttributeError):
                         pass
                 self.clear_active_step_highlight()
+                self.clear_active_periodic_task_highlight()
         self.run_on_ui_thread(_u)
 
     def run_in_test_thread(self, task_name, task_fn):
@@ -517,6 +518,22 @@ class App(tk.Tk):
                 except tk.TclError:
                     pass
         self.run_on_ui_thread(_hl)
+
+    def highlight_active_periodic_task(self, idx):
+        """在主畫面右側定時任務卡片清單中以專屬執行狀態 (翠綠光暈/深綠底) 高亮當前執行的定時任務"""
+        def _hl():
+            if self.is_closing: return
+            if hasattr(self, "periodic_listbox") and hasattr(self.periodic_listbox, "highlight_active_task"):
+                self.periodic_listbox.highlight_active_task(idx)
+        self.run_on_ui_thread(_hl)
+
+    def clear_active_periodic_task_highlight(self):
+        """清除定時任務卡片的執行高亮狀態"""
+        def _clear():
+            if self.is_closing: return
+            if hasattr(self, "periodic_listbox") and hasattr(self.periodic_listbox, "clear_active_highlight"):
+                self.periodic_listbox.clear_active_highlight()
+        self.run_on_ui_thread(_clear)
 
     # ======================= 次層級對話框委派 =======================
     def prompt_edit_combo_dialog(self, combo_step, step_idx=None):
@@ -1441,7 +1458,15 @@ class App(tk.Tk):
         pt = state.periodic_tasks[idx]
         t_name = pt.get("name", "定時任務")
         act = pt.get("action", {})
-        self.run_in_test_thread(f"定時任務【{t_name}】", lambda: self.execute_single_action(act, f"[定時試跑: {t_name}]"))
+
+        def _do_test_pt():
+            try:
+                self.highlight_active_periodic_task(idx)
+                self.execute_single_action(act, f"[定時試跑: {t_name}]")
+            finally:
+                self.clear_active_periodic_task_highlight()
+
+        self.run_in_test_thread(f"定時任務【{t_name}】", _do_test_pt)
 
     # ======================= 動作執行調度器委派 =======================
     def dispatch_action(self, act, parent_desc, current_vars=None, current_combos=None, depth=0, visited_set=None, is_test=False, round_prefix=""):

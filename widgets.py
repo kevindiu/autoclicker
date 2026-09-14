@@ -125,6 +125,7 @@ class PeriodicTaskCardView(tk.Frame):
         self.on_double_click = on_double_click
         self.on_toggle = on_toggle
         self.selected_idx = None
+        self.active_task_idx = None
         self.tasks = []
         self.card_widgets = []
         self._current_width = 240
@@ -138,8 +139,8 @@ class PeriodicTaskCardView(tk.Frame):
         self.canvas_window = self.canvas.create_window((0, 0), window=self.body_frame, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
 
-        self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
+        self.canvas.pack(side="left", fill="both", expand=True)
 
         self.body_frame.bind("<Configure>", self._on_body_configure)
         self.canvas.bind("<Configure>", self._on_canvas_configure)
@@ -403,7 +404,7 @@ class PeriodicTaskCardView(tk.Frame):
         self.card_widgets.append(card_data)
 
     def _on_card_hover(self, idx, entering):
-        if self.selected_idx == idx:
+        if self.selected_idx == idx or self.active_task_idx == idx:
             return
         if 0 <= idx < len(self.card_widgets):
             card_info = self.card_widgets[idx]
@@ -431,16 +432,28 @@ class PeriodicTaskCardView(tk.Frame):
             return
         if self.selected_idx is not None and 0 <= self.selected_idx < len(self.card_widgets):
             old = self.card_widgets[self.selected_idx]
-            self._apply_card_style(old, is_selected=False)
+            self._apply_card_style(old, is_selected=False, is_active=(self.active_task_idx == self.selected_idx))
 
         self.selected_idx = idx
         curr = self.card_widgets[idx]
-        self._apply_card_style(curr, is_selected=True)
+        self._apply_card_style(curr, is_selected=True, is_active=(self.active_task_idx == idx))
 
-    def _apply_card_style(self, card_info, is_selected):
-        bg = self.select_bg if is_selected else card_info["normal_bg"]
-        border = "#38bdf8" if is_selected else card_info["normal_border"]
-        hl_thick = 2 if is_selected else 1
+    def _apply_card_style(self, card_info, is_selected=False, is_active=False):
+        if is_active:
+            # 執行中狀態：最高優先級高亮 (採用專屬翠綠執行邊框與光暈深底)
+            bg = "#064e3b"        # 祖母綠深底 (代表定時任務運行)
+            border = "#34d399"    # 亮翠綠邊框
+            hl_thick = 2
+        elif is_selected:
+            # 使用者選取狀態
+            bg = self.select_bg   # #1e3a5f 深藍
+            border = "#38bdf8"    # 天藍邊框
+            hl_thick = 2
+        else:
+            # 預設正常狀態
+            bg = card_info["normal_bg"]
+            border = card_info["normal_border"]
+            hl_thick = 1
 
         card_info["frame"].config(bg=bg, highlightbackground=border, highlightthickness=hl_thick)
         card_info["hdr"].config(bg=bg)
@@ -448,6 +461,24 @@ class PeriodicTaskCardView(tk.Frame):
         card_info["lbl_title"].config(bg=bg)
         if card_info["lbl_act"]:
             card_info["lbl_act"].config(bg=bg)
+
+    def highlight_active_task(self, idx):
+        """以專屬執行狀態高亮指定定時任務卡片，並自動滾動讓其可見"""
+        if self.active_task_idx is not None and self.active_task_idx != idx:
+            self.clear_active_highlight()
+
+        if 0 <= idx < len(self.card_widgets):
+            self.active_task_idx = idx
+            card_info = self.card_widgets[idx]
+            self._apply_card_style(card_info, is_selected=(self.selected_idx == idx), is_active=True)
+            self.see(idx)
+
+    def clear_active_highlight(self):
+        """清除定時任務的執行高亮，還原為選取或正常背景"""
+        if self.active_task_idx is not None and 0 <= self.active_task_idx < len(self.card_widgets):
+            card_info = self.card_widgets[self.active_task_idx]
+            self._apply_card_style(card_info, is_selected=(self.selected_idx == self.active_task_idx), is_active=False)
+        self.active_task_idx = None
 
     def curselection(self):
         return (self.selected_idx,) if self.selected_idx is not None else ()
