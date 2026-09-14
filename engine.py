@@ -169,11 +169,9 @@ def dispatch_action(
         if state.app_state.stop_event.is_set():
             return False
         if current_vars is None:
-            with state.app_state.steps_lock:
-                current_vars = copy.deepcopy(state.app_state.variables)
+            current_vars = state.app_state.test_variables
         if current_combos is None:
-            with state.app_state.steps_lock:
-                current_combos = copy.deepcopy(state.app_state.combos)
+            current_combos = state.app_state.test_combos
 
     use_bg = state.app_state.use_bg and IS_WINDOWS and (state.app_state.target_hwnd is not None)
     off_x = state.app_state.offset_x
@@ -527,10 +525,9 @@ def macro_worker_loop():
 def test_run_execution_flow_worker():
     """一次性試跑整個掛機執行流程的背景工作函式"""
     try:
-        with state.app_state.steps_lock:
-            steps_copy = copy.deepcopy(state.app_state.steps)
-            combos_copy = copy.deepcopy(state.app_state.combos)
-            vars_copy = copy.deepcopy(state.app_state.variables)
+        steps_copy = state.app_state.test_steps
+        combos_copy = state.app_state.test_combos
+        vars_copy = state.app_state.test_variables
 
         for idx, step in enumerate(steps_copy):
             if state.app_state.stop_event.is_set():

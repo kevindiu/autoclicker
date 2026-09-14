@@ -56,8 +56,12 @@ class AppState:
         self.active_combos: List[ComboDict] = []
         self.active_variables: Dict[str, VariableDict] = {}
         self.active_periodic_tasks: List[PeriodicTaskDict] = []
+        # 3. 試跑專屬唯讀快照 (Test Run Read-Only Snapshots)
+        self.test_steps: List[ActionDict] = []
+        self.test_combos: List[ComboDict] = []
+        self.test_variables: Dict[str, VariableDict] = {}
 
-        # 3. 執行期旗標與執行緒同步物件 (Flags & Thread Synchronization)
+        # 4. 執行期旗標與執行緒同步物件 (Flags & Thread Synchronization)
         self.running_lock = threading.RLock()
         self._running = False
         self._is_testing = False
@@ -162,6 +166,10 @@ class AppState:
             self.currently_held_keys.clear()
         with self.periodic_timers_lock:
             self.periodic_timers.clear()
+        
+        self.test_steps.clear()
+        self.test_combos.clear()
+        self.test_variables.clear()
 
     def reset(self):
         """完全重設狀態 (適用於單元測試環境隔離與全新載入)"""

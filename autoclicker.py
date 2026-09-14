@@ -472,6 +472,11 @@ class App(tk.Tk):
         state.app_state.stop_event.clear()
         self.set_running_ui(True, is_test=True)
 
+        import copy
+        state.app_state.test_steps = copy.deepcopy(state.app_state.steps)
+        state.app_state.test_combos = copy.deepcopy(state.app_state.combos)
+        state.app_state.test_variables = copy.deepcopy(state.app_state.variables)
+
         def _worker():
             try:
                 self.append_log("試跑", f"▶ 正在試跑: {task_name}")
@@ -483,6 +488,9 @@ class App(tk.Tk):
             except Exception as e:
                 self.append_log("警示", f"✕ {task_name} 試跑異常: {e}")
             finally:
+                state.app_state.test_steps.clear()
+                state.app_state.test_combos.clear()
+                state.app_state.test_variables.clear()
                 state.app_state.is_testing = False
                 emergency_release_all()
                 self.set_running_ui(False)
@@ -891,7 +899,7 @@ class App(tk.Tk):
 
     # --- 常用變數管理 (VarController) ---
     def refresh_variables_table(self, select_name=None):
-        return self.var_ctrl.refresh_variables_table(select_name)
+        EventBus.emit(AppEvents.VARS_CHANGED, select_name)
 
     def add_variable_dialog(self):
         return self.var_ctrl.add_variable_dialog()
@@ -919,10 +927,10 @@ class App(tk.Tk):
         return self.combo_ctrl.get_selected_combo_idx()
 
     def refresh_call_combo_dropdown(self):
-        return self.combo_ctrl.refresh_call_combo_dropdown()
+        self._refresh_call_combo_dropdown()
 
     def refresh_combo_list(self, select_idx=None):
-        return self.combo_ctrl.refresh_combo_list(select_idx)
+        EventBus.emit(AppEvents.COMBOS_CHANGED, select_idx)
 
     def on_combo_select(self, event=None):
         return self.combo_ctrl.on_combo_select(event)
@@ -949,7 +957,7 @@ class App(tk.Tk):
         return self.combo_ctrl.get_selected_action_idx()
 
     def refresh_combo_actions_list(self, select_idx=None):
-        return self.combo_ctrl.refresh_combo_actions_list(select_idx)
+        EventBus.emit(AppEvents.COMBO_ACTIONS_CHANGED, select_idx)
 
     def sync_combo_actions_to_main_steps(self, combo_name, new_actions):
         return self.combo_ctrl.sync_combo_actions_to_main_steps(combo_name, new_actions)
@@ -1002,7 +1010,7 @@ class App(tk.Tk):
         return self.step_ctrl.get_main_insert_index()
 
     def update_step_list(self, select_idx=None):
-        return self.step_ctrl.update_step_list(select_idx)
+        EventBus.emit(AppEvents.STEPS_CHANGED, select_idx)
 
     def add_click_action(self, is_combo=False):
         return self.step_ctrl.add_click_action(is_combo=is_combo)
@@ -1045,7 +1053,7 @@ class App(tk.Tk):
 
     # --- 定時週期任務管理 (PeriodicTaskController) ---
     def update_periodic_list(self, select_idx=None):
-        return self.periodic_ctrl.update_periodic_list(select_idx)
+        EventBus.emit(AppEvents.PERIODIC_TASKS_CHANGED, select_idx)
 
     def add_new_periodic_task(self):
         return self.periodic_ctrl.add_new_periodic_task()
