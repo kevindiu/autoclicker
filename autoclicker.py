@@ -737,7 +737,7 @@ class App(tk.Tk):
         self.refresh_variables_table()
         self.refresh_combo_actions_list()
         self.update_step_list()
-        self.append_log("系統", f"🗑 已刪除變數：【{var_name}】")
+        self.append_log("系統", f"已刪除變數：【{var_name}】")
 
     def move_variable(self, delta):
         sel = self.tree_vars.selection()
@@ -964,7 +964,7 @@ class App(tk.Tk):
         self.refresh_combo_list(select_idx=new_sel)
         self.on_combo_select()
         self.update_step_list()
-        self.append_log("系統", f"🗑 已刪除技能組合【{name}】（內含 {act_cnt} 個動作）")
+        self.append_log("系統", f"已刪除技能組合【{name}】（內含 {act_cnt} 個動作）")
         self.trigger_hot_reload()
 
     def add_combo_to_main_steps(self):
@@ -1079,7 +1079,7 @@ class App(tk.Tk):
         if isinstance(removed_item, dict):
             item_desc = f": {format_action_summary(removed_item)}"
 
-        self.append_log("系統", f"🗑 已移除{item_name} #{idx+1}{item_desc}")
+        self.append_log("系統", f"已移除{item_name} #{idx+1}{item_desc}")
         self.trigger_hot_reload()
 
     def _clear_list_items(self, lst, confirm_msg, refresh_cb, status_msg):
@@ -1088,7 +1088,7 @@ class App(tk.Tk):
             cnt = len(lst)
             lst.clear()
             refresh_cb(None)
-            self.append_log("系統", f"🗑 已清空{status_msg}（共移除 {cnt} 個步驟/動作）")
+            self.append_log("系統", f"已清空{status_msg}（共移除 {cnt} 個步驟/動作）")
             self.trigger_hot_reload()
 
     def _insert_action_to_target(self, action_dict, is_combo=False, success_msg=""):
@@ -1420,7 +1420,7 @@ class App(tk.Tk):
         del state.periodic_tasks[idx]
         new_sel = min(idx, len(state.periodic_tasks) - 1) if state.periodic_tasks else None
         self.update_periodic_list(new_sel)
-        self.append_log("系統", f"🗑 已刪除定時任務 #{idx+1}：【{name}】")
+        self.append_log("系統", f"已刪除定時任務 #{idx+1}：【{name}】")
         self.trigger_hot_reload()
 
     def test_run_selected_periodic_task(self):

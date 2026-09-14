@@ -575,7 +575,7 @@ class RightPanel(tk.Frame):
 
         self.lbl_empty_steps = tk.Label(
             self.step_listbox,
-            text="📋 尚無掛機步驟\n\n點擊上方「+ 瞄準取點」\n或雙擊左側組合加入步驟",
+            text="☰ 尚無掛機步驟\n\n點擊上方「+ 瞄準取點」\n或雙擊左側組合加入步驟",
             bg=UITheme.BG_DARK,
             fg="#64748b",
             font=UITheme.FONT_SMALL,

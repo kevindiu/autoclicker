@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import time
 import uuid
@@ -10,7 +11,11 @@ from theme import CONFIG_EXT
 # 負責 .shm 設定檔之檔案列表讀取、資料序列化儲存、載入與 Schema 向後相容補齊
 # ==============================================================================
 
-_DEFAULT_DIR = os.path.dirname(os.path.abspath(__file__))
+# 確保設定檔存放在與執行檔 (.exe) 或主腳本同一目錄下 (相容 PyInstaller 打包與源碼執行)
+if getattr(sys, "frozen", False):
+    _DEFAULT_DIR = os.path.dirname(os.path.abspath(sys.executable))
+else:
+    _DEFAULT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def sanitize_profile_name(name: str) -> str:
     """過濾 Windows 與常見作業系統之非法檔名字元"""
