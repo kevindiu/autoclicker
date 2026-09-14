@@ -320,9 +320,8 @@ def check_and_run_due_periodic_tasks(
             task_name = pt.get("name", "").strip() or "定時任務"
             pt_id = pt.get("id") or f"pt_idx_{idx}"
             act = pt.get("action", {})
-            if hasattr(app, "append_log"):
-                log_msg = strategy.get_log_message(pt, ctx, round_prefix)
-                app.append_log("定時", log_msg)
+            log_msg = strategy.get_log_message(pt, ctx, round_prefix)
+            EventBus.emit(AppEvents.LOG_MESSAGE, "定時", log_msg)
             # 定時任務執行期間：
             # 1. 若有指定下一動 (next_step_idx)，在主畫面流程清單中以待命暖金色標記即將接續執行的動作，
             #    讓使用者一眼看清定時任務完結後會執行邊個動作；否則清除高亮
@@ -522,9 +521,8 @@ def macro_worker_loop():
             state.app_state.periodic_timers.clear()
         emergency_release_all()
         
-        if hasattr(app, "append_log"):
-            completed = round_idx - 1 if round_idx > 1 else (1 if round_idx == 1 and not state.app_state.stop_event.is_set() else 0)
-            app.append_log("系統", f"⏹ 巨集循環結束 (累計運行 {completed} 輪)")
+        completed = round_idx - 1 if round_idx > 1 else (1 if round_idx == 1 and not state.app_state.stop_event.is_set() else 0)
+        EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"⏹ 巨集循環結束 (累計運行 {completed} 輪)")
 
 def test_run_execution_flow_worker():
     """一次性試跑整個掛機執行流程的背景工作函式"""

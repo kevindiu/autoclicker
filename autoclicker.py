@@ -148,7 +148,11 @@ class App(tk.Tk):
         EventBus.subscribe(AppEvents.PERIODIC_TASKS_CHANGED, self._on_periodic_tasks_changed)
         EventBus.subscribe(AppEvents.STATUS_MESSAGE, self.set_status)
         EventBus.subscribe(AppEvents.LOG_MESSAGE, self.append_log)
-
+        EventBus.subscribe(AppEvents.HIGHLIGHT_STEP, self.highlight_active_step)
+        EventBus.subscribe(AppEvents.CLEAR_HIGHLIGHT_STEP, self.clear_active_step_highlight)
+        EventBus.subscribe(AppEvents.HIGHLIGHT_PENDING_STEP, self.highlight_pending_step)
+        EventBus.subscribe(AppEvents.HIGHLIGHT_PERIODIC_TASK, self.highlight_active_periodic_task)
+        EventBus.subscribe(AppEvents.CLEAR_HIGHLIGHT_PERIODIC_TASK, self.clear_active_periodic_task_highlight)
 
     def apply_app_icon(self, target=None):
         """為指定視窗 (預設為主視窗) 套用應用程式圖示 (支援 Windows .ico 與通用 .png)"""
