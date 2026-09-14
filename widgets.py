@@ -176,14 +176,16 @@ class PeriodicTaskCardView(tk.Frame):
         if len(self.tasks) == 0:
             if not self.empty_label:
                 self.empty_label = tk.Label(
-                    self.body_frame,
+                    self.canvas,
                     text="⏱ 尚無定時任務\n\n點擊下方 [+ 新增] 建立週期任務\n(長名稱自動換行顯示)",
                     bg=self.bg,
                     fg="#64748b",
                     font=UITheme.FONT_SMALL,
-                    justify="center"
+                    justify="center",
+                    cursor="arrow"
                 )
-                self.empty_label.pack(expand=True, fill="both", pady=30)
+                self.empty_label.place(relx=0.5, rely=0.5, anchor="center")
+                self.empty_label.bind("<Button-1>", lambda e: self.select(None))
                 self.bind_mousewheel(self.empty_label)
         else:
             if self.empty_label:

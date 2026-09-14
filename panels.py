@@ -702,7 +702,7 @@ class RightPanel(tk.Frame):
 
         self.txt_log = tk.Text(
             f_log_box,
-            height=10,
+            height=13,
             bg=UITheme.BG_DARK,
             fg=UITheme.TEXT_MAIN,
             font=UITheme.FONT_SMALL,
@@ -737,7 +737,7 @@ class RightPanel(tk.Frame):
         self.txt_log.tag_config("text_試跑", foreground="#c7d2fe")
 
         pw_right.add(f_middle_split, minsize=140)
-        pw_right.add(f_log_panel, minsize=100, height=230)
+        pw_right.add(f_log_panel, minsize=140, height=295)
 
     def get_widgets(self):
         """明確定義右欄面板所管理的公開 UI 控制項字典"""
