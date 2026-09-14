@@ -368,7 +368,7 @@ class App(tk.Tk):
                 pass
 
         tasks_executed = 0
-        while True:
+        while tasks_executed < 50:
             try:
                 fn = self.ui_task_queue.get_nowait()
             except queue.Empty:
@@ -377,7 +377,7 @@ class App(tk.Tk):
                 fn()
                 tasks_executed += 1
             except Exception as e:
-                self.append_log(LogTag.ALERT, f"UI 任務執行失敗: {e}")
+                self.append_log("警示", f"UI 任務執行失敗: {e}")
 
         # 定時週期任務即時倒數與設定值更新 (每 200ms 刷新一次)
         now_ts = time.time()
