@@ -109,55 +109,6 @@ class BaseController:
 class VarController(BaseController):
     """變數管理控制器"""
 
-    def refresh_variables_table(self, select_name=None):
-        """重新整理變數表格一覽與關聯下拉選單"""
-        if not hasattr(self.app, "tree_vars"):
-            return
-        for item in self.app.tree_vars.get_children():
-            self.app.tree_vars.delete(item)
-
-        type_display = {"coord": "[坐標]", "key": "[按鍵]", "wait": "[停頓]"}
-
-        for name, data in state.variables.items():
-            t_key = data.get("type", "coord")
-            t_disp = type_display.get(t_key, t_key)
-            val = data.get("value")
-
-            if t_key == "coord":
-                if isinstance(val, dict):
-                    btn_tag = "右鍵·" if val.get("btn") == "right" else "左鍵·"
-                    v_str = f"{btn_tag}({val.get('x', 0)}, {val.get('y', 0)})"
-                else:
-                    v_str = str(val)
-            elif t_key == "key":
-                v_str = str(val).upper()
-            elif t_key == "wait":
-                v_str = f"{val} 秒"
-            else:
-                v_str = str(val)
-
-            self.app.tree_vars.insert("", "end", iid=name, values=(name, t_disp, v_str))
-
-        if select_name and hasattr(self.app.tree_vars, "select"):
-            self.app.tree_vars.select(select_name)
-
-        var_names = list(state.variables.keys())
-        if hasattr(self.app, "cbo_combo_add_var"):
-            self.app.cbo_combo_add_var["values"] = var_names
-            if var_names:
-                if self.app.var_combo_ref_var.get() not in var_names:
-                    self.app.cbo_combo_add_var.current(0)
-            else:
-                self.app.var_combo_ref_var.set("")
-
-        if hasattr(self.app, "cbo_step_add_var"):
-            self.app.cbo_step_add_var["values"] = var_names
-            if var_names:
-                if self.app.var_step_ref_var.get() not in var_names:
-                    self.app.cbo_step_add_var.current(0)
-            else:
-                self.app.var_step_ref_var.set("")
-
     def add_variable_dialog(self):
         """新增變數入口"""
         self.app.prompt_variable_dialog(None)
@@ -180,7 +131,7 @@ class VarController(BaseController):
             return
         state.variables.pop(var_name, None)
         self.trigger_hot_reload()
-        self.refresh_variables_table()
+        EventBus.emit(AppEvents.VARS_CHANGED)
         EventBus.emit(AppEvents.COMBO_ACTIONS_CHANGED, )
         EventBus.emit(AppEvents.STEPS_CHANGED, )
         EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"🗑 已刪除變數：【{var_name}】")
@@ -203,7 +154,7 @@ class VarController(BaseController):
             with state.steps_lock:
                 state.active_variables = copy.deepcopy(state.variables)
                 state.reload_requested = True
-            self.refresh_variables_table(select_name=sel_name)
+            EventBus.emit(AppEvents.VARS_CHANGED, select_name=sel_name)
             direction = "上移" if delta < 0 else "下移"
             EventBus.emit(AppEvents.STATUS_MESSAGE, f"已將變數【{sel_name}】{direction}至 #{target+1}")
             self.trigger_hot_reload()
@@ -287,40 +238,6 @@ class ComboController(BaseController):
         sel = self.app.combo_listbox.curselection()
         return sel[0] if sel and 0 <= sel[0] < len(state.combos) else None
 
-    def refresh_call_combo_dropdown(self):
-        idx = self.get_selected_combo_idx()
-        curr_name = state.combos[idx]["name"] if idx is not None else None
-        avail = [c["name"] for c in state.combos if c["name"] != curr_name]
-        if hasattr(self.app, "cbo_call_combo"):
-            self.app.cbo_call_combo["values"] = avail
-            if avail:
-                if self.app.var_combo_to_call.get() not in avail:
-                    self.app.cbo_call_combo.current(0)
-            else:
-                self.app.var_combo_to_call.set("")
-
-        all_combos = [c["name"] for c in state.combos]
-        if hasattr(self.app, "cbo_step_call_combo"):
-            self.app.cbo_step_call_combo["values"] = all_combos
-            if all_combos:
-                if self.app.var_step_combo_to_call.get() not in all_combos:
-                    self.app.cbo_step_call_combo.current(0)
-            else:
-                self.app.var_step_combo_to_call.set("")
-
-    def refresh_combo_list(self, select_idx=None):
-        if not hasattr(self.app, "combo_listbox"):
-            return
-        self.app.combo_listbox.delete(0, tk.END)
-        for i, c in enumerate(state.combos):
-            act_count = len(c.get("actions", []))
-            self.app.combo_listbox.insert(tk.END, f"{c['name']} ({act_count}動作)")
-        if select_idx is not None and 0 <= select_idx < len(state.combos):
-            self.app.combo_listbox.selection_set(select_idx)
-            self.on_combo_select()
-        else:
-            self.refresh_call_combo_dropdown()
-
     def on_combo_select(self, event=None):
         idx = self.get_selected_combo_idx()
         if idx is None:
@@ -328,14 +245,14 @@ class ComboController(BaseController):
                 self.app.lbl_combo_editing.config(text="【組合動作: 未選取】")
             if hasattr(self.app, "combo_act_listbox"):
                 self.app.combo_act_listbox.delete(0, tk.END)
-            self.refresh_call_combo_dropdown()
+            self.app._refresh_call_combo_dropdown()
             return
         c = state.combos[idx]
         self.app.var_combo_name.set(c["name"])
         if hasattr(self.app, "lbl_combo_editing"):
             self.app.lbl_combo_editing.config(text=f"【編輯: {c['name']}】")
-        self.refresh_combo_actions_list()
-        self.refresh_call_combo_dropdown()
+        EventBus.emit(AppEvents.COMBO_ACTIONS_CHANGED)
+        self.app._refresh_call_combo_dropdown()
 
     def add_new_combo(self):
         name = self.app.var_combo_name.get().strip()
@@ -350,7 +267,7 @@ class ComboController(BaseController):
             return
 
         state.combos.append({"name": name, "actions": []})
-        self.refresh_combo_list(select_idx=len(state.combos)-1)
+        EventBus.emit(AppEvents.COMBOS_CHANGED, select_idx=len(state.combos)-1)
         EventBus.emit(AppEvents.STATUS_MESSAGE, f"已建立新組合: [{name}]")
         self.trigger_hot_reload()
 
@@ -367,7 +284,7 @@ class ComboController(BaseController):
             new_name = f"{base_name}_副本{count}"
 
         state.combos.insert(idx + 1, {"name": new_name, "actions": copy.deepcopy(orig.get("actions", []))})
-        self.refresh_combo_list(select_idx=idx + 1)
+        EventBus.emit(AppEvents.COMBOS_CHANGED, select_idx=idx + 1)
         EventBus.emit(AppEvents.STATUS_MESSAGE, f"已複製組合 [{base_name}] 為 [{new_name}]")
         self.trigger_hot_reload()
 
@@ -409,7 +326,7 @@ class ComboController(BaseController):
 
         if sync_cnt > 0:
             EventBus.emit(AppEvents.STEPS_CHANGED, )
-        self.refresh_combo_list(select_idx=idx)
+        EventBus.emit(AppEvents.COMBOS_CHANGED, select_idx=idx)
         EventBus.emit(AppEvents.STATUS_MESSAGE, f"已將組合改名為 [{new_name}]，同步刷新了關聯步驟")
         self.trigger_hot_reload()
 
@@ -423,7 +340,7 @@ class ComboController(BaseController):
             return
         del state.combos[idx]
         new_sel = min(idx, len(state.combos) - 1) if state.combos else None
-        self.refresh_combo_list(select_idx=new_sel)
+        EventBus.emit(AppEvents.COMBOS_CHANGED, select_idx=new_sel)
         self.on_combo_select()
         EventBus.emit(AppEvents.STEPS_CHANGED, )
         EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"🗑 已刪除技能組合【{name}】（內含 {act_cnt} 個動作）")
@@ -448,7 +365,7 @@ class ComboController(BaseController):
         if c_idx is None:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先在組合清單點選要移動的組合！")
         def _refresh(target):
-            self.refresh_combo_list(select_idx=target)
+            EventBus.emit(AppEvents.COMBOS_CHANGED, select_idx=target)
         self._move_list_item(state.combos, c_idx, delta, _refresh, item_name="技能組合")
 
     # ================= 組合動作管理 =================
@@ -457,20 +374,6 @@ class ComboController(BaseController):
             return None
         sel = self.app.combo_act_listbox.curselection()
         return sel[0] if sel else None
-
-    def refresh_combo_actions_list(self, select_idx=None):
-        if not hasattr(self.app, "combo_act_listbox"):
-            return
-        self.app.combo_act_listbox.delete(0, tk.END)
-        idx = self.get_selected_combo_idx()
-        if idx is None:
-            return
-        actions = state.combos[idx].get("actions", [])
-        for i, act in enumerate(actions):
-            self.app.combo_act_listbox.insert(tk.END, format_action_summary(act, index=i))
-        if select_idx is not None and 0 <= select_idx < len(actions):
-            self.app.combo_act_listbox.selection_set(select_idx)
-            self.app.combo_act_listbox.see(select_idx)
 
     def sync_combo_actions_to_main_steps(self, combo_name, new_actions):
         sync_cnt = 0
@@ -517,7 +420,7 @@ class ComboController(BaseController):
         avail_combos = [c["name"] for c in state.combos if c["name"] != curr_combo_name]
 
         if self.app.prompt_edit_action(act, available_combos=avail_combos):
-            self.refresh_combo_actions_list(select_idx=a_idx)
+            EventBus.emit(AppEvents.COMBO_ACTIONS_CHANGED, select_idx=a_idx)
             self.sync_combo_actions_to_main_steps(state.combos[c_idx]["name"], state.combos[c_idx]["actions"])
             EventBus.emit(AppEvents.STATUS_MESSAGE, f"已成功更新組合動作 #{a_idx+1}")
             self.trigger_hot_reload()
@@ -529,7 +432,7 @@ class ComboController(BaseController):
         a_idx = self.get_selected_action_idx()
         actions = state.combos[c_idx]["actions"]
         def _refresh(target):
-            self.refresh_combo_actions_list(select_idx=target)
+            EventBus.emit(AppEvents.COMBO_ACTIONS_CHANGED, select_idx=target)
             self.sync_combo_actions_to_main_steps(state.combos[c_idx]["name"], actions)
         self._move_list_item(actions, a_idx, delta, _refresh, item_name="組合動作")
 
@@ -540,8 +443,8 @@ class ComboController(BaseController):
         a_idx = self.get_selected_action_idx()
         actions = state.combos[c_idx]["actions"]
         def _refresh(target):
-            self.refresh_combo_actions_list(select_idx=target)
-            self.refresh_combo_list(select_idx=c_idx)
+            EventBus.emit(AppEvents.COMBO_ACTIONS_CHANGED, select_idx=target)
+            EventBus.emit(AppEvents.COMBOS_CHANGED, select_idx=c_idx)
             self.sync_combo_actions_to_main_steps(state.combos[c_idx]["name"], actions)
         self._duplicate_list_item(actions, a_idx, _refresh, item_name="組合動作")
 
@@ -552,8 +455,8 @@ class ComboController(BaseController):
         a_idx = self.get_selected_action_idx()
         actions = state.combos[c_idx]["actions"]
         def _refresh(target):
-            self.refresh_combo_actions_list(select_idx=target)
-            self.refresh_combo_list(select_idx=c_idx)
+            EventBus.emit(AppEvents.COMBO_ACTIONS_CHANGED, select_idx=target)
+            EventBus.emit(AppEvents.COMBOS_CHANGED, select_idx=c_idx)
             self.sync_combo_actions_to_main_steps(state.combos[c_idx]["name"], actions)
         self._delete_list_item(actions, a_idx, _refresh, item_name="組合動作")
 
@@ -563,8 +466,8 @@ class ComboController(BaseController):
             return
         actions = state.combos[c_idx].get("actions", [])
         def _refresh(_):
-            self.refresh_combo_actions_list()
-            self.refresh_combo_list(select_idx=c_idx)
+            EventBus.emit(AppEvents.COMBO_ACTIONS_CHANGED)
+            EventBus.emit(AppEvents.COMBOS_CHANGED, select_idx=c_idx)
             self.sync_combo_actions_to_main_steps(state.combos[c_idx]["name"], [])
         self._clear_list_items(actions, f"請問是否清空組合 [{state.combos[c_idx]['name']}] 的所有動作？", _refresh, "組合所有動作")
 
@@ -588,31 +491,6 @@ class StepController(BaseController):
             return len(state.steps)
         sel = self.app.step_listbox.curselection()
         return sel[0] + 1 if sel else len(state.steps)
-
-    def update_step_list(self, select_idx=None):
-        if not hasattr(self.app, "step_listbox"):
-            return
-        self.app.step_listbox.delete(0, tk.END)
-        for i, s in enumerate(state.steps):
-            self.app.step_listbox.insert(tk.END, format_action_summary(s, index=i))
-        last_idx = getattr(self.app, "last_active_step_idx", None)
-        if last_idx is not None and 0 <= last_idx < len(state.steps):
-            try:
-                self.app.step_listbox.itemconfigure(last_idx, background="#2a4365", foreground="#63b3ed")
-            except tk.TclError:
-                pass
-        if select_idx is not None and 0 <= select_idx < len(state.steps):
-            self.app.step_listbox.selection_set(select_idx)
-            self.app.step_listbox.see(select_idx)
-
-        # 空清單視覺引導 (Empty State Placeholder)
-        lbl_empty = getattr(self.app, "lbl_empty_steps", None)
-        if lbl_empty:
-            if len(state.steps) == 0:
-                lbl_empty.place(relx=0.5, rely=0.5, anchor="center")
-                lbl_empty.lift()
-            else:
-                lbl_empty.place_forget()
 
     def add_click_action(self, is_combo=False):
         if state.is_running():
@@ -749,34 +627,24 @@ class StepController(BaseController):
     def move_main_step(self, delta):
         sel = self.app.step_listbox.curselection() if hasattr(self.app, "step_listbox") else None
         idx = sel[0] if sel else None
-        self._move_list_item(state.steps, idx, delta, self.update_step_list, item_name="主步驟")
+        self._move_list_item(state.steps, idx, delta, lambda target: EventBus.emit(AppEvents.STEPS_CHANGED, select_idx=target), item_name="主步驟")
 
     def duplicate_main_step(self):
         sel = self.app.step_listbox.curselection() if hasattr(self.app, "step_listbox") else None
         idx = sel[0] if sel else None
-        self._duplicate_list_item(state.steps, idx, self.update_step_list, item_name="主步驟")
+        self._duplicate_list_item(state.steps, idx, lambda target: EventBus.emit(AppEvents.STEPS_CHANGED, select_idx=target), item_name="主步驟")
 
     def delete_main_step(self):
         sel = self.app.step_listbox.curselection() if hasattr(self.app, "step_listbox") else None
         idx = sel[0] if sel else None
-        self._delete_list_item(state.steps, idx, self.update_step_list, item_name="主步驟")
+        self._delete_list_item(state.steps, idx, lambda target: EventBus.emit(AppEvents.STEPS_CHANGED, select_idx=target), item_name="主步驟")
 
     def clear_main_steps(self):
-        self._clear_list_items(state.steps, "請問是否清空整個掛機流程？\n清空後未儲存的內容無法還原！", self.update_step_list, "掛機流程")
+        self._clear_list_items(state.steps, "請問是否清空整個掛機流程？\n清空後未儲存的內容無法還原！", lambda _: EventBus.emit(AppEvents.STEPS_CHANGED), "掛機流程")
 
 
 class PeriodicTaskController(BaseController):
     """定時週期任務控制器"""
-
-    def update_periodic_list(self, select_idx=None):
-        if not hasattr(self.app, "periodic_listbox"):
-            return
-        self.app.periodic_listbox.delete(0, tk.END)
-        for pt in state.periodic_tasks:
-            self.app.periodic_listbox.insert(tk.END, pt)
-        if select_idx is not None and 0 <= select_idx < len(state.periodic_tasks):
-            self.app.periodic_listbox.selection_set(select_idx)
-            self.app.periodic_listbox.see(select_idx)
 
     def add_new_periodic_task(self):
         new_pt = dialogs.prompt_edit_periodic_task(self.app, task=None)

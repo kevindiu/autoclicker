@@ -1,8 +1,11 @@
 import copy
 import time
 import pyautogui
+from typing import Optional, Set, Dict, List
 
+import constants
 import state
+from state import ActionDict, ComboDict, VariableDict
 from win32_api import (
     IS_WINDOWS,
     execute_click,
@@ -17,7 +20,17 @@ from win32_api import (
 # 動作執行調度器與背景巨集引擎
 # ==============================================================================
 
-def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=None, depth=0, visited_set=None, is_test=False, round_prefix=""):
+def dispatch_action(
+    app: any,
+    act: ActionDict,
+    parent_desc: str,
+    current_vars: Optional[Dict[str, VariableDict]] = None,
+    current_combos: Optional[List[ComboDict]] = None,
+    depth: int = 0,
+    visited_set: Optional[Set[str]] = None,
+    is_test: bool = False,
+    round_prefix: str = ""
+) -> bool:
     """統一派發並執行單一動作或呼叫組合，含循環呼叫保護與變數求值"""
     if visited_set is None:
         visited_set = set()
@@ -93,7 +106,7 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
         log_txt = f"{round_prefix}{parent_desc} {var_info}{msg}"
         if hasattr(app, "append_log"):
             app.append_log(log_tag, log_txt)
-        if not safe_sleep(0.12):
+        if not safe_sleep(constants.SLEEP_CLICK):
             return False
 
     elif atype == "key":
@@ -107,7 +120,7 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
                 state.currently_held_keys.add(("fg", key))
             try:
                 pyautogui.keyDown(key)
-                if not safe_sleep(0.06):
+                if not safe_sleep(constants.SLEEP_KEY_FG):
                     return False
             finally:
                 try:
@@ -121,7 +134,7 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
         mode_tag = " (後台)" if use_bg else " (前台)"
         if hasattr(app, "append_log"):
             app.append_log(log_tag, f"{round_prefix}{parent_desc} {var_info}按鍵 [{key.upper()}]{mode_tag}")
-        if not safe_sleep(0.10):
+        if not safe_sleep(constants.SLEEP_KEY_AFTER):
             return False
 
     elif atype == "wait":
@@ -146,7 +159,7 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
         tgt_name = act.get("target_name")
         if not tgt_name:
             return True
-        if depth >= 10:
+        if depth >= constants.MAX_COMBO_DEPTH:
             warn_msg = f"{round_prefix}呼叫 [{tgt_name}] 超過深度上限"
             if hasattr(app, "append_log"):
                 app.append_log("警示", warn_msg)
@@ -339,7 +352,7 @@ def check_and_run_due_periodic_tasks(
             sync_periodic_timers(periodic_tasks_runtime, active_task_id=None, current_round=current_round)
             if not ok:
                 return False
-            if not safe_sleep(0.05):
+            if not safe_sleep(constants.SLEEP_TEST_MODE):
                 return False
     return True
 
@@ -504,7 +517,7 @@ def macro_worker_loop(app):
                 break
 
             round_idx += 1
-            if not safe_sleep(0.05):
+            if not safe_sleep(constants.SLEEP_TEST_MODE):
                 break
     except Exception as e:
         if hasattr(app, "append_log"):

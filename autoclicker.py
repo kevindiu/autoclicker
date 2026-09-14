@@ -174,19 +174,134 @@ class App(tk.Tk):
         return state.has_unsaved_changes(self.last_saved_snapshot)
 
     def _on_vars_changed(self, select_name=None):
-        self.var_ctrl.refresh_variables_table(select_name)
-        
+        if not hasattr(self, "tree_vars"):
+            return
+        for item in self.tree_vars.get_children():
+            self.tree_vars.delete(item)
+
+        type_display = {"coord": "[坐標]", "key": "[按鍵]", "wait": "[停頓]"}
+        for name, data in state.variables.items():
+            t_key = data.get("type", "coord")
+            t_disp = type_display.get(t_key, t_key)
+            val = data.get("value")
+
+            if t_key == "coord":
+                if isinstance(val, dict):
+                    btn_tag = "右鍵·" if val.get("btn") == "right" else "左鍵·"
+                    v_str = f"{btn_tag}({val.get('x', 0)}, {val.get('y', 0)})"
+                else:
+                    v_str = str(val)
+            elif t_key == "key":
+                v_str = str(val).upper()
+            elif t_key == "wait":
+                v_str = f"{val} 秒"
+            else:
+                v_str = str(val)
+
+            self.tree_vars.insert("", "end", iid=name, values=(name, t_disp, v_str))
+
+        if select_name and hasattr(self.tree_vars, "select"):
+            self.tree_vars.select(select_name)
+
+        var_names = list(state.variables.keys())
+        if hasattr(self, "cbo_combo_add_var"):
+            self.cbo_combo_add_var["values"] = var_names
+            if var_names:
+                if self.var_combo_ref_var.get() not in var_names:
+                    self.cbo_combo_add_var.current(0)
+            else:
+                self.var_combo_ref_var.set("")
+
+        if hasattr(self, "cbo_step_add_var"):
+            self.cbo_step_add_var["values"] = var_names
+            if var_names:
+                if self.var_step_ref_var.get() not in var_names:
+                    self.cbo_step_add_var.current(0)
+            else:
+                self.var_step_ref_var.set("")
+
     def _on_combos_changed(self, select_idx=None):
-        self.combo_ctrl.refresh_combo_list(select_idx)
-        
+        if not hasattr(self, "combo_listbox"):
+            return
+        self.combo_listbox.delete(0, tk.END)
+        for i, c in enumerate(state.combos):
+            act_count = len(c.get("actions", []))
+            self.combo_listbox.insert(tk.END, f"{c['name']} ({act_count}動作)")
+        if select_idx is not None and 0 <= select_idx < len(state.combos):
+            self.combo_listbox.selection_set(select_idx)
+            self.combo_ctrl.on_combo_select()
+        else:
+            self._refresh_call_combo_dropdown()
+
+    def _refresh_call_combo_dropdown(self):
+        idx = self.combo_ctrl.get_selected_combo_idx()
+        curr_name = state.combos[idx]["name"] if idx is not None else None
+        avail = [c["name"] for c in state.combos if c["name"] != curr_name]
+        if hasattr(self, "cbo_call_combo"):
+            self.cbo_call_combo["values"] = avail
+            if avail:
+                if self.var_combo_to_call.get() not in avail:
+                    self.cbo_call_combo.current(0)
+            else:
+                self.var_combo_to_call.set("")
+
+        all_combos = [c["name"] for c in state.combos]
+        if hasattr(self, "cbo_step_call_combo"):
+            self.cbo_step_call_combo["values"] = all_combos
+            if all_combos:
+                if self.var_step_combo_to_call.get() not in all_combos:
+                    self.cbo_step_call_combo.current(0)
+            else:
+                self.var_step_combo_to_call.set("")
+
     def _on_combo_actions_changed(self, select_idx=None):
-        self.combo_ctrl.refresh_combo_actions_list(select_idx)
-        
+        if not hasattr(self, "combo_act_listbox"):
+            return
+        self.combo_act_listbox.delete(0, tk.END)
+        idx = self.combo_ctrl.get_selected_combo_idx()
+        if idx is None:
+            return
+        actions = state.combos[idx].get("actions", [])
+        for i, act in enumerate(actions):
+            self.combo_act_listbox.insert(tk.END, format_action_summary(act, index=i))
+        if select_idx is not None and 0 <= select_idx < len(actions):
+            self.combo_act_listbox.selection_set(select_idx)
+            self.combo_act_listbox.see(select_idx)
+
     def _on_steps_changed(self, select_idx=None):
-        self.step_ctrl.update_step_list(select_idx)
-        
+        if not hasattr(self, "step_listbox"):
+            return
+        self.step_listbox.delete(0, tk.END)
+        for i, s in enumerate(state.steps):
+            self.step_listbox.insert(tk.END, format_action_summary(s, index=i))
+        last_idx = getattr(self, "last_active_step_idx", None)
+        if last_idx is not None and 0 <= last_idx < len(state.steps):
+            try:
+                self.step_listbox.itemconfigure(last_idx, background="#2a4365", foreground="#63b3ed")
+            except tk.TclError:
+                pass
+        if select_idx is not None and 0 <= select_idx < len(state.steps):
+            self.step_listbox.selection_set(select_idx)
+            self.step_listbox.see(select_idx)
+
+        # 空清單視覺引導 (Empty State Placeholder)
+        lbl_empty = getattr(self, "lbl_empty_steps", None)
+        if lbl_empty:
+            if len(state.steps) == 0:
+                lbl_empty.place(relx=0.5, rely=0.5, anchor="center")
+                lbl_empty.lift()
+            else:
+                lbl_empty.place_forget()
+
     def _on_periodic_tasks_changed(self, select_idx=None):
-        self.periodic_ctrl.update_periodic_list(select_idx)
+        if not hasattr(self, "periodic_listbox"):
+            return
+        self.periodic_listbox.delete(0, tk.END)
+        for pt in state.periodic_tasks:
+            self.periodic_listbox.insert(tk.END, pt)
+        if select_idx is not None and 0 <= select_idx < len(state.periodic_tasks):
+            self.periodic_listbox.selection_set(select_idx)
+            self.periodic_listbox.see(select_idx)
 
     def on_close(self):
         """主視窗關閉事件處理 (若有未儲存之變更則提示使用者儲存)"""

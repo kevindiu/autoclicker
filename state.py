@@ -2,7 +2,40 @@ import sys
 import copy
 import json
 import threading
+from typing import Dict, List, Any, Optional, TypedDict
 from contextlib import contextmanager
+
+# ==============================================================================
+# Type Hints (型別提示)
+# ==============================================================================
+class VariableDict(TypedDict, total=False):
+    type: str   # 'coord', 'key', 'wait'
+    value: Any
+
+class ActionDict(TypedDict, total=False):
+    type: str   # 'click', 'key', 'wait', 'call_combo', 'combo'
+    var_name: str
+    x: int
+    y: int
+    btn: str
+    rel: bool
+    key: str
+    sec: float
+    target_name: str
+    name: str
+    actions: List['ActionDict']
+
+class ComboDict(TypedDict):
+    name: str
+    actions: List[ActionDict]
+
+class PeriodicTaskDict(TypedDict):
+    id: str
+    name: str
+    interval: float
+    enabled: bool
+    run_on_start: bool
+    action: ActionDict
 
 
 class AppState:
@@ -13,16 +46,16 @@ class AppState:
     """
     def __init__(self):
         # 1. 編輯器草稿資料 (Draft Data)
-        self.combos = []
-        self.steps = []           # 主 UI 編輯器草稿 (Draft)
-        self.variables = {}       # 全域變數庫字典: {var_name: {"type": "coord"|"key"|"wait", ...}}
-        self.periodic_tasks = []  # 主 UI 定時任務草稿 (Draft)
+        self.combos: List[ComboDict] = []
+        self.steps: List[ActionDict] = []
+        self.variables: Dict[str, VariableDict] = {}
+        self.periodic_tasks: List[PeriodicTaskDict] = []
 
         # 2. 背景運行實例快照 (Active Runtime Snapshots)
-        self.active_steps = []    # 背景運行實例快照 (Active Snapshot)
-        self.active_combos = []   # 背景組合運行實例快照 (Active Combo Snapshot)
-        self.active_variables = {} # 背景變數運行實例快照 (Active Variables Snapshot)
-        self.active_periodic_tasks = [] # 背景定時任務運行實例快照 (Active Periodic Snapshot)
+        self.active_steps: List[ActionDict] = []
+        self.active_combos: List[ComboDict] = []
+        self.active_variables: Dict[str, VariableDict] = {}
+        self.active_periodic_tasks: List[PeriodicTaskDict] = []
 
         # 3. 執行期旗標與執行緒同步物件 (Flags & Thread Synchronization)
         self.running_lock = threading.RLock()

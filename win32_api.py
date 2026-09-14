@@ -4,6 +4,7 @@ from ctypes import wintypes
 import pyautogui
 
 import state
+from events import EventBus, AppEvents
 
 pyautogui.FAILSAFE = False
 pyautogui.PAUSE = 0.0
@@ -180,8 +181,8 @@ def emergency_release_all():
         try:
             user32.PostMessageW(state.target_hwnd, WM_LBUTTONUP, 0, 0)
             user32.PostMessageW(state.target_hwnd, WM_RBUTTONUP, 0, 0)
-        except (OSError, ctypes.ArgumentError):
-            pass
+        except (OSError, ctypes.ArgumentError) as e:
+            EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"Win32 API 例外 (釋放背景滑鼠): {e}")
 
     # 2. 釋放登記中的背景與前台按鍵
     with state.currently_held_keys_lock:
@@ -193,16 +194,16 @@ def emergency_release_all():
                 elif item[0] == "fg":
                     _, k = item
                     pyautogui.keyUp(k)
-            except (OSError, ctypes.ArgumentError, pyautogui.PyAutoGUIException, ValueError):
-                pass
+            except (OSError, ctypes.ArgumentError, pyautogui.PyAutoGUIException, ValueError) as e:
+                EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"例外 (釋放按鍵): {e}")
         state.currently_held_keys.clear()
 
     # 3. 前台滑鼠防禦性釋放
     try:
         pyautogui.mouseUp(button="left")
         pyautogui.mouseUp(button="right")
-    except (pyautogui.PyAutoGUIException, OSError, ValueError):
-        pass
+    except (pyautogui.PyAutoGUIException, OSError, ValueError) as e:
+        EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"例外 (釋放前台滑鼠): {e}")
 
 def post_bg_click(hwnd, client_x, client_y, offset_x=0, offset_y=0, btn="left"):
     """向指定視窗背景發送點擊訊息"""
@@ -224,8 +225,8 @@ def post_bg_click(hwnd, client_x, client_y, offset_x=0, offset_y=0, btn="left"):
     finally:
         try:
             user32.PostMessageW(hwnd, up_msg, 0, lparam)
-        except (OSError, ctypes.ArgumentError):
-            pass
+        except (OSError, ctypes.ArgumentError) as e:
+            EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"Win32 API 例外 (點擊): {e}")
     return cx, cy
 
 def post_bg_key(hwnd, key_str):
@@ -251,8 +252,8 @@ def post_bg_key(hwnd, key_str):
                 res = user32.VkKeyScanW(key_str)
                 if res != -1:
                     vk = res & 0xFF
-            except (OSError, ctypes.ArgumentError):
-                pass
+            except (OSError, ctypes.ArgumentError) as e:
+                EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"Win32 API 例外 (VkKeyScanW): {e}")
         if vk is None and key_str.isalnum():
             vk = ord(key_str.upper())
 
