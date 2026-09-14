@@ -225,7 +225,7 @@ def emergency_release_all() -> None:
                 elif item[0] == "fg":
                     _, k = item
                     pyautogui.keyUp(k)
-            except (OSError, ctypes.ArgumentError, pyautogui.PyAutoGUIException, ValueError) as e:
+            except Exception as e:
                 EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"例外 (釋放按鍵): {e}")
         state.app_state.currently_held_keys.clear()
 
@@ -233,7 +233,7 @@ def emergency_release_all() -> None:
     try:
         pyautogui.mouseUp(button="left")
         pyautogui.mouseUp(button="right")
-    except (pyautogui.PyAutoGUIException, OSError, ValueError) as e:
+    except Exception as e:
         EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"例外 (釋放前台滑鼠): {e}")
 
 def post_bg_click(hwnd: Any, client_x: int, client_y: int, offset_x: int = 0, offset_y: int = 0, btn: str = "left") -> Tuple[int, int]:

@@ -1097,6 +1097,12 @@ class App(tk.Tk):
 
     # ======================= 主執行引擎 =======================
     def toggle_run(self):
+        # 防連點保護
+        now = time.time()
+        if hasattr(self, "_last_toggle_time") and now - self._last_toggle_time < 0.5:
+            return
+        self._last_toggle_time = now
+
         with state.running_lock:
             is_active = state.is_running() or state.app_state.is_testing
             was_test = state.app_state.is_testing
@@ -1106,7 +1112,10 @@ class App(tk.Tk):
 
         if is_active:
             state.app_state.stop_event.set()
-            emergency_release_all()
+            try:
+                emergency_release_all()
+            except Exception as e:
+                self.append_log("系統", f"釋放按鍵例外: {e}")
             self.set_running_ui(False)
             msg = "試跑已手動中止！" if was_test else "已手動停止"
             self.set_status(msg)
