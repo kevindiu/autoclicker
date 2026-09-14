@@ -80,8 +80,7 @@ SWP_SHOWWINDOW   = 0x0040
 HWND_TOPMOST     = ctypes.c_void_p(-1)
 HWND_NOTOPMOST   = ctypes.c_void_p(-2)
 
-class POINT(ctypes.Structure):
-    _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+POINT = wintypes.POINT
 
 if IS_WINDOWS:
     for fn in (lambda: ctypes.windll.shcore.SetProcessDpiAwareness(2), lambda: ctypes.windll.user32.SetProcessDPIAware()):
