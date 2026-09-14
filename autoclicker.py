@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import uuid
 import copy
 import ctypes
 import threading
@@ -339,10 +340,11 @@ class App(tk.Tk):
         if state.is_testing:
             return self.set_status("已有試跑任務正在執行中，請稍候！")
 
+        state.is_testing = True
+        state.stop_event.clear()
+        self.set_running_ui(True, is_test=True)
+
         def _worker():
-            state.is_testing = True
-            state.stop_event.clear()
-            self.set_running_ui(True, is_test=True)
             try:
                 self.set_status(f"正在試跑 {task_name}...")
                 self.append_log("試跑", f"▶ 正在試跑: {task_name}")
@@ -1380,7 +1382,7 @@ class App(tk.Tk):
             return self.set_status("請先在定時任務清單中選擇要複製的任務！")
         idx = sel[0]
         copied_pt = copy.deepcopy(state.periodic_tasks[idx])
-        copied_pt["id"] = f"pt_{int(time.time()*1000)}"
+        copied_pt["id"] = f"pt_{int(time.time()*1000)}_{uuid.uuid4().hex[:6]}"
         copied_pt["name"] = f"{copied_pt.get('name', '任務')}_副本"
         state.periodic_tasks.insert(idx + 1, copied_pt)
         self.update_periodic_list(idx + 1)

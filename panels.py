@@ -469,9 +469,10 @@ class RightPanel(tk.Frame):
         bot.pack(side="bottom", fill="x", pady=(2, 0))
 
         self.lbl_mouse_hud = tk.Label(bot, text="● 游標實時坐標: (0, 0)", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_TITLE, font=UITheme.FONT_NORMAL_BOLD)
-        self.lbl_mouse_hud.pack(fill="x", pady=(0, 2))
+        self.lbl_mouse_hud.pack(fill="x", pady=(0, 1))
 
-        self.lbl_status = None
+        self.lbl_status = tk.Label(bot, text="● 狀態: 已就緒", anchor="w", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL)
+        self.lbl_status.pack(fill="x", pady=(0, 2))
 
         # 鎖定大小之開始/停止按鈕容器 (嚴格鎖定 46px 高度)
         f_btn_wrap = tk.Frame(bot, height=46, bg=UITheme.BG_PANEL)
@@ -737,6 +738,7 @@ class RightPanel(tk.Frame):
             "periodic_task_view": getattr(self, "periodic_task_view", None),
             "txt_log": getattr(self, "txt_log", None),
             "lbl_mouse_hud": getattr(self, "lbl_mouse_hud", None),
+            "lbl_status": getattr(self, "lbl_status", None),
             "btn_toggle": getattr(self, "btn_toggle", None),
             "cbo_step_call_combo": getattr(self, "cbo_step_call_combo", None),
             "cbo_step_add_var": getattr(self, "cbo_step_add_var", None),

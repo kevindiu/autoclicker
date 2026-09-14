@@ -41,17 +41,25 @@ KEY_RELEASE_LPARAM_MASK    = 0xC0000000  # bits 30 & 31: Previous key state & Tr
 KEY_RELEASE_DEFAULT_LPARAM = 0xC0000001  # Repeat count 1 + bits 30 & 31
 
 # 虛擬按鍵碼 (Virtual Key Codes)
-VK_SPACE         = 0x20
-VK_RETURN        = 0x0D
-VK_ESCAPE        = 0x1B
+VK_BACK          = 0x08
 VK_TAB           = 0x09
+VK_RETURN        = 0x0D
 VK_SHIFT         = 0x10
 VK_CONTROL       = 0x11
 VK_MENU          = 0x12  # Alt key
+VK_CAPITAL       = 0x14  # Caps Lock
+VK_ESCAPE        = 0x1B
+VK_SPACE         = 0x20
+VK_PRIOR         = 0x21  # Page Up
+VK_NEXT          = 0x22  # Page Down
+VK_END           = 0x23
+VK_HOME          = 0x24
 VK_LEFT          = 0x25
 VK_UP            = 0x26
 VK_RIGHT         = 0x27
 VK_DOWN          = 0x28
+VK_INSERT        = 0x2D
+VK_DELETE        = 0x2E
 
 # GetAsyncKeyState 狀態遮罩
 KEY_PRESSED_MASK = 0x8000
@@ -110,6 +118,8 @@ if IS_WINDOWS:
     user32.GetWindowTextW.restype = ctypes.c_int
     user32.MapVirtualKeyW.argtypes = [wintypes.UINT, wintypes.UINT]
     user32.MapVirtualKeyW.restype = wintypes.UINT
+    user32.VkKeyScanW.argtypes = [wintypes.WCHAR]
+    user32.VkKeyScanW.restype = ctypes.c_short
     WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
     user32.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
     user32.EnumWindows.restype = wintypes.BOOL
@@ -120,8 +130,27 @@ else:
 VK_MAP = {
     "space": VK_SPACE, "enter": VK_RETURN, "return": VK_RETURN, "esc": VK_ESCAPE, "escape": VK_ESCAPE,
     "tab": VK_TAB, "shift": VK_SHIFT, "ctrl": VK_CONTROL, "alt": VK_MENU,
+    "backspace": VK_BACK, "delete": VK_DELETE, "del": VK_DELETE, "insert": VK_INSERT, "ins": VK_INSERT,
+    "home": VK_HOME, "end": VK_END, "pageup": VK_PRIOR, "pgup": VK_PRIOR, "pagedown": VK_NEXT, "pgdn": VK_NEXT,
+    "capslock": VK_CAPITAL,
     "up": VK_UP, "down": VK_DOWN, "left": VK_LEFT, "right": VK_RIGHT,
     **{f"f{i}": 0x6F + i for i in range(1, 13)},
+    # OEM 標點符號鍵 (防止 ord() 誤轉為錯誤之系統功能鍵)
+    "-": 0xBD, "_": 0xBD,
+    "=": 0xBB, "+": 0xBB,
+    "[": 0xDB, "{": 0xDB,
+    "]": 0xDD, "}": 0xDD,
+    ";": 0xBA, ":": 0xBA,
+    "'": 0xDE, '"': 0xDE,
+    ",": 0xBC, "<": 0xBC,
+    ".": 0xBE, ">": 0xBE,
+    "/": 0xBF, "?": 0xBF,
+    "\\": 0xDC, "|": 0xDC,
+    "`": 0xC0, "~": 0xC0,
+    # 九宮格數字鍵盤 (Numpad)
+    **{f"num{i}": 0x60 + i for i in range(10)},
+    **{f"numpad{i}": 0x60 + i for i in range(10)},
+    "num*": 0x6A, "num+": 0x6B, "num-": 0x6D, "num.": 0x6E, "num/": 0x6F,
 }
 
 # ==============================================================================
@@ -184,7 +213,9 @@ def post_bg_click(hwnd, client_x, client_y, offset_x=0, offset_y=0, btn="left"):
     # 連續立即發送 WM_MOUSEMOVE 與 WM_LBUTTONDOWN / WM_RBUTTONDOWN，絕不停頓，保證訊息原子性連續被遊戲處理，防止硬體滑鼠訊息插隊
     user32.PostMessageW(hwnd, WM_MOUSEMOVE, 0, lparam)
     user32.PostMessageW(hwnd, down_msg, down_wparam, lparam)
-    if safe_sleep(0.04):
+    try:
+        safe_sleep(0.04)
+    finally:
         try:
             user32.PostMessageW(hwnd, up_msg, 0, lparam)
         except (OSError, ctypes.ArgumentError):
@@ -205,7 +236,20 @@ def post_bg_key(hwnd, key_str):
             with state.currently_held_keys_lock:
                 state.currently_held_keys.discard(("fg", key_str))
         return
-    vk = VK_MAP.get(key_str.lower()) or (ord(key_str.upper()) if len(key_str) == 1 else None)
+
+    k_lower = key_str.lower()
+    vk = VK_MAP.get(k_lower)
+    if vk is None and len(key_str) == 1:
+        if IS_WINDOWS and user32:
+            try:
+                res = user32.VkKeyScanW(key_str)
+                if res != -1:
+                    vk = res & 0xFF
+            except (OSError, ctypes.ArgumentError):
+                pass
+        if vk is None and key_str.isalnum():
+            vk = ord(key_str.upper())
+
     if vk is not None:
         scan_code = 0
         try:
@@ -225,7 +269,7 @@ def post_bg_key(hwnd, key_str):
                 state.currently_held_keys.discard(("bg", hwnd, vk))
 
 def execute_click(x, y, is_rel, use_bg, off_x, off_y, btn="left", target_hwnd=None):
-    """統一派發前台或背景點擊"""
+    """統一派發前台或背景點擊 (保證後台與前台模式均精準套用偏差校正)"""
     hwnd = target_hwnd if target_hwnd is not None else state.target_hwnd
     btn_cn = "右鍵" if btn == "right" else "左鍵"
     if use_bg:
@@ -236,13 +280,15 @@ def execute_click(x, y, is_rel, use_bg, off_x, off_y, btn="left", target_hwnd=No
         cx, cy = post_bg_click(hwnd, x, y, off_x, off_y, btn=btn)
         return f"後台{btn_cn}相對:({cx},{cy})"
     else:
+        target_x = int(x) + off_x
+        target_y = int(y) + off_y
         if is_rel and IS_WINDOWS and hwnd and user32:
-            pt = POINT(int(x), int(y))
+            pt = POINT(target_x, target_y)
             user32.ClientToScreen(hwnd, ctypes.byref(pt))
             pyautogui.click(pt.x, pt.y, button=btn)
             return f"前台追蹤{btn_cn} ({pt.x},{pt.y})"
-        pyautogui.click(x, y, button=btn)
-        return f"前台{btn_cn} ({x},{y})"
+        pyautogui.click(target_x, target_y, button=btn)
+        return f"前台{btn_cn} ({target_x},{target_y})"
 
 def force_bring_window_to_front(hwnd):
     """強制喚醒並將目標視窗置頂最前"""

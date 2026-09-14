@@ -1,5 +1,6 @@
 import copy
 import time
+import uuid
 import tkinter as tk
 from tkinter import ttk, messagebox
 
@@ -624,7 +625,7 @@ def prompt_edit_periodic_task(app, task=None):
     title = "修改定時週期任務" if is_edit else "新增定時週期任務"
 
     orig_task = copy.deepcopy(task) if is_edit else {}
-    task_id = orig_task.get("id") or f"pt_{int(time.time()*1000)}"
+    task_id = orig_task.get("id") or f"pt_{int(time.time()*1000)}_{uuid.uuid4().hex[:6]}"
     init_name = orig_task.get("name", "")
     init_interval = str(orig_task.get("interval", 30.0))
     init_enabled = orig_task.get("enabled", True)
