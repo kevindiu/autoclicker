@@ -134,7 +134,7 @@ class VarTable(tk.Frame):
 # 自訂組件：全深色模式定時週期任務卡片列表 (PeriodicTaskCardView)
 # ==============================================================================
 class PeriodicTaskCardView(tk.Frame):
-    def __init__(self, parent, bg=UITheme.BG_DARK, select_bg="#1e3a5f", on_double_click=None, on_toggle=None):
+    def __init__(self, parent, bg=UITheme.BG_DARK, select_bg=UITheme.SELECT_BG, on_double_click=None, on_toggle=None):
         super().__init__(parent, bg=bg)
         self.bg = bg
         self.select_bg = select_bg
@@ -201,7 +201,7 @@ class PeriodicTaskCardView(tk.Frame):
                     self.canvas,
                     text="⏱ 尚無定時任務\n\n點擊下方 [+ 新增] 建立週期任務\n(長名稱自動換行顯示)",
                     bg=self.bg,
-                    fg="#64748b",
+                    fg=UITheme.BADGE_IDLE_FG,
                     font=UITheme.FONT_SMALL,
                     justify="center",
                     cursor="arrow"
@@ -254,8 +254,8 @@ class PeriodicTaskCardView(tk.Frame):
             if r_int < 1:
                 r_int = 1
             badge_text = f"🔄 每 {r_int} 輪"
-            badge_bg = "#3b0764"
-            badge_fg = "#c084fc"
+            badge_bg = UITheme.BADGE_PURPLE_BG
+            badge_fg = UITheme.BADGE_PURPLE_FG
         else:
             interval = task.get("interval", 1.0)
             try:
@@ -264,8 +264,8 @@ class PeriodicTaskCardView(tk.Frame):
             except (ValueError, TypeError):
                 sec_str = f"{interval}s"
             badge_text = f"⏱ 每 {sec_str}"
-            badge_bg = "#0c4a6e"
-            badge_fg = "#38bdf8"
+            badge_bg = UITheme.BADGE_CYAN_BG
+            badge_fg = UITheme.BADGE_CYAN_FG
 
         name = task.get("name", "").strip()
         run_on_start = task.get("run_on_start", False)
@@ -292,8 +292,8 @@ class PeriodicTaskCardView(tk.Frame):
             act_text = ""
 
         # 配色方案
-        card_bg = "#1e222b" if enabled else "#17191f"
-        border_col = "#2d3544" if enabled else "#23262d"
+        card_bg = UITheme.CARD_BG_ENABLED if enabled else UITheme.CARD_BG_DISABLED
+        border_col = UITheme.CARD_BORDER_ENABLED if enabled else UITheme.CARD_BORDER_DISABLED
         wrap_w = max(100, self._current_width - 32)
 
         # 外層卡片面板 (精緻緊湊排版)
@@ -314,12 +314,12 @@ class PeriodicTaskCardView(tk.Frame):
         # 狀態標籤 (點擊可直接切換開關狀態)
         if enabled:
             st_text = "✓ 啟用"
-            st_bg = "#14532d"
-            st_fg = "#4ade80"
+            st_bg = UITheme.BADGE_GREEN_BG
+            st_fg = UITheme.BADGE_GREEN_FG
         else:
             st_text = "✕ 停用"
-            st_bg = "#334155"
-            st_fg = "#94a3b8"
+            st_bg = UITheme.BADGE_DISABLED_BG
+            st_fg = UITheme.BADGE_DISABLED_FG
 
         lbl_status = tk.Label(
             hdr,
@@ -352,8 +352,8 @@ class PeriodicTaskCardView(tk.Frame):
             lbl_start = tk.Label(
                 hdr,
                 text="⚡ 首發",
-                bg="#78350f",
-                fg="#fbbf24",
+                bg=UITheme.BADGE_AMBER_BG,
+                fg=UITheme.BADGE_AMBER_FG,
                 font=UITheme.FONT_SMALL_BOLD,
                 padx=4,
                 pady=0
@@ -365,7 +365,7 @@ class PeriodicTaskCardView(tk.Frame):
             hdr,
             text=f"#{idx+1}",
             bg=card_bg,
-            fg="#64748b",
+            fg=UITheme.BADGE_IDLE_FG,
             font=UITheme.FONT_SMALL
         )
         lbl_idx.pack(side="right")
@@ -376,7 +376,7 @@ class PeriodicTaskCardView(tk.Frame):
             card,
             text=title_text,
             bg=card_bg,
-            fg="#f8fafc" if enabled else "#64748b",
+            fg=UITheme.TEXT_MAIN if enabled else UITheme.BADGE_IDLE_FG,
             font=UITheme.FONT_NORMAL_BOLD,
             anchor="w",
             justify="left",
@@ -391,7 +391,7 @@ class PeriodicTaskCardView(tk.Frame):
                 card,
                 text=act_text,
                 bg=card_bg,
-                fg="#7dd3fc" if enabled else "#475569",
+                fg=UITheme.CYAN_SUB if enabled else UITheme.BADGE_MUTED_FG,
                 font=UITheme.FONT_SMALL,
                 anchor="w",
                 justify="left",
@@ -445,8 +445,8 @@ class PeriodicTaskCardView(tk.Frame):
             return
         if 0 <= idx < len(self.card_widgets):
             card_info = self.card_widgets[idx]
-            target_bg = "#232834" if entering else card_info["normal_bg"]
-            target_border = "#3a4454" if entering else card_info["normal_border"]
+            target_bg = UITheme.CARD_HOVER_BG if entering else card_info["normal_bg"]
+            target_border = UITheme.CARD_HOVER_BORDER if entering else card_info["normal_border"]
             card_info["frame"].config(bg=target_bg, highlightbackground=target_border)
             card_info["hdr"].config(bg=target_bg)
             card_info["lbl_idx"].config(bg=target_bg)
@@ -490,13 +490,13 @@ class PeriodicTaskCardView(tk.Frame):
     def _apply_card_style(self, card_info, is_selected=False, is_active=False):
         if is_active:
             # 執行中狀態：最高優先級高亮 (採用專屬翠綠執行邊框與光暈深底)
-            bg = "#064e3b"        # 祖母綠深底 (代表定時任務運行)
-            border = "#34d399"    # 亮翠綠邊框
+            bg = UITheme.CARD_ACTIVE_BG        # 祖母綠深底 (代表定時任務運行)
+            border = UITheme.CARD_ACTIVE_BORDER    # 亮翠綠邊框
             hl_thick = 2
         elif is_selected:
             # 使用者選取狀態
-            bg = self.select_bg   # #1e3a5f 深藍
-            border = "#38bdf8"    # 天藍邊框
+            bg = self.select_bg
+            border = UITheme.SELECT_BORDER    # 天藍邊框
             hl_thick = 2
         else:
             # 預設正常狀態
@@ -596,20 +596,20 @@ class PeriodicTaskCardView(tk.Frame):
                 base_text = f"🔄 每 {r_int} 輪"
 
                 if not enabled:
-                    if lbl_int.cget("text") != base_text or lbl_int.cget("bg") != "#1e293b":
-                        lbl_int.config(text=base_text, bg="#1e293b", fg="#64748b")
+                    if lbl_int.cget("text") != base_text or lbl_int.cget("bg") != UITheme.BADGE_IDLE_BG:
+                        lbl_int.config(text=base_text, bg=UITheme.BADGE_IDLE_BG, fg=UITheme.BADGE_IDLE_FG)
                     continue
 
                 if not is_running or task_id not in timers:
-                    if lbl_int.cget("text") != base_text or lbl_int.cget("bg") != "#3b0764":
-                        lbl_int.config(text=base_text, bg="#3b0764", fg="#c084fc")
+                    if lbl_int.cget("text") != base_text or lbl_int.cget("bg") != UITheme.BADGE_PURPLE_BG:
+                        lbl_int.config(text=base_text, bg=UITheme.BADGE_PURPLE_BG, fg=UITheme.BADGE_PURPLE_FG)
                     continue
 
                 t_info = timers[task_id]
                 if t_info.get("is_active"):
                     target_text = f"🔄 執行中 / 每 {r_int} 輪"
-                    if lbl_int.cget("text") != target_text or lbl_int.cget("bg") != "#14532d":
-                        lbl_int.config(text=target_text, bg="#14532d", fg="#4ade80")
+                    if lbl_int.cget("text") != target_text or lbl_int.cget("bg") != UITheme.BADGE_GREEN_BG:
+                        lbl_int.config(text=target_text, bg=UITheme.BADGE_GREEN_BG, fg=UITheme.BADGE_GREEN_FG)
                     continue
 
                 cur_r = t_info.get("current_round", 1)
@@ -618,8 +618,8 @@ class PeriodicTaskCardView(tk.Frame):
                 rem = max(0, r_int - (cur_display_r - last_r))
 
                 target_text = f"🔄 剩 {rem} 輪 / 每 {r_int} 輪"
-                target_bg = "#6b21a8" if rem == 0 else "#3b0764"
-                target_fg = "#ffffff" if rem == 0 else "#c084fc"
+                target_bg = UITheme.BADGE_PURPLE_ACTIVE_BG if rem == 0 else UITheme.BADGE_PURPLE_BG
+                target_fg = UITheme.TEXT_WHITE if rem == 0 else UITheme.BADGE_PURPLE_FG
                 if lbl_int.cget("text") != target_text or lbl_int.cget("bg") != target_bg:
                     lbl_int.config(text=target_text, bg=target_bg, fg=target_fg)
 
@@ -634,20 +634,20 @@ class PeriodicTaskCardView(tk.Frame):
                 base_text = f"⏱ 每 {sec_str}"
 
                 if not enabled:
-                    if lbl_int.cget("text") != base_text or lbl_int.cget("bg") != "#1e293b":
-                        lbl_int.config(text=base_text, bg="#1e293b", fg="#64748b")
+                    if lbl_int.cget("text") != base_text or lbl_int.cget("bg") != UITheme.BADGE_IDLE_BG:
+                        lbl_int.config(text=base_text, bg=UITheme.BADGE_IDLE_BG, fg=UITheme.BADGE_IDLE_FG)
                     continue
 
                 if not is_running or task_id not in timers:
-                    if lbl_int.cget("text") != base_text or lbl_int.cget("bg") != "#0c4a6e":
-                        lbl_int.config(text=base_text, bg="#0c4a6e", fg="#38bdf8")
+                    if lbl_int.cget("text") != base_text or lbl_int.cget("bg") != UITheme.BADGE_CYAN_BG:
+                        lbl_int.config(text=base_text, bg=UITheme.BADGE_CYAN_BG, fg=UITheme.BADGE_CYAN_FG)
                     continue
 
                 t_info = timers[task_id]
                 if t_info.get("is_active"):
                     target_text = f"⏱ 執行中 / 每 {sec_str}"
-                    if lbl_int.cget("text") != target_text or lbl_int.cget("bg") != "#14532d":
-                        lbl_int.config(text=target_text, bg="#14532d", fg="#4ade80")
+                    if lbl_int.cget("text") != target_text or lbl_int.cget("bg") != UITheme.BADGE_GREEN_BG:
+                        lbl_int.config(text=target_text, bg=UITheme.BADGE_GREEN_BG, fg=UITheme.BADGE_GREEN_FG)
                     continue
 
                 last_run = t_info.get("last_run", 0.0)
@@ -662,8 +662,8 @@ class PeriodicTaskCardView(tk.Frame):
                     rem_str = f"{int(math.ceil(remaining))}s"
 
                 target_text = f"⏱ {rem_str} / 每 {sec_str}"
-                target_bg = "#0284c7" if remaining <= 1.0 else "#0c4a6e"
-                target_fg = "#ffffff" if remaining <= 1.0 else "#38bdf8"
+                target_bg = UITheme.BADGE_CYAN_ACTIVE_BG if remaining <= 1.0 else UITheme.BADGE_CYAN_BG
+                target_fg = UITheme.TEXT_WHITE if remaining <= 1.0 else UITheme.BADGE_CYAN_FG
                 if lbl_int.cget("text") != target_text or lbl_int.cget("bg") != target_bg:
                     lbl_int.config(text=target_text, bg=target_bg, fg=target_fg)
 

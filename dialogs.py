@@ -31,6 +31,37 @@ def _create_dialog(app, title, w, h, resizable=False, minsize=None):
         dialog.minsize(*minsize)
     return dialog
 
+def restore_dialog(dialog):
+    """恢復對話框視窗顯示、焦點與模態抓取"""
+    try:
+        if dialog and dialog.winfo_exists():
+            dialog.deiconify()
+            dialog.lift()
+            dialog.focus_force()
+            dialog.grab_set()
+    except tk.TclError:
+        pass
+
+def start_dialog_capture(dialog, app, on_finish_coord, btn="left"):
+    """輔助函式：隱藏對話框進行太空鍵取點，取點完成或取消時自動恢復對話框顯示與焦點"""
+    if state.is_running():
+        app.set_status("巨集正在循環執行中，為免干擾滑鼠瞄準，請先停止運行再取點！")
+        return
+    try:
+        dialog.grab_release()
+        dialog.withdraw()
+    except tk.TclError:
+        pass
+
+    def _on_finish(rx, ry, rel):
+        restore_dialog(dialog)
+        on_finish_coord(rx, ry, rel)
+
+    def _on_cancel():
+        restore_dialog(dialog)
+
+    app.capture_pos_space(_on_finish, _on_cancel, btn=btn)
+
 def _add_dialog_buttons(dialog, on_ok, padx=16, pady=10, extra_left_buttons=None):
     """建立統一的底部按鈕列 (確定 + 取消) 並綁定 Enter/Escape 快捷鍵"""
     bf = tk.Frame(dialog, bg=UITheme.BG_PANEL, padx=padx, pady=pady)
@@ -38,11 +69,11 @@ def _add_dialog_buttons(dialog, on_ok, padx=16, pady=10, extra_left_buttons=None
     if extra_left_buttons:
         for btn_cfg in extra_left_buttons:
             tk.Button(bf, **btn_cfg).pack(side="left", padx=(0, 4))
-    tk.Button(bf, text="✓ 確定儲存", width=10, bg=UITheme.ACCENT_BLUE, fg="#fff",
+    tk.Button(bf, text="✓ 確定儲存", width=10, bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE,
              activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat",
              font=UITheme.FONT_NORMAL_BOLD, padx=8, pady=4,
              command=on_ok).pack(side="right", padx=(4, 0))
-    tk.Button(bf, text="✕ 取消", width=8, bg=UITheme.BTN_GRAY, fg="#fff",
+    tk.Button(bf, text="✕ 取消", width=8, bg=UITheme.BTN_GRAY, fg=UITheme.TEXT_WHITE,
              activebackground=UITheme.BTN_GRAY_HOVER, relief="flat",
              font=UITheme.FONT_NORMAL, padx=8, pady=4,
              command=dialog.destroy).pack(side="right")
@@ -110,28 +141,14 @@ def prompt_variable_dialog(app, edit_name=None):
     var_wait = tk.StringVar(value=init_wait)
 
     def start_space_capture():
-        if state.is_running():
-            app.set_status("巨集正在循環執行中，為免干擾滑鼠瞄準，請先停止運行再取點！")
-            return
-        dialog.grab_release()
-        dialog.withdraw()
         target_btn = "right" if var_btn.get() == "右鍵" else "left"
         def on_finish(rx, ry, rel):
-            dialog.deiconify()
-            dialog.lift()
-            dialog.focus_force()
-            dialog.grab_set()
             var_x.set(str(rx))
             var_y.set(str(ry))
             var_rel[0] = rel
             btn_cn = "右鍵" if target_btn == "right" else "左鍵"
             app.set_status(f"變數取點成功 [{btn_cn}]: ({rx}, {ry})")
-        def on_cancel():
-            dialog.deiconify()
-            dialog.lift()
-            dialog.focus_force()
-            dialog.grab_set()
-        app.capture_pos_space(on_finish, on_cancel, btn=target_btn)
+        start_dialog_capture(dialog, app, on_finish, btn=target_btn)
 
     def render_inputs():
         for child in f_val_box.winfo_children():
@@ -476,34 +493,17 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
         e_y = tk.Entry(f, textvariable=var_y, width=10, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL)
         e_y.grid(row=3, column=1, padx=6, pady=3, sticky="w")
 
-        btn_rec = tk.Button(f, text="◎ 重新瞄準取點 (Space)", width=24, bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, font=UITheme.FONT_NORMAL_BOLD)
+        btn_rec = tk.Button(f, text="◎ 重新瞄準取點 (Space)", width=24, bg=UITheme.ACCENT_GREEN, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_GREEN_HOVER, font=UITheme.FONT_NORMAL_BOLD)
         btn_rec.grid(row=4, column=0, columnspan=2, pady=(8, 2))
 
         def do_rec():
-            if state.is_running():
-                app.set_status("巨集正在循環執行中，為免干擾滑鼠瞄準，請先停止運行再取點！")
-                return
-            dialog.grab_release()
-            dialog.withdraw()
-
+            target_btn = "right" if var_btn.get() == "右鍵" else "left"
             def on_finish_space(rx, ry, rel):
-                dialog.deiconify()
-                dialog.lift()
-                dialog.focus_force()
-                dialog.grab_set()
                 var_x.set(str(rx))
                 var_y.set(str(ry))
                 var_rel[0] = rel
                 app.set_status(f"已更新點擊位置: ({rx}, {ry})")
-
-            def on_cancel_space():
-                dialog.deiconify()
-                dialog.lift()
-                dialog.focus_force()
-                dialog.grab_set()
-
-            target_btn = "right" if var_btn.get() == "右鍵" else "left"
-            app.capture_pos_space(on_finish_space, on_cancel_space, btn=target_btn)
+            start_dialog_capture(dialog, app, on_finish_space, btn=target_btn)
 
         btn_rec.config(command=do_rec)
         e_x.focus_set()
@@ -807,7 +807,7 @@ def prompt_edit_periodic_task(app, task=None):
             row = tk.Frame(f_dynamic, bg=UITheme.BG_PANEL)
             row.pack(fill="x", pady=6)
             tk.Label(row, text="按鍵名稱:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(4, 6))
-            e_k = tk.Entry(row, textvariable=var_key, width=12, bg=UITheme.BG_INPUT, fg="#fff", font=UITheme.FONT_NORMAL, relief="flat")
+            e_k = tk.Entry(row, textvariable=var_key, width=12, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, font=UITheme.FONT_NORMAL, relief="flat")
             e_k.pack(side="left", padx=(0, 6))
             tk.Label(row, text="(例如: f1, space, 1, a)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(side="left")
 

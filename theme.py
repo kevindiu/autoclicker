@@ -49,6 +49,37 @@ class UITheme:
     ACCENT_CYAN = "#0284c7"      # 青藍 (展開)
     ACCENT_CYAN_HOVER = "#0369a1"
 
+    TEXT_WHITE = "#ffffff"       # 純白文字 (按鈕前景、高亮字樣)
+    SELECT_BG = "#1e3a5f"        # 深藍選取底色 (卡片、表格選中)
+    SELECT_BORDER = "#38bdf8"    # 天藍選取邊框
+
+    # ================= 定時週期任務卡片 (Periodic Task Card) 專屬色碼 =================
+    CARD_BG_ENABLED = "#1e222b"        # 啟用卡片底色
+    CARD_BG_DISABLED = "#17191f"       # 停用卡片底色
+    CARD_BORDER_ENABLED = "#2d3544"    # 啟用卡片邊框
+    CARD_BORDER_DISABLED = "#23262d"   # 停用卡片邊框
+    CARD_HOVER_BG = "#232834"          # 卡片懸停底色
+    CARD_HOVER_BORDER = "#3a4454"      # 卡片懸停邊框
+    CARD_ACTIVE_BG = "#064e3b"         # 祖母綠深底 (定時任務觸發運行中)
+    CARD_ACTIVE_BORDER = "#34d399"     # 亮翠綠邊框 (定時任務觸發運行中)
+
+    # ================= 徽章與狀態標籤 (Badges) 色碼 =================
+    BADGE_PURPLE_BG = "#3b0764"        # 輪次觸發徽章底色 (深紫)
+    BADGE_PURPLE_FG = "#c084fc"        # 輪次觸發徽章文字 (紫羅蘭)
+    BADGE_PURPLE_ACTIVE_BG = "#6b21a8" # 輪次觸發中徽章底色
+    BADGE_CYAN_BG = "#0c4a6e"          # 秒數間隔徽章底色 (深天藍)
+    BADGE_CYAN_FG = "#38bdf8"          # 秒數間隔徽章文字 (天藍)
+    BADGE_CYAN_ACTIVE_BG = "#0284c7"   # 秒數間隔即將觸發徽章底色
+    BADGE_GREEN_BG = "#14532d"         # 執行中徽章底色 (深翠綠)
+    BADGE_GREEN_FG = "#4ade80"         # 執行中徽章文字 (嫩綠)
+    BADGE_IDLE_BG = "#1e293b"          # 待命/未運行徽章底色 (石板暗灰)
+    BADGE_IDLE_FG = "#64748b"          # 待命/未運行徽章文字
+    BADGE_DISABLED_BG = "#334155"      # 停用狀態徽章底色
+    BADGE_DISABLED_FG = "#94a3b8"      # 停用狀態徽章文字
+    BADGE_AMBER_BG = "#78350f"         # 首發徽章底色 (深琥珀)
+    BADGE_AMBER_FG = "#fbbf24"         # 首發徽章文字 (暖黃)
+    BADGE_MUTED_FG = "#475569"         # 停用副文字 (暗灰)
+
     # ================= 深色滾動條配置 (Dark Scrollbar) =================
     SCROLLBAR_THUMB = "#334155"         # 滑塊底色 (深石板灰)
     SCROLLBAR_THUMB_HOVER = "#475569"   # 滑塊懸停色 (稍亮石板灰)
