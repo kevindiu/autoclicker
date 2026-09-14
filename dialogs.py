@@ -6,6 +6,7 @@ from tkinter import ttk, messagebox
 
 import state
 from theme import UITheme
+from widgets import DarkScrollbar
 
 # ==============================================================================
 # 次層級對話框模組
@@ -336,7 +337,7 @@ def prompt_edit_combo_dialog(app, combo_step, step_idx=None):
     sub_list.pack(side="left", fill="both", expand=True)
     sub_list.bind("<Double-Button-1>", lambda e: do_edit_sub())
 
-    sc_sub = tk.Scrollbar(f_sub_box, orient="vertical", command=sub_list.yview)
+    sc_sub = DarkScrollbar(f_sub_box, orient="vertical", command=sub_list.yview)
     sc_sub.pack(side="right", fill="y")
     sub_list.config(yscrollcommand=sc_sub.set)
 

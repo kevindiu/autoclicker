@@ -1,8 +1,24 @@
 import math
 import time
 import tkinter as tk
+from tkinter import ttk
 import state
 from theme import UITheme
+
+# ==============================================================================
+# 自訂組件：全深色模式滾動條 (DarkScrollbar)
+# ==============================================================================
+class DarkScrollbar(ttk.Scrollbar):
+    """自訂現代全深色模式滾動條 (DarkScrollbar)，替換原生刺眼白色滾動條"""
+    def __init__(self, parent, **kwargs):
+        from theme import setup_dark_theme
+        setup_dark_theme(parent)
+        orient = kwargs.get("orient", "vertical")
+        if orient == "horizontal":
+            kwargs.setdefault("style", "Dark.Horizontal.TScrollbar")
+        else:
+            kwargs.setdefault("style", "Dark.Vertical.TScrollbar")
+        super().__init__(parent, **kwargs)
 
 # ==============================================================================
 # 自訂組件：全深色模式變數表格 (VarTable)
@@ -28,7 +44,7 @@ class VarTable(tk.Frame):
         f_box.pack(fill="both", expand=True)
 
         self.canvas = tk.Canvas(f_box, bg=bg, bd=0, highlightthickness=0, height=130)
-        self.scrollbar = tk.Scrollbar(f_box, orient="vertical", command=self.canvas.yview)
+        self.scrollbar = DarkScrollbar(f_box, orient="vertical", command=self.canvas.yview)
         self.body_frame = tk.Frame(self.canvas, bg=bg)
 
         self.body_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
@@ -133,7 +149,7 @@ class PeriodicTaskCardView(tk.Frame):
 
         # 滾動容器
         self.canvas = tk.Canvas(self, bg=bg, bd=0, highlightthickness=0)
-        self.scrollbar = tk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.scrollbar = DarkScrollbar(self, orient="vertical", command=self.canvas.yview)
         self.body_frame = tk.Frame(self.canvas, bg=bg)
 
         self.canvas_window = self.canvas.create_window((0, 0), window=self.body_frame, anchor="nw")

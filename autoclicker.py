@@ -67,11 +67,11 @@ class App(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.apply_app_icon()
 
-        # 全域字體配置 (增強微軟正黑體 UI 顯示效果)
+        # 全域字體與深色主題樣式配置 (深色滾動條、深色選單、微軟正黑體 UI)
         self.option_add("*Font", UITheme.FONT_NORMAL)
+        from theme import setup_dark_theme
+        setup_dark_theme(self)
         try:
-            style = ttk.Style()
-            style.configure("TCombobox", font=UITheme.FONT_NORMAL)
             self.option_add("*TCombobox*Listbox.font", UITheme.FONT_NORMAL)
         except tk.TclError:
             pass

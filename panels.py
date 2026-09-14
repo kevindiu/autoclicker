@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 from theme import UITheme
-from widgets import VarTable, PeriodicTaskCardView
+from widgets import VarTable, PeriodicTaskCardView, DarkScrollbar
 
 # ==============================================================================
 # UI 左欄面板 (LeftPanel)
@@ -245,7 +245,7 @@ class LeftPanel(tk.Frame):
         self.combo_listbox.pack(side="left", fill="both", expand=True)
         self.combo_listbox.bind("<<ListboxSelect>>", app.on_combo_select)
         self.combo_listbox.bind("<Double-Button-1>", app.on_combo_double_click_add)
-        sc_cl = tk.Scrollbar(f_cl_box, orient="vertical", command=self.combo_listbox.yview)
+        sc_cl = DarkScrollbar(f_cl_box, orient="vertical", command=self.combo_listbox.yview)
         sc_cl.pack(side="right", fill="y")
         self.combo_listbox.config(yscrollcommand=sc_cl.set)
 
@@ -349,7 +349,7 @@ class LeftPanel(tk.Frame):
         self.combo_act_listbox.bind("<Button-1>", _on_combo_act_click)
         self.combo_act_listbox.bind("<Double-Button-1>", lambda e: app.edit_selected_combo_action())
         f_cr_box.bind("<Button-1>", lambda e: self.combo_act_listbox.selection_clear(0, tk.END))
-        sc_cr = tk.Scrollbar(f_cr_box, orient="vertical", command=self.combo_act_listbox.yview)
+        sc_cr = DarkScrollbar(f_cr_box, orient="vertical", command=self.combo_act_listbox.yview)
         sc_cr.pack(side="right", fill="y")
         self.combo_act_listbox.config(yscrollcommand=sc_cr.set)
 
@@ -571,7 +571,7 @@ class RightPanel(tk.Frame):
             font=UITheme.FONT_NORMAL,
             exportselection=False
         )
-        sc_step = tk.Scrollbar(f_list_s, orient="vertical", command=self.step_listbox.yview)
+        sc_step = DarkScrollbar(f_list_s, orient="vertical", command=self.step_listbox.yview)
         sc_step.pack(side="right", fill="y")
         self.step_listbox.pack(side="left", fill="both", expand=True)
         self.step_listbox.config(yscrollcommand=sc_step.set)
@@ -706,7 +706,7 @@ class RightPanel(tk.Frame):
 
         self.txt_log = tk.Text(
             f_log_box,
-            height=13,
+            height=18,
             bg=UITheme.BG_DARK,
             fg=UITheme.TEXT_MAIN,
             font=UITheme.FONT_SMALL,
@@ -717,7 +717,7 @@ class RightPanel(tk.Frame):
         )
         self.txt_log.pack(side="left", fill="both", expand=True, padx=(4, 0), pady=2)
 
-        sc_log = tk.Scrollbar(f_log_box, orient="vertical", command=self.txt_log.yview)
+        sc_log = DarkScrollbar(f_log_box, orient="vertical", command=self.txt_log.yview)
         sc_log.pack(side="right", fill="y")
         self.txt_log.config(yscrollcommand=sc_log.set)
 
@@ -741,7 +741,7 @@ class RightPanel(tk.Frame):
         self.txt_log.tag_config("text_試跑", foreground="#c7d2fe")
 
         pw_right.add(f_middle_split, minsize=140)
-        pw_right.add(f_log_panel, minsize=140, height=295)
+        pw_right.add(f_log_panel, minsize=140, height=375)
 
     def get_widgets(self):
         """明確定義右欄面板所管理的公開 UI 控制項字典"""
