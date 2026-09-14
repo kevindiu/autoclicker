@@ -9,7 +9,8 @@ from win32_api import (
     post_bg_key,
     safe_sleep,
     emergency_release_all,
-    force_bring_window_to_front
+    force_bring_window_to_front,
+    is_window_alive
 )
 
 # ==============================================================================
@@ -67,15 +68,21 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
 
     atype = act.get("type")
     if atype == "click":
-        x = act.get("x", 0)
-        y = act.get("y", 0)
+        try:
+            x = int(act.get("x", 0))
+            y = int(act.get("y", 0))
+        except (ValueError, TypeError):
+            x, y = 0, 0
         btn = act.get("btn", "left")
         is_rel = act.get("rel")
         if v_data and v_data.get("type") == "coord":
             val = v_data.get("value", {})
             if isinstance(val, dict):
-                x = val.get("x", x)
-                y = val.get("y", y)
+                try:
+                    x = int(val.get("x", x))
+                    y = int(val.get("y", y))
+                except (ValueError, TypeError):
+                    pass
                 btn = val.get("btn", btn)
                 if "rel" in val:
                     is_rel = val.get("rel")
@@ -91,7 +98,7 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
             return False
 
     elif atype == "key":
-        key = act["key"]
+        key = str(act.get("key", "f1"))
         if v_data and v_data.get("type") == "key":
             key = str(v_data.get("value", key))
         if use_bg:
@@ -120,7 +127,10 @@ def dispatch_action(app, act, parent_desc, current_vars=None, current_combos=Non
             return False
 
     elif atype == "wait":
-        sec = float(act.get("sec", 0.5))
+        try:
+            sec = float(act.get("sec", 0.5))
+        except (ValueError, TypeError):
+            sec = 0.5
         if v_data and v_data.get("type") == "wait":
             try:
                 sec = float(v_data.get("value", sec))
@@ -225,6 +235,8 @@ def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, 
         if now - last_run >= interval:
             if not state.is_running() or state.stop_event.is_set():
                 return False
+            if IS_WINDOWS and state.target_hwnd and not is_window_alive(state.target_hwnd):
+                return False
             task_name = pt.get("name", "").strip() or "定時任務"
             pt_id = pt.get("id") or f"pt_idx_{idx}"
             act = pt.get("action", {})
@@ -278,6 +290,14 @@ def macro_worker_loop(app):
             return
 
         while state.is_running() and not state.stop_event.is_set():
+            if IS_WINDOWS and state.target_hwnd and not is_window_alive(state.target_hwnd):
+                msg = "目標遊戲視窗已關閉或崩潰，巨集已自動安全停止！"
+                app.set_status(msg)
+                if hasattr(app, "append_log"):
+                    app.append_log("警示", f"✕ {msg}")
+                state.set_running(False)
+                break
+
             with state.steps_lock:
                 current_steps = copy.deepcopy(state.active_steps)
                 current_combos = copy.deepcopy(state.active_combos)
@@ -329,6 +349,14 @@ def macro_worker_loop(app):
 
             for idx, step in enumerate(current_steps):
                 if not state.is_running() or state.stop_event.is_set():
+                    break
+
+                if IS_WINDOWS and state.target_hwnd and not is_window_alive(state.target_hwnd):
+                    msg = "目標遊戲視窗已關閉或崩潰，巨集已自動安全停止！"
+                    app.set_status(msg)
+                    if hasattr(app, "append_log"):
+                        app.append_log("警示", f"✕ {msg}")
+                    state.set_running(False)
                     break
 
                 app.highlight_active_step(idx)
@@ -410,6 +438,12 @@ def test_run_execution_flow_worker(app):
 
         for idx, step in enumerate(steps_copy):
             if state.stop_event.is_set():
+                break
+            if IS_WINDOWS and state.target_hwnd and not is_window_alive(state.target_hwnd):
+                msg = "目標遊戲視窗已關閉，試跑流程中止！"
+                app.set_status(msg)
+                if hasattr(app, "append_log"):
+                    app.append_log("警示", f"✕ {msg}")
                 break
             app.highlight_active_step(idx)
             pfx = "[試跑流程] "

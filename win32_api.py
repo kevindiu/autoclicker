@@ -112,6 +112,8 @@ if IS_WINDOWS:
     user32.GetAsyncKeyState.restype = ctypes.c_short
     user32.IsWindowVisible.argtypes = [wintypes.HWND]
     user32.IsWindowVisible.restype = wintypes.BOOL
+    user32.IsWindow.argtypes = [wintypes.HWND]
+    user32.IsWindow.restype = wintypes.BOOL
     user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
     user32.GetWindowTextLengthW.restype = ctypes.c_int
     user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
@@ -309,3 +311,12 @@ def force_bring_window_to_front(hwnd):
         user32.BringWindowToTop(hwnd)
     except (OSError, AttributeError):
         pass
+
+def is_window_alive(hwnd):
+    """檢查指定視窗句柄是否仍然存活且有效 (防禦目標視窗關閉或異常崩潰)"""
+    if not IS_WINDOWS or not user32 or not hwnd:
+        return True
+    try:
+        return bool(user32.IsWindow(hwnd))
+    except (OSError, AttributeError):
+        return True
