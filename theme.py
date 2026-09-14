@@ -64,6 +64,13 @@ class UITheme:
     CARD_ACTIVE_BG = "#064e3b"         # 祖母綠深底 (定時任務觸發運行中)
     CARD_ACTIVE_BORDER = "#34d399"     # 亮翠綠邊框 (定時任務觸發運行中)
 
+    # ================= 流程清單與提示橫幅 (Steps & Banners) 色碼 =================
+    STEP_ACTIVE_BG = "#2a4365"         # 執行中步驟底色 (深藍)
+    STEP_ACTIVE_FG = "#63b3ed"         # 執行中步驟文字 (亮藍)
+    STEP_PENDING_BG = "#451a03"        # 待命接續步驟底色 (暖金琥珀)
+    STEP_PENDING_FG = "#fbbf24"        # 待命接續步驟文字 (琥珀字)
+    BANNER_BG = "#0f172a"              # 浮動提示框底色 (深邃藍黑)
+
     # ================= 徽章與狀態標籤 (Badges) 色碼 =================
     BADGE_PURPLE_BG = "#3b0764"        # 輪次觸發徽章底色 (深紫)
     BADGE_PURPLE_FG = "#c084fc"        # 輪次觸發徽章文字 (紫羅蘭)
@@ -80,6 +87,16 @@ class UITheme:
     BADGE_AMBER_BG = "#78350f"         # 首發徽章底色 (深琥珀)
     BADGE_AMBER_FG = "#fbbf24"         # 首發徽章文字 (暖黃)
     BADGE_MUTED_FG = "#475569"         # 停用副文字 (暗灰)
+
+    # ================= 日誌終端機 (Log Terminal) 專屬色碼 =================
+    LOG_TAG_TEST = "#818cf8"           # 試跑 Tag (淺靛紫)
+    LOG_TAG_ALERT = "#f87171"          # 警示 Tag (亮紅)
+    LOG_TEXT_ALERT = "#fca5a5"         # 警示內容 (淺紅)
+    LOG_TEXT_FLOW = "#e2e8f0"          # 流程內容 (淺灰)
+    LOG_TEXT_PERIODIC = "#bae6fd"      # 定時內容 (粉藍)
+    LOG_TEXT_COMBO = "#e9d5ff"         # 組合內容 (粉紫)
+    LOG_TEXT_SYS = "#86efac"           # 系統內容 (粉綠)
+    LOG_TEXT_TEST = "#c7d2fe"          # 試跑內容 (粉紫藍)
 
     # ================= 深色滾動條配置 (Dark Scrollbar) =================
     SCROLLBAR_THUMB = "#334155"         # 滑塊底色 (深石板灰)

@@ -1,7 +1,7 @@
 import copy
 import time
 import pyautogui
-from typing import Optional, Set, Dict, List
+from typing import Optional, Set, Dict, List, Tuple
 
 import constants
 import state
@@ -289,15 +289,15 @@ def get_trigger_strategy(trigger_mode):
     return IntervalTriggerStrategy()
 
 def check_and_run_due_periodic_tasks(
-    periodic_tasks_runtime,
-    current_vars,
-    current_combos,
-    round_prefix="",
-    next_step_idx=None,
-    current_round=0,
-    is_round_end=False,
-    is_startup=False
-):
+    periodic_tasks_runtime: List[Dict],
+    current_vars: Optional[Dict[str, VariableDict]],
+    current_combos: Optional[List[ComboDict]],
+    round_prefix: str = "",
+    next_step_idx: Optional[int] = None,
+    current_round: int = 0,
+    is_round_end: bool = False,
+    is_startup: bool = False
+) -> bool:
     """檢查是否有已到期的定時任務（支援時間間隔與循環輪次雙觸發模式）；若有，安全依序執行並更新時間/輪次戳記"""
     if not periodic_tasks_runtime:
         return True
@@ -356,7 +356,108 @@ def check_and_run_due_periodic_tasks(
                 return False
     return True
 
-def macro_worker_loop():
+def _apply_hot_reload(round_idx: int, periodic_tasks_runtime: List[Dict]) -> Tuple[List[Dict], List[ComboDict], Dict[str, VariableDict]]:
+    """套用熱更新，並回傳最新的 steps, combos, variables"""
+    state.app_state.reload_requested = False
+    current_steps = state.fast_deepcopy(state.app_state.active_steps)
+    current_combos = state.fast_deepcopy(state.app_state.active_combos)
+    current_variables = state.fast_deepcopy(state.app_state.active_variables)
+    latest_pts = state.fast_deepcopy(state.app_state.active_periodic_tasks)
+
+    # 平滑套用熱更新，保留進行中定時任務的上次執行計時與輪次
+    existing_timers = {
+        pt.get("id"): (pt.get("last_run"), pt.get("last_run_round", 0))
+        for pt in periodic_tasks_runtime if pt.get("id")
+    }
+    new_runtime = []
+    now = time.time()
+    for pt in latest_pts:
+        pt_copy = copy.deepcopy(pt)
+        pt_id = pt_copy.get("id")
+        if pt_id in existing_timers:
+            pt_copy["last_run"], pt_copy["last_run_round"] = existing_timers[pt_id]
+        else:
+            pt_copy["last_run"] = 0.0 if pt.get("run_on_start", False) else now
+            pt_copy["last_run_round"] = round_idx
+        new_runtime.append(pt_copy)
+    periodic_tasks_runtime[:] = new_runtime
+    sync_periodic_timers(periodic_tasks_runtime, current_round=round_idx)
+    msg = f"第 {round_idx} 輪: 已自動套用最新流程與定時任務！"
+    EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"⚡ {msg}")
+    
+    return current_steps, current_combos, current_variables
+
+def _execute_round_steps(
+    current_steps: List[Dict],
+    current_variables: Dict[str, VariableDict],
+    current_combos: List[ComboDict],
+    periodic_tasks_runtime: List[Dict],
+    round_idx: int
+) -> bool:
+    """執行一輪的所有步驟，回傳是否應繼續執行"""
+    EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"--- 開始第 {round_idx} 輪循環 ---")
+    sync_periodic_timers(periodic_tasks_runtime, current_round=round_idx)
+
+    for idx, step in enumerate(current_steps):
+        if not state.is_running() or state.app_state.stop_event.is_set():
+            return False
+
+        if IS_WINDOWS and state.app_state.target_hwnd and not is_window_alive(state.app_state.target_hwnd):
+            msg = "目標遊戲視窗已關閉或崩潰，巨集已自動安全停止！"
+            EventBus.emit(AppEvents.LOG_MESSAGE, "警示", f"✕ {msg}")
+            state.set_running(False)
+            return False
+
+        EventBus.emit(AppEvents.HIGHLIGHT_STEP, idx)
+        pfx = f"第 {round_idx} 輪: "
+
+        stype = step.get("type")
+        step_ok = True
+        if stype == "combo":
+            c_name = step.get("name", "組合")
+            sub_actions = step.get("actions", [])
+            sub_total = len(sub_actions)
+            for a_idx, act in enumerate(sub_actions):
+                if not state.is_running() or state.app_state.stop_event.is_set():
+                    step_ok = False
+                    break
+                EventBus.emit(AppEvents.HIGHLIGHT_STEP, idx, sub_idx=a_idx)
+                if not dispatch_action(
+                    act,
+                    f"[{c_name}#{a_idx+1}/{sub_total}]",
+                    current_vars=current_variables,
+                    current_combos=current_combos,
+                    depth=0,
+                    visited_set={c_name},
+                    is_test=False,
+                    round_prefix=pfx
+                ):
+                    step_ok = False
+                    break
+        else:
+            if not dispatch_action(
+                step,
+                f"步驟#{idx+1}",
+                current_vars=current_variables,
+                current_combos=current_combos,
+                depth=0,
+                visited_set=set(),
+                is_test=False,
+                round_prefix=pfx
+            ):
+                step_ok = False
+
+        if not step_ok or not state.is_running() or state.app_state.stop_event.is_set():
+            return False
+
+        # 當前步驟或 COMBO 已完全執行結束！安全檢查並執行到期的定時任務（非每輪結束，僅 interval 任務判定）
+        next_step = (idx + 1) if (idx + 1 < len(current_steps)) else 0
+        if not check_and_run_due_periodic_tasks(periodic_tasks_runtime, current_variables, current_combos, round_prefix=pfx, next_step_idx=next_step, current_round=round_idx, is_round_end=False):
+            return False
+
+    return True
+
+def macro_worker_loop() -> None:
     """背景巨集循環執行緒主迴圈"""
     round_idx = 1
     with state.app_state.steps_lock:
@@ -399,34 +500,10 @@ def macro_worker_loop():
 
             with state.app_state.steps_lock:
                 was_reloaded = state.app_state.reload_requested
-                if was_reloaded:
-                    state.app_state.reload_requested = False
-                    current_steps = state.fast_deepcopy(state.app_state.active_steps)
-                    current_combos = state.fast_deepcopy(state.app_state.active_combos)
-                    current_variables = state.fast_deepcopy(state.app_state.active_variables)
-                    latest_pts = state.fast_deepcopy(state.app_state.active_periodic_tasks)
 
             if was_reloaded:
-                # 平滑套用熱更新，保留進行中定時任務的上次執行計時與輪次
-                existing_timers = {
-                    pt.get("id"): (pt.get("last_run"), pt.get("last_run_round", 0))
-                    for pt in periodic_tasks_runtime if pt.get("id")
-                }
-                new_runtime = []
-                now = time.time()
-                for pt in latest_pts:
-                    pt_copy = copy.deepcopy(pt)
-                    pt_id = pt_copy.get("id")
-                    if pt_id in existing_timers:
-                        pt_copy["last_run"], pt_copy["last_run_round"] = existing_timers[pt_id]
-                    else:
-                        pt_copy["last_run"] = 0.0 if pt.get("run_on_start", False) else now
-                        pt_copy["last_run_round"] = round_idx
-                    new_runtime.append(pt_copy)
-                periodic_tasks_runtime = new_runtime
-                sync_periodic_timers(periodic_tasks_runtime, current_round=round_idx)
-                msg = f"第 {round_idx} 輪: 已自動套用最新流程與定時任務！"
-                EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"⚡ {msg}")
+                with state.app_state.steps_lock:
+                    current_steps, current_combos, current_variables = _apply_hot_reload(round_idx, periodic_tasks_runtime)
 
             has_enabled_periodic = any(pt.get("enabled", True) for pt in periodic_tasks_runtime)
             if not current_steps and not has_enabled_periodic:
@@ -443,65 +520,8 @@ def macro_worker_loop():
                     break
                 continue
 
-            EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"--- 開始第 {round_idx} 輪循環 ---")
-            sync_periodic_timers(periodic_tasks_runtime, current_round=round_idx)
-
-            for idx, step in enumerate(current_steps):
-                if not state.is_running() or state.app_state.stop_event.is_set():
-                    break
-
-                if IS_WINDOWS and state.app_state.target_hwnd and not is_window_alive(state.app_state.target_hwnd):
-                    msg = "目標遊戲視窗已關閉或崩潰，巨集已自動安全停止！"
-                    EventBus.emit(AppEvents.LOG_MESSAGE, "警示", f"✕ {msg}")
-                    state.set_running(False)
-                    break
-
-                EventBus.emit(AppEvents.HIGHLIGHT_STEP, idx)
-                pfx = f"第 {round_idx} 輪: "
-
-                stype = step.get("type")
-                step_ok = True
-                if stype == "combo":
-                    c_name = step.get("name", "組合")
-                    sub_actions = step.get("actions", [])
-                    sub_total = len(sub_actions)
-                    for a_idx, act in enumerate(sub_actions):
-                        if not state.is_running() or state.app_state.stop_event.is_set():
-                            step_ok = False
-                            break
-                        EventBus.emit(AppEvents.HIGHLIGHT_STEP, idx, sub_idx=a_idx)
-                        if not dispatch_action(
-                            act,
-                            f"[{c_name}#{a_idx+1}/{sub_total}]",
-                            current_vars=current_variables,
-                            current_combos=current_combos,
-                            depth=0,
-                            visited_set={c_name},
-                            is_test=False,
-                            round_prefix=pfx
-                        ):
-                            step_ok = False
-                            break
-                else:
-                    if not dispatch_action(
-                        step,
-                        f"步驟#{idx+1}",
-                        current_vars=current_variables,
-                        current_combos=current_combos,
-                        depth=0,
-                        visited_set=set(),
-                        is_test=False,
-                        round_prefix=pfx
-                    ):
-                        step_ok = False
-
-                if not step_ok or not state.is_running() or state.app_state.stop_event.is_set():
-                    break
-
-                # 當前步驟或 COMBO 已完全執行結束！安全檢查並執行到期的定時任務（非每輪結束，僅 interval 任務判定）
-                next_step = (idx + 1) if (idx + 1 < len(current_steps)) else 0
-                if not check_and_run_due_periodic_tasks(periodic_tasks_runtime, current_variables, current_combos, round_prefix=pfx, next_step_idx=next_step, current_round=round_idx, is_round_end=False):
-                    break
+            if not _execute_round_steps(current_steps, current_variables, current_combos, periodic_tasks_runtime, round_idx):
+                break
 
             # 輪次銜接時亦進行一次定時任務檢查（is_round_end=True，round 與 interval 任務皆判定）
             next_step = 0 if current_steps else None

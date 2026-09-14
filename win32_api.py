@@ -2,6 +2,7 @@ import time
 import ctypes
 from ctypes import wintypes
 import pyautogui
+from typing import Optional, Tuple, Any
 
 import state
 from events import EventBus, AppEvents
@@ -14,7 +15,7 @@ pyautogui.PAUSE = 0.0
 # ==============================================================================
 IS_WINDOWS = hasattr(ctypes, "windll")
 
-def to_lparam(val):
+def to_lparam(val: int) -> int:
     """安全轉換整數為 C 語言 signed LPARAM 範圍，防止 32-bit / 64-bit ctypes 溢位"""
     val = int(val) & 0xFFFFFFFF
     return val if val < 0x80000000 else val - 0x100000000
@@ -142,7 +143,7 @@ else:
     user32 = None
     WNDENUMPROC = None
 
-def get_cursor_pos():
+def get_cursor_pos() -> Tuple[int, int]:
     if IS_WINDOWS and user32:
         pt = POINT()
         user32.GetCursorPos(ctypes.byref(pt))
@@ -180,7 +181,7 @@ VK_MAP = {
 # ==============================================================================
 # 動作執行與安全輔助函數
 # ==============================================================================
-def safe_sleep(seconds, stop_event=None):
+def safe_sleep(seconds: float, stop_event: Optional[Any] = None) -> bool:
     """具備中止感知的安全等待 (支援微秒級自旋等待)
     
     :param seconds: 等待秒數
@@ -204,7 +205,7 @@ def safe_sleep(seconds, stop_event=None):
     interrupted = ev.wait(timeout=sec)
     return not interrupted
 
-def emergency_release_all():
+def emergency_release_all() -> None:
     """全面釋放背景與前台的所有可能卡住的滑鼠與鍵盤狀態"""
     # 1. 釋放背景滑鼠
     if IS_WINDOWS and state.app_state.target_hwnd and user32:
@@ -235,7 +236,7 @@ def emergency_release_all():
     except (pyautogui.PyAutoGUIException, OSError, ValueError) as e:
         EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"例外 (釋放前台滑鼠): {e}")
 
-def post_bg_click(hwnd, client_x, client_y, offset_x=0, offset_y=0, btn="left"):
+def post_bg_click(hwnd: Any, client_x: int, client_y: int, offset_x: int = 0, offset_y: int = 0, btn: str = "left") -> Tuple[int, int]:
     """向指定視窗背景發送點擊訊息"""
     if not IS_WINDOWS or not hwnd or not user32:
         pyautogui.click(client_x, client_y, button=btn)
@@ -259,7 +260,7 @@ def post_bg_click(hwnd, client_x, client_y, offset_x=0, offset_y=0, btn="left"):
             EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"Win32 API 例外 (點擊): {e}")
     return cx, cy
 
-def post_bg_key(hwnd, key_str):
+def post_bg_key(hwnd: Any, key_str: str) -> None:
     """向指定視窗背景發送按鍵按下與放開訊息"""
     if not IS_WINDOWS or not hwnd or not user32:
         with state.app_state.currently_held_keys_lock:
@@ -291,8 +292,8 @@ def post_bg_key(hwnd, key_str):
         scan_code = 0
         try:
             scan_code = user32.MapVirtualKeyW(vk, 0)
-        except OSError:
-            pass
+        except OSError as e:
+            EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"Win32 API 例外 (MapVirtualKeyW): {e}")
         lparam_down = to_lparam(1 | (scan_code << 16))
         lparam_up = to_lparam(1 | (scan_code << 16) | KEY_RELEASE_LPARAM_MASK)
         with state.app_state.currently_held_keys_lock:
@@ -303,12 +304,12 @@ def post_bg_key(hwnd, key_str):
         finally:
             try:
                 user32.PostMessageW(hwnd, WM_KEYUP, vk, lparam_up)
-            except (OSError, ctypes.ArgumentError):
-                pass
+            except (OSError, ctypes.ArgumentError) as e:
+                EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"Win32 API 例外 (KeyUp): {e}")
             with state.app_state.currently_held_keys_lock:
                 state.app_state.currently_held_keys.discard(("bg", hwnd, vk))
 
-def execute_click(x, y, is_rel, use_bg, off_x, off_y, btn="left", target_hwnd=None):
+def execute_click(x: int, y: int, is_rel: bool, use_bg: bool, off_x: int, off_y: int, btn: str = "left", target_hwnd: Optional[Any] = None) -> str:
     """統一派發前台或背景點擊 (保證後台與前台模式均精準套用偏差校正)"""
     hwnd = target_hwnd if target_hwnd is not None else state.app_state.target_hwnd
     btn_cn = "右鍵" if btn == "right" else "左鍵"
@@ -330,7 +331,7 @@ def execute_click(x, y, is_rel, use_bg, off_x, off_y, btn="left", target_hwnd=No
         pyautogui.click(target_x, target_y, button=btn)
         return f"前台{btn_cn} ({target_x},{target_y})"
 
-def force_bring_window_to_front(hwnd):
+def force_bring_window_to_front(hwnd: Any) -> None:
     """強制喚醒並將目標視窗置頂最前"""
     if not IS_WINDOWS or not hwnd or not user32:
         return
@@ -347,14 +348,15 @@ def force_bring_window_to_front(hwnd):
 
         user32.SetForegroundWindow(hwnd)
         user32.BringWindowToTop(hwnd)
-    except (OSError, AttributeError):
-        pass
+    except (OSError, AttributeError) as e:
+        EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"Win32 API 例外 (BringWindowToTop): {e}")
 
-def is_window_alive(hwnd):
+def is_window_alive(hwnd: Any) -> bool:
     """檢查指定視窗句柄是否仍然存活且有效 (防禦目標視窗關閉或異常崩潰)"""
     if not IS_WINDOWS or not user32 or not hwnd:
         return True
     try:
         return bool(user32.IsWindow(hwnd))
-    except (OSError, AttributeError):
+    except (OSError, AttributeError) as e:
+        EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"Win32 API 例外 (IsWindow): {e}")
         return True

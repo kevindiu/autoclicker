@@ -130,7 +130,7 @@ class App(tk.Tk):
         self.build_right_panel()
 
         # 執行緒安全的 UI 通訊佇列
-        self.ui_task_queue = queue.Queue()
+        self.ui_task_queue = queue.Queue(maxsize=2000)
         self.poll_ui_queues()
 
         # EventBus Subscriptions (必須在 load_config 前註冊，確保初始載入事件能正確觸發 UI 更新)
@@ -283,7 +283,7 @@ class App(tk.Tk):
         last_idx = getattr(self, "last_active_step_idx", None)
         if last_idx is not None and 0 <= last_idx < len(state.app_state.steps):
             try:
-                self.step_listbox.itemconfigure(last_idx, background="#2a4365", foreground="#63b3ed")
+                self.step_listbox.itemconfigure(last_idx, background=UITheme.STEP_ACTIVE_BG, foreground=UITheme.STEP_ACTIVE_FG)
             except tk.TclError:
                 pass
         if select_idx is not None and 0 <= select_idx < len(state.app_state.steps):
@@ -368,7 +368,8 @@ class App(tk.Tk):
                 pass
 
         tasks_executed = 0
-        while tasks_executed < 50:
+        start_time = time.perf_counter()
+        while True:
             try:
                 fn = self.ui_task_queue.get_nowait()
             except queue.Empty:
@@ -378,6 +379,10 @@ class App(tk.Tk):
                 tasks_executed += 1
             except Exception as e:
                 self.append_log("警示", f"UI 任務執行失敗: {e}")
+            
+            # 限制單次批次處理時間不超過 20ms，確保 Tkinter 主迴圈能維持 50FPS 以上的流暢度
+            if time.perf_counter() - start_time > 0.02:
+                break
 
         # 定時週期任務即時倒數與設定值更新 (每 200ms 刷新一次)
         now_ts = time.time()
@@ -601,13 +606,13 @@ class App(tk.Tk):
         by = 12
         banner.geometry(f"{bw}x{bh}+{bx}+{by}")
 
-        inner_frame = tk.Frame(banner, bg="#0f172a", padx=10, pady=4)
+        inner_frame = tk.Frame(banner, bg=UITheme.BANNER_BG, padx=10, pady=4)
         inner_frame.pack(fill="both", expand=True, padx=2, pady=2)
 
         lbl_hud = tk.Label(
             inner_frame,
             text=f"【設定{btn_cn}點擊】將滑鼠指住目標 -> 按 [SPACE 空白鍵] 確定！(按 ESC 取消)",
-            bg="#0f172a",
+            bg=UITheme.BANNER_BG,
             fg=UITheme.CYAN_TITLE,
             font=UITheme.FONT_TITLE
         )
@@ -691,7 +696,7 @@ class App(tk.Tk):
 
             if 0 <= idx < lb_sz:
                 try:
-                    lb.itemconfigure(idx, background="#2a4365", foreground="#63b3ed")
+                    lb.itemconfigure(idx, background=UITheme.STEP_ACTIVE_BG, foreground=UITheme.STEP_ACTIVE_FG)
                     self.last_active_step_idx = idx
                     lb.see(idx)
                 except tk.TclError:
@@ -715,8 +720,8 @@ class App(tk.Tk):
 
             if 0 <= idx < lb_sz:
                 try:
-                    # 採用待命接續樣式：暖金琥珀色 (#451a03 底 + #fbbf24 字)，一眼看清定時任務結束後下一動跑哪一步！
-                    lb.itemconfigure(idx, background="#451a03", foreground="#fbbf24")
+                    # 採用待命接續樣式：一眼看清定時任務結束後下一動跑哪一步！
+                    lb.itemconfigure(idx, background=UITheme.STEP_PENDING_BG, foreground=UITheme.STEP_PENDING_FG)
                     self.last_active_step_idx = idx
                     lb.see(idx)
                 except tk.TclError:

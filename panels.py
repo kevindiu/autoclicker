@@ -565,7 +565,7 @@ class RightPanel(tk.Frame):
             self.step_listbox,
             text="☰ 尚無掛機步驟\n\n點擊上方「+ 瞄準取點」\n或雙擊左側組合加入步驟",
             bg=UITheme.BG_DARK,
-            fg="#64748b",
+            fg=UITheme.BADGE_IDLE_FG,
             font=UITheme.FONT_SMALL,
             justify="center",
             cursor="arrow"
@@ -711,19 +711,19 @@ class RightPanel(tk.Frame):
         self.txt_log.bind("<Button-5>", lambda e: self.txt_log.yview_scroll(1, "units"), add="+")
 
         # 設定 Tag 色彩樣式
-        self.txt_log.tag_config("time", foreground="#94a3b8")
-        self.txt_log.tag_config("tag_流程", foreground="#f1f5f9")
-        self.txt_log.tag_config("tag_定時", foreground="#38bdf8")
-        self.txt_log.tag_config("tag_組合", foreground="#c084fc")
-        self.txt_log.tag_config("tag_系統", foreground="#4ade80")
-        self.txt_log.tag_config("tag_試跑", foreground="#818cf8")
-        self.txt_log.tag_config("tag_警示", foreground="#f87171")
-        self.txt_log.tag_config("text_警示", foreground="#fca5a5")
-        self.txt_log.tag_config("text_流程", foreground="#e2e8f0")
-        self.txt_log.tag_config("text_定時", foreground="#bae6fd")
-        self.txt_log.tag_config("text_組合", foreground="#e9d5ff")
-        self.txt_log.tag_config("text_系統", foreground="#86efac")
-        self.txt_log.tag_config("text_試跑", foreground="#c7d2fe")
+        self.txt_log.tag_config("time", foreground=UITheme.TEXT_MUTED)
+        self.txt_log.tag_config("tag_流程", foreground=UITheme.TEXT_MAIN)
+        self.txt_log.tag_config("tag_定時", foreground=UITheme.CYAN_TITLE)
+        self.txt_log.tag_config("tag_組合", foreground=UITheme.BADGE_PURPLE_FG)
+        self.txt_log.tag_config("tag_系統", foreground=UITheme.BADGE_GREEN_FG)
+        self.txt_log.tag_config("tag_試跑", foreground=UITheme.LOG_TAG_TEST)
+        self.txt_log.tag_config("tag_警示", foreground=UITheme.LOG_TAG_ALERT)
+        self.txt_log.tag_config("text_警示", foreground=UITheme.LOG_TEXT_ALERT)
+        self.txt_log.tag_config("text_流程", foreground=UITheme.LOG_TEXT_FLOW)
+        self.txt_log.tag_config("text_定時", foreground=UITheme.LOG_TEXT_PERIODIC)
+        self.txt_log.tag_config("text_組合", foreground=UITheme.LOG_TEXT_COMBO)
+        self.txt_log.tag_config("text_系統", foreground=UITheme.LOG_TEXT_SYS)
+        self.txt_log.tag_config("text_試跑", foreground=UITheme.LOG_TEXT_TEST)
 
         pw_right.add(f_middle_split, minsize=140)
         pw_right.add(f_log_panel, minsize=140, height=375)
