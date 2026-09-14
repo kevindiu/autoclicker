@@ -7,7 +7,6 @@ import state
 from events import EventBus, AppEvents
 from state import ActionDict, ComboDict, VariableDict
 from win32_api import (
-    IS_WINDOWS,
     execute_click,
     post_bg_key,
     safe_sleep,
@@ -174,12 +173,12 @@ def dispatch_action(
         if current_combos is None:
             current_combos = state.app_state.test_combos
 
-    use_bg = state.app_state.use_bg and IS_WINDOWS and (state.app_state.target_hwnd is not None)
+    use_bg = state.app_state.use_bg and (state.app_state.target_hwnd is not None)
     off_x = state.app_state.offset_x
     off_y = state.app_state.offset_y
 
     # 若在前台模式且有綁定目標視窗，自動將目標視窗置頂以確保能接收點擊與按鍵
-    if not use_bg and IS_WINDOWS and state.app_state.target_hwnd:
+    if not use_bg and state.app_state.target_hwnd:
         force_bring_window_to_front(state.app_state.target_hwnd)
 
     if is_test:
@@ -314,7 +313,7 @@ def check_and_run_due_periodic_tasks(
         if strategy.is_due(pt, ctx):
             if not state.is_running() or state.app_state.stop_event.is_set():
                 return False
-            if IS_WINDOWS and state.app_state.target_hwnd and not is_window_alive(state.app_state.target_hwnd):
+            if state.app_state.target_hwnd and not is_window_alive(state.app_state.target_hwnd):
                 return False
             task_name = pt.get("name", "").strip() or "定時任務"
             pt_id = pt.get("id") or f"pt_idx_{idx}"
@@ -403,7 +402,7 @@ def _execute_round_steps(
         if not state.is_running() or state.app_state.stop_event.is_set():
             return False
 
-        if IS_WINDOWS and state.app_state.target_hwnd and not is_window_alive(state.app_state.target_hwnd):
+        if state.app_state.target_hwnd and not is_window_alive(state.app_state.target_hwnd):
             msg = "目標遊戲視窗已關閉或崩潰，巨集已自動安全停止！"
             EventBus.emit(AppEvents.LOG_MESSAGE, "警示", f"✕ {msg}")
             state.set_running(False)
@@ -493,7 +492,7 @@ def macro_worker_loop() -> None:
             return
 
         while state.is_running() and not state.app_state.stop_event.is_set():
-            if IS_WINDOWS and state.app_state.target_hwnd and not is_window_alive(state.app_state.target_hwnd):
+            if state.app_state.target_hwnd and not is_window_alive(state.app_state.target_hwnd):
                 msg = "目標遊戲視窗已關閉或崩潰，巨集已自動安全停止！"
                 EventBus.emit(AppEvents.LOG_MESSAGE, "警示", f"✕ {msg}")
                 state.set_running(False)
@@ -554,7 +553,7 @@ def test_run_execution_flow_worker():
         for idx, step in enumerate(steps_copy):
             if state.app_state.stop_event.is_set():
                 break
-            if IS_WINDOWS and state.app_state.target_hwnd and not is_window_alive(state.app_state.target_hwnd):
+            if state.app_state.target_hwnd and not is_window_alive(state.app_state.target_hwnd):
                 msg = "目標遊戲視窗已關閉，試跑流程中止！"
                 EventBus.emit(AppEvents.LOG_MESSAGE, "警示", f"✕ {msg}")
                 break

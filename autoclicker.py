@@ -15,7 +15,7 @@ import state
 from state import format_action_summary
 from win32_api import (
     get_cursor_pos,
-    IS_WINDOWS,
+    HWND_TOPMOST,
     user32,
     POINT,
     WNDENUMPROC,
@@ -522,7 +522,7 @@ class App(tk.Tk):
 
             # 僅在游標位置變更或首度初始化時執行 Win32 ScreenToClient 轉換與 UI 渲染
             if is_moved or not hasattr(self, "_last_mouse_hud_text"):
-                if IS_WINDOWS and state.app_state.target_hwnd and getattr(self, "cached_use_rel", True) and user32:
+                if state.app_state.target_hwnd and getattr(self, "cached_use_rel", True) and user32:
                     pt = POINT(cur_raw[0], cur_raw[1])
                     user32.ScreenToClient(state.app_state.target_hwnd, ctypes.byref(pt))
                     new_text = f"游標實時坐標(相對): ({pt.x}, {pt.y})"
@@ -556,14 +556,14 @@ class App(tk.Tk):
         self.deiconify()
         self.lift()
         self.focus_force()
-        if IS_WINDOWS and user32:
+        if user32:
             hwnd_self = user32.FindWindowW(None, WINDOW_TITLE)
             if hwnd_self:
                 force_bring_window_to_front(hwnd_self)
 
     def locate_target_window(self):
         """定位並閃爍目標遊戲視窗 (非同步背景閃爍，杜絕 UI 主執行緒凍結)"""
-        if not IS_WINDOWS or not state.app_state.target_hwnd or not user32:
+        if not state.app_state.target_hwnd or not user32:
             return self.set_status("未綁定有效視窗，無法定位！")
 
         hwnd = state.app_state.target_hwnd
@@ -618,7 +618,7 @@ class App(tk.Tk):
         )
         lbl_hud.pack(fill="both", expand=True)
 
-        if IS_WINDOWS and user32:
+        if user32:
             user32.GetAsyncKeyState(VK_SPACE)
             user32.GetAsyncKeyState(VK_ESCAPE)
 
@@ -629,7 +629,7 @@ class App(tk.Tk):
                 return
 
             pos_x, pos_y = get_cursor_pos()
-            if IS_WINDOWS and state.app_state.target_hwnd and self.var_use_rel.get() and user32:
+            if state.app_state.target_hwnd and self.var_use_rel.get() and user32:
                 pt = POINT(int(pos_x), int(pos_y))
                 user32.ScreenToClient(state.app_state.target_hwnd, ctypes.byref(pt))
                 coord_desc = f"({pt.x}, {pt.y})"
@@ -640,7 +640,7 @@ class App(tk.Tk):
 
             lbl_hud.config(text=f"【設定{btn_cn}點擊】滑鼠指住目標 -> 按 [SPACE 空白鍵] 確定！(坐標: {coord_desc} | ESC 取消)")
 
-            if IS_WINDOWS and user32:
+            if user32:
                 if user32.GetAsyncKeyState(VK_SPACE) & KEY_PRESSED_MASK:
                     is_handled[0] = True
                     banner.destroy()
@@ -847,7 +847,7 @@ class App(tk.Tk):
 
     # ======================= 視窗綁定 =======================
     def get_window_list(self):
-        if not IS_WINDOWS or not user32:
+        if not user32:
             return []
         windows = []
         def enum_proc(hwnd, lParam):

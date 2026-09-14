@@ -108,7 +108,7 @@ class UITheme:
     SCROLLBAR_WIDTH = 12                # 滾動條寬度 (精緻窄邊排版)
 
     # ================= 統一清晰字體系統 (微軟正黑體 UI) =================
-    FONT_FAMILY = "Microsoft JhengHei UI" if sys.platform == "win32" else ("PingFang TC" if sys.platform == "darwin" else "Noto Sans CJK TC")
+    FONT_FAMILY = "Microsoft JhengHei UI"
     
     FONT_SMALL = (FONT_FAMILY, 8)
     FONT_SMALL_BOLD = (FONT_FAMILY, 8, "bold")

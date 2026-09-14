@@ -19,7 +19,7 @@ def _get_pyautogui():
 # ==============================================================================
 # Win32 底層 API 封裝與溢位防護
 # ==============================================================================
-IS_WINDOWS = hasattr(ctypes, "windll")
+# ==============================================================================
 
 def to_lparam(val: int) -> int:
     """安全轉換整數為 C 語言 signed LPARAM 範圍，防止 32-bit / 64-bit ctypes 溢位"""
@@ -88,10 +88,9 @@ HWND_NOTOPMOST   = ctypes.c_void_p(-2)
 
 POINT = wintypes.POINT
 
-if IS_WINDOWS:
-    for fn in (lambda: ctypes.windll.shcore.SetProcessDpiAwareness(2), lambda: ctypes.windll.user32.SetProcessDPIAware()):
-        try: fn(); break
-        except (AttributeError, OSError): pass
+for fn in (lambda: ctypes.windll.shcore.SetProcessDpiAwareness(2), lambda: ctypes.windll.user32.SetProcessDPIAware()):
+    try: fn(); break
+    except (AttributeError, OSError): pass
 
     user32 = ctypes.windll.user32
     user32.ScreenToClient.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
@@ -149,12 +148,11 @@ else:
     WNDENUMPROC = None
 
 def get_cursor_pos() -> Tuple[int, int]:
-    if IS_WINDOWS and user32:
+    if user32:
         pt = POINT()
         user32.GetCursorPos(ctypes.byref(pt))
         return (pt.x, pt.y)
-    pos = _get_pyautogui().position()
-    return (int(pos.x), int(pos.y))
+    return (0, 0)
 
 VK_MAP = {
     "space": VK_SPACE, "enter": VK_RETURN, "return": VK_RETURN, "esc": VK_ESCAPE, "escape": VK_ESCAPE,
@@ -212,7 +210,7 @@ def safe_sleep(seconds: float, stop_event: Optional[Any] = None) -> bool:
 def emergency_release_all() -> None:
     """全面釋放背景與前台的所有可能卡住的滑鼠與鍵盤狀態"""
     # 1. 釋放背景滑鼠
-    if IS_WINDOWS and state.app_state.target_hwnd and user32:
+    if state.app_state.target_hwnd and user32:
         try:
             user32.PostMessageW(state.app_state.target_hwnd, WM_LBUTTONUP, 0, 0)
             user32.PostMessageW(state.app_state.target_hwnd, WM_RBUTTONUP, 0, 0)
@@ -223,7 +221,7 @@ def emergency_release_all() -> None:
     with state.app_state.currently_held_keys_lock:
         for item in list(state.app_state.currently_held_keys):
             try:
-                if item[0] == "bg" and IS_WINDOWS and user32:
+                if item[0] == "bg" and user32:
                     _, h, vk = item
                     user32.PostMessageW(h, WM_KEYUP, vk, to_lparam(KEY_RELEASE_DEFAULT_LPARAM))
                 elif item[0] == "fg":
@@ -242,7 +240,7 @@ def emergency_release_all() -> None:
 
 def post_bg_click(hwnd: Any, client_x: int, client_y: int, offset_x: int = 0, offset_y: int = 0, btn: str = "left") -> Tuple[int, int]:
     """向指定視窗背景發送點擊訊息"""
-    if not IS_WINDOWS or not hwnd or not user32:
+    if not hwnd or not user32:
         _get_pyautogui().click(client_x, client_y, button=btn)
         return int(client_x), int(client_y)
     cx, cy = int(client_x) + offset_x, int(client_y) + offset_y
@@ -266,7 +264,7 @@ def post_bg_click(hwnd: Any, client_x: int, client_y: int, offset_x: int = 0, of
 
 def post_bg_key(hwnd: Any, key_str: str) -> None:
     """向指定視窗背景發送按鍵按下與放開訊息"""
-    if not IS_WINDOWS or not hwnd or not user32:
+    if not hwnd or not user32:
         with state.app_state.currently_held_keys_lock:
             state.app_state.currently_held_keys.add(("fg", key_str))
         try:
@@ -282,7 +280,7 @@ def post_bg_key(hwnd: Any, key_str: str) -> None:
     k_lower = key_str.lower()
     vk = VK_MAP.get(k_lower)
     if vk is None and len(key_str) == 1:
-        if IS_WINDOWS and user32:
+        if user32:
             try:
                 res = user32.VkKeyScanW(key_str)
                 if res != -1:
@@ -318,7 +316,7 @@ def execute_click(x: int, y: int, is_rel: bool, use_bg: bool, off_x: int, off_y:
     hwnd = target_hwnd if target_hwnd is not None else state.app_state.target_hwnd
     btn_cn = "右鍵" if btn == "right" else "左鍵"
     if use_bg:
-        if not is_rel and IS_WINDOWS and hwnd and user32:
+        if not is_rel and hwnd and user32:
             pt = POINT(int(x), int(y))
             user32.ScreenToClient(hwnd, ctypes.byref(pt))
             x, y = pt.x, pt.y
@@ -327,7 +325,7 @@ def execute_click(x: int, y: int, is_rel: bool, use_bg: bool, off_x: int, off_y:
     else:
         target_x = int(x) + off_x
         target_y = int(y) + off_y
-        if is_rel and IS_WINDOWS and hwnd and user32:
+        if is_rel and hwnd and user32:
             pt = POINT(target_x, target_y)
             user32.ClientToScreen(hwnd, ctypes.byref(pt))
             _get_pyautogui().click(pt.x, pt.y, button=btn)
@@ -337,7 +335,7 @@ def execute_click(x: int, y: int, is_rel: bool, use_bg: bool, off_x: int, off_y:
 
 def force_bring_window_to_front(hwnd: Any) -> None:
     """強制喚醒並將目標視窗置頂最前"""
-    if not IS_WINDOWS or not hwnd or not user32:
+    if not hwnd or not user32:
         return
     try:
         if user32.GetForegroundWindow() == hwnd:
@@ -357,7 +355,7 @@ def force_bring_window_to_front(hwnd: Any) -> None:
 
 def is_window_alive(hwnd: Any) -> bool:
     """檢查指定視窗句柄是否仍然存活且有效 (防禦目標視窗關閉或異常崩潰)"""
-    if not IS_WINDOWS or not user32 or not hwnd:
+    if not user32 or not hwnd:
         return True
     try:
         return bool(user32.IsWindow(hwnd))
