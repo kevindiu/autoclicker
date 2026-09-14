@@ -572,8 +572,8 @@ class PeriodicTaskCardView(tk.Frame):
 
     def update_countdowns(self):
         """實時刷新定時任務卡片的即時倒數與間隔設定值 (倒數 ＋ 間隔 BOTH 雙重展示)"""
-        with state.periodic_timers_lock:
-            timers = dict(state.periodic_timers)
+        with state.app_state.periodic_timers_lock:
+            timers = dict(state.app_state.periodic_timers)
 
         is_running = state.is_running()
         for idx, c in enumerate(self.card_widgets):

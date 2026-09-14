@@ -126,9 +126,30 @@ if IS_WINDOWS:
     WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
     user32.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
     user32.EnumWindows.restype = wintypes.BOOL
+    user32.GetCursorPos.argtypes = [ctypes.POINTER(POINT)]
+    user32.GetCursorPos.restype = wintypes.BOOL
+
+    try:
+        ctypes.windll.winmm.timeBeginPeriod(1)
+        import atexit
+        def cleanup_win32():
+            try: ctypes.windll.winmm.timeEndPeriod(1)
+            except: pass
+        atexit.register(cleanup_win32)
+    except (AttributeError, OSError):
+        pass
 else:
     user32 = None
     WNDENUMPROC = None
+
+def get_cursor_pos():
+    if IS_WINDOWS and user32:
+        pt = POINT()
+        user32.GetCursorPos(ctypes.byref(pt))
+        return (pt.x, pt.y)
+    import pyautogui
+    pos = pyautogui.position()
+    return (int(pos.x), int(pos.y))
 
 VK_MAP = {
     "space": VK_SPACE, "enter": VK_RETURN, "return": VK_RETURN, "esc": VK_ESCAPE, "escape": VK_ESCAPE,
@@ -160,16 +181,25 @@ VK_MAP = {
 # 動作執行與安全輔助函數
 # ==============================================================================
 def safe_sleep(seconds, stop_event=None):
-    """具備中止感知的安全等待 (利用 threading.Event.wait 實現即時感知與零 CPU 消耗的非阻塞休眠)
+    """具備中止感知的安全等待 (支援微秒級自旋等待)
     
     :param seconds: 等待秒數
-    :param stop_event: 可選的中止事件，預設使用 state.stop_event
+    :param stop_event: 可選的中止事件，預設使用 state.app_state.stop_event
     :return: 若正常等待完畢回傳 True；若中途收到中止信號回傳 False
     """
     sec = max(0.0, float(seconds))
-    ev = stop_event if stop_event is not None else state.stop_event
+    ev = stop_event if stop_event is not None else state.app_state.stop_event
     if sec == 0:
         return not ev.is_set()
+        
+    if sec < 0.02:
+        end_time = time.perf_counter() + sec
+        while time.perf_counter() < end_time:
+            if ev.is_set():
+                return False
+            time.sleep(0)
+        return True
+
     # Event.wait 在被 set() 觸發中止時回傳 True，在超時（正常完成等待）時回傳 False
     interrupted = ev.wait(timeout=sec)
     return not interrupted
@@ -177,16 +207,16 @@ def safe_sleep(seconds, stop_event=None):
 def emergency_release_all():
     """全面釋放背景與前台的所有可能卡住的滑鼠與鍵盤狀態"""
     # 1. 釋放背景滑鼠
-    if IS_WINDOWS and state.target_hwnd and user32:
+    if IS_WINDOWS and state.app_state.target_hwnd and user32:
         try:
-            user32.PostMessageW(state.target_hwnd, WM_LBUTTONUP, 0, 0)
-            user32.PostMessageW(state.target_hwnd, WM_RBUTTONUP, 0, 0)
+            user32.PostMessageW(state.app_state.target_hwnd, WM_LBUTTONUP, 0, 0)
+            user32.PostMessageW(state.app_state.target_hwnd, WM_RBUTTONUP, 0, 0)
         except (OSError, ctypes.ArgumentError) as e:
             EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"Win32 API 例外 (釋放背景滑鼠): {e}")
 
     # 2. 釋放登記中的背景與前台按鍵
-    with state.currently_held_keys_lock:
-        for item in list(state.currently_held_keys):
+    with state.app_state.currently_held_keys_lock:
+        for item in list(state.app_state.currently_held_keys):
             try:
                 if item[0] == "bg" and IS_WINDOWS and user32:
                     _, h, vk = item
@@ -196,7 +226,7 @@ def emergency_release_all():
                     pyautogui.keyUp(k)
             except (OSError, ctypes.ArgumentError, pyautogui.PyAutoGUIException, ValueError) as e:
                 EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"例外 (釋放按鍵): {e}")
-        state.currently_held_keys.clear()
+        state.app_state.currently_held_keys.clear()
 
     # 3. 前台滑鼠防禦性釋放
     try:
@@ -232,16 +262,16 @@ def post_bg_click(hwnd, client_x, client_y, offset_x=0, offset_y=0, btn="left"):
 def post_bg_key(hwnd, key_str):
     """向指定視窗背景發送按鍵按下與放開訊息"""
     if not IS_WINDOWS or not hwnd or not user32:
-        with state.currently_held_keys_lock:
-            state.currently_held_keys.add(("fg", key_str))
+        with state.app_state.currently_held_keys_lock:
+            state.app_state.currently_held_keys.add(("fg", key_str))
         try:
             pyautogui.keyDown(key_str)
             safe_sleep(0.06)
         finally:
             try: pyautogui.keyUp(key_str)
             except (pyautogui.PyAutoGUIException, OSError, ValueError): pass
-            with state.currently_held_keys_lock:
-                state.currently_held_keys.discard(("fg", key_str))
+            with state.app_state.currently_held_keys_lock:
+                state.app_state.currently_held_keys.discard(("fg", key_str))
         return
 
     k_lower = key_str.lower()
@@ -265,8 +295,8 @@ def post_bg_key(hwnd, key_str):
             pass
         lparam_down = to_lparam(1 | (scan_code << 16))
         lparam_up = to_lparam(1 | (scan_code << 16) | KEY_RELEASE_LPARAM_MASK)
-        with state.currently_held_keys_lock:
-            state.currently_held_keys.add(("bg", hwnd, vk))
+        with state.app_state.currently_held_keys_lock:
+            state.app_state.currently_held_keys.add(("bg", hwnd, vk))
         try:
             user32.PostMessageW(hwnd, WM_KEYDOWN, vk, lparam_down)
             safe_sleep(0.06)
@@ -275,12 +305,12 @@ def post_bg_key(hwnd, key_str):
                 user32.PostMessageW(hwnd, WM_KEYUP, vk, lparam_up)
             except (OSError, ctypes.ArgumentError):
                 pass
-            with state.currently_held_keys_lock:
-                state.currently_held_keys.discard(("bg", hwnd, vk))
+            with state.app_state.currently_held_keys_lock:
+                state.app_state.currently_held_keys.discard(("bg", hwnd, vk))
 
 def execute_click(x, y, is_rel, use_bg, off_x, off_y, btn="left", target_hwnd=None):
     """統一派發前台或背景點擊 (保證後台與前台模式均精準套用偏差校正)"""
-    hwnd = target_hwnd if target_hwnd is not None else state.target_hwnd
+    hwnd = target_hwnd if target_hwnd is not None else state.app_state.target_hwnd
     btn_cn = "右鍵" if btn == "right" else "左鍵"
     if use_bg:
         if not is_rel and IS_WINDOWS and hwnd and user32:

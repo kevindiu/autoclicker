@@ -15,6 +15,7 @@ from events import EventBus, AppEvents
 import state
 from state import format_action_summary
 from win32_api import (
+    get_cursor_pos,
     IS_WINDOWS,
     user32,
     POINT,
@@ -180,7 +181,7 @@ class App(tk.Tk):
             self.tree_vars.delete(item)
 
         type_display = {"coord": "[坐標]", "key": "[按鍵]", "wait": "[停頓]"}
-        for name, data in state.variables.items():
+        for name, data in state.app_state.variables.items():
             t_key = data.get("type", "coord")
             t_disp = type_display.get(t_key, t_key)
             val = data.get("value")
@@ -203,7 +204,7 @@ class App(tk.Tk):
         if select_name and hasattr(self.tree_vars, "select"):
             self.tree_vars.select(select_name)
 
-        var_names = list(state.variables.keys())
+        var_names = list(state.app_state.variables.keys())
         if hasattr(self, "cbo_combo_add_var"):
             self.cbo_combo_add_var["values"] = var_names
             if var_names:
@@ -224,10 +225,10 @@ class App(tk.Tk):
         if not hasattr(self, "combo_listbox"):
             return
         self.combo_listbox.delete(0, tk.END)
-        for i, c in enumerate(state.combos):
+        for i, c in enumerate(state.app_state.combos):
             act_count = len(c.get("actions", []))
             self.combo_listbox.insert(tk.END, f"{c['name']} ({act_count}動作)")
-        if select_idx is not None and 0 <= select_idx < len(state.combos):
+        if select_idx is not None and 0 <= select_idx < len(state.app_state.combos):
             self.combo_listbox.selection_set(select_idx)
             self.combo_ctrl.on_combo_select()
         else:
@@ -235,8 +236,8 @@ class App(tk.Tk):
 
     def _refresh_call_combo_dropdown(self):
         idx = self.combo_ctrl.get_selected_combo_idx()
-        curr_name = state.combos[idx]["name"] if idx is not None else None
-        avail = [c["name"] for c in state.combos if c["name"] != curr_name]
+        curr_name = state.app_state.combos[idx]["name"] if idx is not None else None
+        avail = [c["name"] for c in state.app_state.combos if c["name"] != curr_name]
         if hasattr(self, "cbo_call_combo"):
             self.cbo_call_combo["values"] = avail
             if avail:
@@ -245,7 +246,7 @@ class App(tk.Tk):
             else:
                 self.var_combo_to_call.set("")
 
-        all_combos = [c["name"] for c in state.combos]
+        all_combos = [c["name"] for c in state.app_state.combos]
         if hasattr(self, "cbo_step_call_combo"):
             self.cbo_step_call_combo["values"] = all_combos
             if all_combos:
@@ -261,7 +262,7 @@ class App(tk.Tk):
         idx = self.combo_ctrl.get_selected_combo_idx()
         if idx is None:
             return
-        actions = state.combos[idx].get("actions", [])
+        actions = state.app_state.combos[idx].get("actions", [])
         for i, act in enumerate(actions):
             self.combo_act_listbox.insert(tk.END, format_action_summary(act, index=i))
         if select_idx is not None and 0 <= select_idx < len(actions):
@@ -272,22 +273,22 @@ class App(tk.Tk):
         if not hasattr(self, "step_listbox"):
             return
         self.step_listbox.delete(0, tk.END)
-        for i, s in enumerate(state.steps):
+        for i, s in enumerate(state.app_state.steps):
             self.step_listbox.insert(tk.END, format_action_summary(s, index=i))
         last_idx = getattr(self, "last_active_step_idx", None)
-        if last_idx is not None and 0 <= last_idx < len(state.steps):
+        if last_idx is not None and 0 <= last_idx < len(state.app_state.steps):
             try:
                 self.step_listbox.itemconfigure(last_idx, background="#2a4365", foreground="#63b3ed")
             except tk.TclError:
                 pass
-        if select_idx is not None and 0 <= select_idx < len(state.steps):
+        if select_idx is not None and 0 <= select_idx < len(state.app_state.steps):
             self.step_listbox.selection_set(select_idx)
             self.step_listbox.see(select_idx)
 
         # 空清單視覺引導 (Empty State Placeholder)
         lbl_empty = getattr(self, "lbl_empty_steps", None)
         if lbl_empty:
-            if len(state.steps) == 0:
+            if len(state.app_state.steps) == 0:
                 lbl_empty.place(relx=0.5, rely=0.5, anchor="center")
                 lbl_empty.lift()
             else:
@@ -297,9 +298,9 @@ class App(tk.Tk):
         if not hasattr(self, "periodic_listbox"):
             return
         self.periodic_listbox.delete(0, tk.END)
-        for pt in state.periodic_tasks:
+        for pt in state.app_state.periodic_tasks:
             self.periodic_listbox.insert(tk.END, pt)
-        if select_idx is not None and 0 <= select_idx < len(state.periodic_tasks):
+        if select_idx is not None and 0 <= select_idx < len(state.app_state.periodic_tasks):
             self.periodic_listbox.selection_set(select_idx)
             self.periodic_listbox.see(select_idx)
 
@@ -323,7 +324,7 @@ class App(tk.Tk):
 
         self.is_closing = True
         state.set_running(False)
-        state.stop_event.set()
+        state.app_state.stop_event.set()
         emergency_release_all()
         self.destroy()
 
@@ -464,21 +465,21 @@ class App(tk.Tk):
             else:
                 return self.set_status("已有試跑任務正在執行中，請稍候！")
 
-        state.stop_event.clear()
+        state.app_state.stop_event.clear()
         self.set_running_ui(True, is_test=True)
 
         def _worker():
             try:
                 self.append_log("試跑", f"▶ 正在試跑: {task_name}")
                 task_fn()
-                if state.stop_event.is_set():
+                if state.app_state.stop_event.is_set():
                     self.append_log("試跑", f"⏹ {task_name} 試跑已手動中止！")
                 else:
                     self.append_log("試跑", f"✓ {task_name} 試跑完成！")
             except Exception as e:
                 self.append_log("警示", f"✕ {task_name} 試跑異常: {e}")
             finally:
-                state.is_testing = False
+                state.app_state.is_testing = False
                 emergency_release_all()
                 self.set_running_ui(False)
 
@@ -496,17 +497,17 @@ class App(tk.Tk):
                     self.after(1000, self.track_mouse_live)
                 return
 
-            pos = pyautogui.position()
-            cur_raw = (int(pos.x), int(pos.y))
+            pos_x, pos_y = get_cursor_pos()
+            cur_raw = (int(pos_x), int(pos_y))
             last_raw = getattr(self, "_last_raw_mouse_pos", None)
             is_moved = (cur_raw != last_raw)
             self._last_raw_mouse_pos = cur_raw
 
             # 僅在游標位置變更或首度初始化時執行 Win32 ScreenToClient 轉換與 UI 渲染
             if is_moved or not hasattr(self, "_last_mouse_hud_text"):
-                if IS_WINDOWS and state.target_hwnd and getattr(self, "cached_use_rel", True) and user32:
+                if IS_WINDOWS and state.app_state.target_hwnd and getattr(self, "cached_use_rel", True) and user32:
                     pt = POINT(cur_raw[0], cur_raw[1])
-                    user32.ScreenToClient(state.target_hwnd, ctypes.byref(pt))
+                    user32.ScreenToClient(state.app_state.target_hwnd, ctypes.byref(pt))
                     new_text = f"游標實時坐標(相對): ({pt.x}, {pt.y})"
                 else:
                     new_text = f"游標實時坐標(螢幕): ({cur_raw[0]}, {cur_raw[1]})"
@@ -545,10 +546,10 @@ class App(tk.Tk):
 
     def locate_target_window(self):
         """定位並閃爍目標遊戲視窗 (非同步背景閃爍，杜絕 UI 主執行緒凍結)"""
-        if not IS_WINDOWS or not state.target_hwnd or not user32:
+        if not IS_WINDOWS or not state.app_state.target_hwnd or not user32:
             return self.set_status("未綁定有效視窗，無法定位！")
 
-        hwnd = state.target_hwnd
+        hwnd = state.app_state.target_hwnd
         try:
             force_bring_window_to_front(hwnd)
             def _flash_worker():
@@ -568,13 +569,13 @@ class App(tk.Tk):
     # ======================= 取點防重入機制 + 頂部提示 =======================
     def capture_pos_space(self, on_finish, on_cancel=None, btn="left"):
         """無干擾 Hover 取點模式：頂部浮動 HUD，按 Space 確定，按 ESC 取消"""
-        if not state.target_hwnd:
+        if not state.app_state.target_hwnd:
             messagebox.showwarning("提示", "尚未綁定目標視窗，請先在上方選擇遊戲視窗！", parent=self)
             if on_cancel: on_cancel()
             return
 
         btn_cn = "右鍵" if btn == "right" else "左鍵"
-        force_bring_window_to_front(state.target_hwnd)
+        force_bring_window_to_front(state.app_state.target_hwnd)
         self.set_status(f"【設定{btn_cn}點擊】遊戲已置頂！請將滑鼠指住目標，按 [SPACE 空白鍵] 確定")
 
         banner = tk.Toplevel(self)
@@ -610,14 +611,14 @@ class App(tk.Tk):
             if not banner.winfo_exists() or is_handled[0]:
                 return
 
-            pos = pyautogui.position()
-            if IS_WINDOWS and state.target_hwnd and self.var_use_rel.get() and user32:
-                pt = POINT(int(pos.x), int(pos.y))
-                user32.ScreenToClient(state.target_hwnd, ctypes.byref(pt))
+            pos_x, pos_y = get_cursor_pos()
+            if IS_WINDOWS and state.app_state.target_hwnd and self.var_use_rel.get() and user32:
+                pt = POINT(int(pos_x), int(pos_y))
+                user32.ScreenToClient(state.app_state.target_hwnd, ctypes.byref(pt))
                 coord_desc = f"({pt.x}, {pt.y})"
                 rx, ry, rel = pt.x, pt.y, True
             else:
-                coord_desc = f"({pos.x}, {pos.y})"
+                coord_desc = f"({pos_x}, {pos_y})"
                 rx, ry, rel = pos.x, pos.y, False
 
             lbl_hud.config(text=f"【設定{btn_cn}點擊】滑鼠指住目標 -> 按 [SPACE 空白鍵] 確定！(坐標: {coord_desc} | ESC 取消)")
@@ -769,7 +770,7 @@ class App(tk.Tk):
             self.cbo_profile.current(0)
 
     def create_new_profile(self):
-        if state.is_running() or state.is_testing:
+        if state.is_running() or state.app_state.is_testing:
             return self.set_status("巨集正在執行或試跑中，請先停止再新建設定檔！")
         name = simpledialog.askstring("新建設定檔", "請輸入新設定檔名稱 (毋須輸入副檔名):", parent=self)
         if not name or not name.strip(): return
@@ -804,7 +805,7 @@ class App(tk.Tk):
             self.append_log("警示", f"儲存設定檔失敗: {e}")
 
     def load_config(self):
-        if state.is_running() or state.is_testing:
+        if state.is_running() or state.app_state.is_testing:
             return self.set_status("巨集正在執行或試跑中，請先停止再載入設定檔！")
         name = self.var_profile_name.get().strip()
         if not name: return
@@ -843,7 +844,7 @@ class App(tk.Tk):
     def refresh_window_dropdown(self):
         win_list = self.get_window_list()
         items, target_idx = [], 0
-        current_hwnd = state.target_hwnd
+        current_hwnd = state.app_state.target_hwnd
         found_target = False
         found_fallback = False
         fallback_idx = 0
@@ -861,23 +862,23 @@ class App(tk.Tk):
             target_idx = fallback_idx
 
         if not items:
-            items, state.target_hwnd = ["未偵測到任何視窗"], None
+            items, state.app_state.target_hwnd = ["未偵測到任何視窗"], None
         else:
-            state.target_hwnd = win_list[target_idx][0]
+            state.app_state.target_hwnd = win_list[target_idx][0]
 
         self.cbo_window["values"] = items
         self.cbo_window.current(target_idx)
-        if state.target_hwnd:
-            self.set_status(f"已綁定目標視窗 HWND: {state.target_hwnd}")
+        if state.app_state.target_hwnd:
+            self.set_status(f"已綁定目標視窗 HWND: {state.app_state.target_hwnd}")
 
     def on_window_select(self, event=None):
         val = self.var_window.get()
         if val and val.startswith("["):
             try:
-                state.target_hwnd = int(val.split("]")[0].replace("[", ""))
-                self.set_status(f"已綁定目標視窗 HWND: {state.target_hwnd}")
+                state.app_state.target_hwnd = int(val.split("]")[0].replace("[", ""))
+                self.set_status(f"已綁定目標視窗 HWND: {state.app_state.target_hwnd}")
             except (ValueError, IndexError) as e:
-                state.target_hwnd = None
+                state.app_state.target_hwnd = None
                 self.append_log("警示", f"視窗綁定解析失敗: {e}")
 
     # ==========================================================================
@@ -1080,25 +1081,25 @@ class App(tk.Tk):
     # ======================= 主執行引擎 =======================
     def toggle_run(self):
         with state.running_lock:
-            is_active = state.is_running() or state.is_testing
-            was_test = state.is_testing
+            is_active = state.is_running() or state.app_state.is_testing
+            was_test = state.app_state.is_testing
             if is_active:
                 state.set_running(False)
-                state.is_testing = False
+                state.app_state.is_testing = False
 
         if is_active:
-            state.stop_event.set()
+            state.app_state.stop_event.set()
             emergency_release_all()
             self.set_running_ui(False)
             msg = "試跑已手動中止！" if was_test else "已手動停止"
             self.set_status(msg)
             self.append_log("系統", f"⏹ 巨集{msg}")
         else:
-            has_enabled_periodic = any(pt.get("enabled", True) for pt in state.periodic_tasks)
-            if not state.steps and not has_enabled_periodic:
+            has_enabled_periodic = any(pt.get("enabled", True) for pt in state.app_state.periodic_tasks)
+            if not state.app_state.steps and not has_enabled_periodic:
                 return self.set_status("掛機流程清單與定時任務均為空，請先加入步驟或定時任務！")
             state.get_state().snapshot_active(reload_requested=False)
-            state.stop_event.clear()
+            state.app_state.stop_event.clear()
             state.set_running(True)
             self.set_running_ui(True)
             self.set_status("循環運作中...")
@@ -1110,35 +1111,6 @@ class App(tk.Tk):
     def macro_worker_loop(self):
         engine.macro_worker_loop(self)
 
-# ==============================================================================
-# 模組自訂類別包裝 (唯一狀態代理：保證 autoclicker 屬性讀寫均動態委派至 state，杜絕淺引用斷裂)
-# ==============================================================================
-_STATE_PROXY_ATTRS = (
-    "combos", "steps", "variables", "periodic_tasks",
-    "active_steps", "active_combos", "active_variables", "active_periodic_tasks",
-    "running_lock", "steps_lock", "stop_event", "target_hwnd",
-    "is_testing", "reload_requested", "currently_held_keys",
-    "currently_held_keys_lock", "periodic_timers", "periodic_timers_lock",
-    "running"
-)
-
-class _AutoclickerModule(sys.modules[__name__].__class__):
-    """自訂模組類別，統一攔截模組屬性讀寫，保證別名與 state 保持 100% 雙向動態同步"""
-    def __getattr__(self, name):
-        if name in _STATE_PROXY_ATTRS or hasattr(state, name):
-            return getattr(state, name)
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-    def __setattr__(self, name, value):
-        if name in _STATE_PROXY_ATTRS or (hasattr(state, name) and name not in ("__class__",)):
-            setattr(state, name, value)
-        else:
-            super().__setattr__(name, value)
-
-    def __dir__(self):
-        return sorted(set(super().__dir__()) | set(_STATE_PROXY_ATTRS) | set(dir(state)))
-
-sys.modules[__name__].__class__ = _AutoclickerModule
 
 if __name__ == "__main__":
     if sys.platform == "win32":

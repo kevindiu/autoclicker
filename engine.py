@@ -20,6 +20,136 @@ from win32_api import (
 # 動作執行調度器與背景巨集引擎
 # ==============================================================================
 
+def _handle_click(app, act, parent_desc, current_vars, current_combos, depth, visited_set, is_test, round_prefix, use_bg, off_x, off_y, log_tag, var_name, v_data):
+    try:
+        x = int(act.get("x", 0))
+        y = int(act.get("y", 0))
+    except (ValueError, TypeError):
+        x, y = 0, 0
+    btn = act.get("btn", "left")
+    is_rel = act.get("rel")
+    if v_data and v_data.get("type") == "coord":
+        val = v_data.get("value", {})
+        if isinstance(val, dict):
+            try:
+                x = int(val.get("x", x))
+                y = int(val.get("y", y))
+            except (ValueError, TypeError):
+                pass
+            btn = val.get("btn", btn)
+            if "rel" in val:
+                is_rel = val.get("rel")
+    if is_rel is None:
+        is_rel = True if state.app_state.target_hwnd else False
+    msg = execute_click(x, y, is_rel, use_bg, off_x, off_y, btn=btn)
+    var_info = f"【{var_name}】" if var_name else ""
+    log_txt = f"{round_prefix}{parent_desc} {var_info}{msg}"
+    if hasattr(app, "append_log"):
+        app.append_log(log_tag, log_txt)
+    if not safe_sleep(constants.SLEEP_CLICK):
+        return False
+    return True
+
+def _handle_key(app, act, parent_desc, current_vars, current_combos, depth, visited_set, is_test, round_prefix, use_bg, off_x, off_y, log_tag, var_name, v_data):
+    key = str(act.get("key", "f1"))
+    if v_data and v_data.get("type") == "key":
+        key = str(v_data.get("value", key))
+    if use_bg:
+        post_bg_key(state.app_state.target_hwnd, key)
+    else:
+        with state.app_state.currently_held_keys_lock:
+            state.app_state.currently_held_keys.add(("fg", key))
+        try:
+            pyautogui.keyDown(key)
+            if not safe_sleep(constants.SLEEP_KEY_FG):
+                return False
+        finally:
+            try:
+                pyautogui.keyUp(key)
+            except Exception as e:
+                if hasattr(app, "append_log"):
+                    app.append_log("警示", f"釋放前台按鍵 [{key}] 失敗: {e}")
+            with state.app_state.currently_held_keys_lock:
+                state.app_state.currently_held_keys.discard(("fg", key))
+    var_info = f"【{var_name}】" if var_name else ""
+    mode_tag = " (後台)" if use_bg else " (前台)"
+    if hasattr(app, "append_log"):
+        app.append_log(log_tag, f"{round_prefix}{parent_desc} {var_info}按鍵 [{key.upper()}]{mode_tag}")
+    if not safe_sleep(constants.SLEEP_KEY_AFTER):
+        return False
+    return True
+
+def _handle_wait(app, act, parent_desc, current_vars, current_combos, depth, visited_set, is_test, round_prefix, use_bg, off_x, off_y, log_tag, var_name, v_data):
+    try:
+        sec = float(act.get("sec", 0.5))
+    except (ValueError, TypeError):
+        sec = 0.5
+    if v_data and v_data.get("type") == "wait":
+        try:
+            sec = float(v_data.get("value", sec))
+        except (ValueError, TypeError):
+            if hasattr(app, "append_log"):
+                app.append_log("警示", f"變數【{var_name}】等待秒數數值格式無效，使用預設值 {sec}s")
+    var_info = f"【{var_name}】" if var_name else ""
+    log_txt = f"{round_prefix}{parent_desc} {var_info}等待 {sec}s"
+    if hasattr(app, "append_log"):
+        app.append_log(log_tag, log_txt)
+    if not safe_sleep(sec):
+        return False
+    return True
+
+def _handle_call_combo(app, act, parent_desc, current_vars, current_combos, depth, visited_set, is_test, round_prefix, use_bg, off_x, off_y, log_tag, var_name, v_data):
+    tgt_name = act.get("target_name")
+    if not tgt_name:
+        return True
+    if depth >= constants.MAX_COMBO_DEPTH:
+        warn_msg = f"{round_prefix}呼叫 [{tgt_name}] 超過深度上限"
+        if hasattr(app, "append_log"):
+            app.append_log("警示", warn_msg)
+        return True
+    if tgt_name in visited_set:
+        warn_msg = f"{round_prefix}循環呼叫 [{tgt_name}]，自動跳過"
+        if hasattr(app, "append_log"):
+            app.append_log("警示", warn_msg)
+        return True
+
+    tgt_combo = next((c for c in current_combos if c["name"] == tgt_name), None)
+    if tgt_combo:
+        new_visited = visited_set | {tgt_name}
+        sub_actions = tgt_combo.get("actions", [])
+        sub_total = len(sub_actions)
+        for sub_idx, sub_act in enumerate(sub_actions):
+            if not is_test and (not state.is_running() or state.app_state.stop_event.is_set()):
+                return False
+            if is_test and state.app_state.stop_event.is_set():
+                return False
+            sub_desc = f"{parent_desc}->[{tgt_name}#{sub_idx+1}/{sub_total}]"
+            if not dispatch_action(
+                app,
+                sub_act,
+                sub_desc,
+                current_vars=current_vars,
+                current_combos=current_combos,
+                depth=depth + 1,
+                visited_set=new_visited,
+                is_test=is_test,
+                round_prefix=round_prefix
+            ):
+                return False
+    else:
+        warn_msg = f"{round_prefix}找不到被呼叫的組合 [{tgt_name}]"
+        if hasattr(app, "append_log"):
+            app.append_log("警示", warn_msg)
+
+    return True
+
+ACTION_HANDLERS = {
+    "click": _handle_click,
+    "key": _handle_key,
+    "wait": _handle_wait,
+    "call_combo": _handle_call_combo
+}
+
 def dispatch_action(
     app: any,
     act: ActionDict,
@@ -36,31 +166,31 @@ def dispatch_action(
         visited_set = set()
 
     if not is_test:
-        if not state.is_running() or state.stop_event.is_set():
+        if not state.is_running() or state.app_state.stop_event.is_set():
             return False
         if current_vars is None:
-            with state.steps_lock:
-                current_vars = copy.deepcopy(state.active_variables)
+            with state.app_state.steps_lock:
+                current_vars = copy.deepcopy(state.app_state.active_variables)
         if current_combos is None:
-            with state.steps_lock:
-                current_combos = copy.deepcopy(state.active_combos)
+            with state.app_state.steps_lock:
+                current_combos = copy.deepcopy(state.app_state.active_combos)
     else:
-        if state.stop_event.is_set():
+        if state.app_state.stop_event.is_set():
             return False
         if current_vars is None:
-            with state.steps_lock:
-                current_vars = copy.deepcopy(state.variables)
+            with state.app_state.steps_lock:
+                current_vars = copy.deepcopy(state.app_state.variables)
         if current_combos is None:
-            with state.steps_lock:
-                current_combos = copy.deepcopy(state.combos)
+            with state.app_state.steps_lock:
+                current_combos = copy.deepcopy(state.app_state.combos)
 
-    use_bg = getattr(app, "cached_use_bg", True) and IS_WINDOWS and (state.target_hwnd is not None)
+    use_bg = getattr(app, "cached_use_bg", True) and IS_WINDOWS and (state.app_state.target_hwnd is not None)
     off_x = getattr(app, "cached_offset_x", 0)
     off_y = getattr(app, "cached_offset_y", 0)
 
     # 若在前台模式且有綁定目標視窗，自動將目標視窗置頂以確保能接收點擊與按鍵
-    if not use_bg and IS_WINDOWS and state.target_hwnd:
-        force_bring_window_to_front(state.target_hwnd)
+    if not use_bg and IS_WINDOWS and state.app_state.target_hwnd:
+        force_bring_window_to_front(state.app_state.target_hwnd)
 
     if is_test:
         log_tag = "試跑"
@@ -74,91 +204,17 @@ def dispatch_action(
     var_name = act.get("var_name")
     v_data = None
     if var_name:
-        with state.steps_lock:
-            v_data = state.active_variables.get(var_name)
+        with state.app_state.steps_lock:
+            v_data = state.app_state.active_variables.get(var_name)
         if not v_data and current_vars:
             v_data = current_vars.get(var_name)
 
     atype = act.get("type")
-    if atype == "click":
-        try:
-            x = int(act.get("x", 0))
-            y = int(act.get("y", 0))
-        except (ValueError, TypeError):
-            x, y = 0, 0
-        btn = act.get("btn", "left")
-        is_rel = act.get("rel")
-        if v_data and v_data.get("type") == "coord":
-            val = v_data.get("value", {})
-            if isinstance(val, dict):
-                try:
-                    x = int(val.get("x", x))
-                    y = int(val.get("y", y))
-                except (ValueError, TypeError):
-                    pass
-                btn = val.get("btn", btn)
-                if "rel" in val:
-                    is_rel = val.get("rel")
-        if is_rel is None:
-            is_rel = True if state.target_hwnd else False
-        msg = execute_click(x, y, is_rel, use_bg, off_x, off_y, btn=btn)
-        var_info = f"【{var_name}】" if var_name else ""
-        log_txt = f"{round_prefix}{parent_desc} {var_info}{msg}"
-        if hasattr(app, "append_log"):
-            app.append_log(log_tag, log_txt)
-        if not safe_sleep(constants.SLEEP_CLICK):
-            return False
-
-    elif atype == "key":
-        key = str(act.get("key", "f1"))
-        if v_data and v_data.get("type") == "key":
-            key = str(v_data.get("value", key))
-        if use_bg:
-            post_bg_key(state.target_hwnd, key)
-        else:
-            with state.currently_held_keys_lock:
-                state.currently_held_keys.add(("fg", key))
-            try:
-                pyautogui.keyDown(key)
-                if not safe_sleep(constants.SLEEP_KEY_FG):
-                    return False
-            finally:
-                try:
-                    pyautogui.keyUp(key)
-                except Exception as e:
-                    if hasattr(app, "append_log"):
-                        app.append_log("警示", f"釋放前台按鍵 [{key}] 失敗: {e}")
-                with state.currently_held_keys_lock:
-                    state.currently_held_keys.discard(("fg", key))
-        var_info = f"【{var_name}】" if var_name else ""
-        mode_tag = " (後台)" if use_bg else " (前台)"
-        if hasattr(app, "append_log"):
-            app.append_log(log_tag, f"{round_prefix}{parent_desc} {var_info}按鍵 [{key.upper()}]{mode_tag}")
-        if not safe_sleep(constants.SLEEP_KEY_AFTER):
-            return False
-
-    elif atype == "wait":
-        try:
-            sec = float(act.get("sec", 0.5))
-        except (ValueError, TypeError):
-            sec = 0.5
-        if v_data and v_data.get("type") == "wait":
-            try:
-                sec = float(v_data.get("value", sec))
-            except (ValueError, TypeError):
-                if hasattr(app, "append_log"):
-                    app.append_log("警示", f"變數【{var_name}】等待秒數數值格式無效，使用預設值 {sec}s")
-        var_info = f"【{var_name}】" if var_name else ""
-        log_txt = f"{round_prefix}{parent_desc} {var_info}等待 {sec}s"
-        if hasattr(app, "append_log"):
-            app.append_log(log_tag, log_txt)
-        if not safe_sleep(sec):
-            return False
-
-    elif atype == "call_combo":
-        tgt_name = act.get("target_name")
-        if not tgt_name:
-            return True
+    handler = ACTION_HANDLERS.get(atype)
+    if handler:
+        return handler(app, act, parent_desc, current_vars, current_combos, depth, visited_set, is_test, round_prefix, use_bg, off_x, off_y, log_tag, var_name, v_data)
+    
+    return True
         if depth >= constants.MAX_COMBO_DEPTH:
             warn_msg = f"{round_prefix}呼叫 [{tgt_name}] 超過深度上限"
             if hasattr(app, "append_log"):
@@ -176,9 +232,9 @@ def dispatch_action(
             sub_actions = tgt_combo.get("actions", [])
             sub_total = len(sub_actions)
             for sub_idx, sub_act in enumerate(sub_actions):
-                if not is_test and (not state.is_running() or state.stop_event.is_set()):
+                if not is_test and (not state.is_running() or state.app_state.stop_event.is_set()):
                     return False
-                if is_test and state.stop_event.is_set():
+                if is_test and state.app_state.stop_event.is_set():
                     return False
                 sub_desc = f"{parent_desc}->[{tgt_name}#{sub_idx+1}/{sub_total}]"
                 if not dispatch_action(
@@ -205,7 +261,7 @@ def execute_single_action(app, act, desc):
     dispatch_action(app, act, desc, is_test=True)
 
 def sync_periodic_timers(periodic_tasks_runtime, active_task_id=None, current_round=0):
-    """線程安全地同步背景定時任務當前計時器快照至 state.periodic_timers 供 UI 即時倒數與設定值展示"""
+    """線程安全地同步背景定時任務當前計時器快照至 state.app_state.periodic_timers 供 UI 即時倒數與設定值展示"""
     timers = {}
     for idx, pt in enumerate(periodic_tasks_runtime):
         pt_id = pt.get("id") or f"pt_idx_{idx}"
@@ -227,8 +283,8 @@ def sync_periodic_timers(periodic_tasks_runtime, active_task_id=None, current_ro
             "enabled": pt.get("enabled", True),
             "is_active": (pt_id == active_task_id)
         }
-    with state.periodic_timers_lock:
-        state.periodic_timers = timers
+    with state.app_state.periodic_timers_lock:
+        state.app_state.periodic_timers = timers
 
 class TriggerContext:
     def __init__(self, current_round, is_round_end, is_startup):
@@ -307,9 +363,9 @@ def check_and_run_due_periodic_tasks(
         strategy = get_trigger_strategy(pt.get("trigger_mode", "interval"))
         
         if strategy.is_due(pt, ctx):
-            if not state.is_running() or state.stop_event.is_set():
+            if not state.is_running() or state.app_state.stop_event.is_set():
                 return False
-            if IS_WINDOWS and state.target_hwnd and not is_window_alive(state.target_hwnd):
+            if IS_WINDOWS and state.app_state.target_hwnd and not is_window_alive(state.app_state.target_hwnd):
                 return False
             task_name = pt.get("name", "").strip() or "定時任務"
             pt_id = pt.get("id") or f"pt_idx_{idx}"
@@ -359,11 +415,11 @@ def check_and_run_due_periodic_tasks(
 def macro_worker_loop(app):
     """背景巨集循環執行緒主迴圈"""
     round_idx = 1
-    with state.steps_lock:
-        active_pts = copy.deepcopy(state.active_periodic_tasks)
-        current_steps = copy.deepcopy(state.active_steps)
-        current_combos = copy.deepcopy(state.active_combos)
-        current_variables = copy.deepcopy(state.active_variables)
+    with state.app_state.steps_lock:
+        active_pts = copy.deepcopy(state.app_state.active_periodic_tasks)
+        current_steps = copy.deepcopy(state.app_state.active_steps)
+        current_combos = copy.deepcopy(state.app_state.active_combos)
+        current_variables = copy.deepcopy(state.app_state.active_variables)
 
     start_time = time.time()
     periodic_tasks_runtime = []
@@ -391,22 +447,22 @@ def macro_worker_loop(app):
         ):
             return
 
-        while state.is_running() and not state.stop_event.is_set():
-            if IS_WINDOWS and state.target_hwnd and not is_window_alive(state.target_hwnd):
+        while state.is_running() and not state.app_state.stop_event.is_set():
+            if IS_WINDOWS and state.app_state.target_hwnd and not is_window_alive(state.app_state.target_hwnd):
                 msg = "目標遊戲視窗已關閉或崩潰，巨集已自動安全停止！"
                 if hasattr(app, "append_log"):
                     app.append_log("警示", f"✕ {msg}")
                 state.set_running(False)
                 break
 
-            with state.steps_lock:
-                was_reloaded = state.reload_requested
+            with state.app_state.steps_lock:
+                was_reloaded = state.app_state.reload_requested
                 if was_reloaded:
-                    state.reload_requested = False
-                    current_steps = copy.deepcopy(state.active_steps)
-                    current_combos = copy.deepcopy(state.active_combos)
-                    current_variables = copy.deepcopy(state.active_variables)
-                    latest_pts = copy.deepcopy(state.active_periodic_tasks)
+                    state.app_state.reload_requested = False
+                    current_steps = copy.deepcopy(state.app_state.active_steps)
+                    current_combos = copy.deepcopy(state.app_state.active_combos)
+                    current_variables = copy.deepcopy(state.app_state.active_variables)
+                    latest_pts = copy.deepcopy(state.app_state.active_periodic_tasks)
 
             if was_reloaded:
                 # 平滑套用熱更新，保留進行中定時任務的上次執行計時與輪次
@@ -452,10 +508,10 @@ def macro_worker_loop(app):
             sync_periodic_timers(periodic_tasks_runtime, current_round=round_idx)
 
             for idx, step in enumerate(current_steps):
-                if not state.is_running() or state.stop_event.is_set():
+                if not state.is_running() or state.app_state.stop_event.is_set():
                     break
 
-                if IS_WINDOWS and state.target_hwnd and not is_window_alive(state.target_hwnd):
+                if IS_WINDOWS and state.app_state.target_hwnd and not is_window_alive(state.app_state.target_hwnd):
                     msg = "目標遊戲視窗已關閉或崩潰，巨集已自動安全停止！"
                     if hasattr(app, "append_log"):
                         app.append_log("警示", f"✕ {msg}")
@@ -472,7 +528,7 @@ def macro_worker_loop(app):
                     sub_actions = step.get("actions", [])
                     sub_total = len(sub_actions)
                     for a_idx, act in enumerate(sub_actions):
-                        if not state.is_running() or state.stop_event.is_set():
+                        if not state.is_running() or state.app_state.stop_event.is_set():
                             step_ok = False
                             break
                         app.highlight_active_step(idx, sub_idx=a_idx)
@@ -503,7 +559,7 @@ def macro_worker_loop(app):
                     ):
                         step_ok = False
 
-                if not step_ok or not state.is_running() or state.stop_event.is_set():
+                if not step_ok or not state.is_running() or state.app_state.stop_event.is_set():
                     break
 
                 # 當前步驟或 COMBO 已完全執行結束！安全檢查並執行到期的定時任務（非每輪結束，僅 interval 任務判定）
@@ -524,26 +580,26 @@ def macro_worker_loop(app):
             app.append_log("警示", f"✕ 異常中斷: {e}")
     finally:
         state.set_running(False)
-        with state.periodic_timers_lock:
-            state.periodic_timers.clear()
+        with state.app_state.periodic_timers_lock:
+            state.app_state.periodic_timers.clear()
         emergency_release_all()
         app.set_running_ui(False)
         if hasattr(app, "append_log"):
-            completed = round_idx - 1 if round_idx > 1 else (1 if round_idx == 1 and not state.stop_event.is_set() else 0)
+            completed = round_idx - 1 if round_idx > 1 else (1 if round_idx == 1 and not state.app_state.stop_event.is_set() else 0)
             app.append_log("系統", f"⏹ 巨集循環結束 (累計運行 {completed} 輪)")
 
 def test_run_execution_flow_worker(app):
     """一次性試跑整個掛機執行流程的背景工作函式"""
     try:
-        with state.steps_lock:
-            steps_copy = copy.deepcopy(state.steps)
-            combos_copy = copy.deepcopy(state.combos)
-            vars_copy = copy.deepcopy(state.variables)
+        with state.app_state.steps_lock:
+            steps_copy = copy.deepcopy(state.app_state.steps)
+            combos_copy = copy.deepcopy(state.app_state.combos)
+            vars_copy = copy.deepcopy(state.app_state.variables)
 
         for idx, step in enumerate(steps_copy):
-            if state.stop_event.is_set():
+            if state.app_state.stop_event.is_set():
                 break
-            if IS_WINDOWS and state.target_hwnd and not is_window_alive(state.target_hwnd):
+            if IS_WINDOWS and state.app_state.target_hwnd and not is_window_alive(state.app_state.target_hwnd):
                 msg = "目標遊戲視窗已關閉，試跑流程中止！"
                 if hasattr(app, "append_log"):
                     app.append_log("警示", f"✕ {msg}")
@@ -559,7 +615,7 @@ def test_run_execution_flow_worker(app):
                         app.append_log("試跑", f"[試跑流程] 步驟 #{idx+1} 組合 [{c_name}] 內無動作，跳過")
                     continue
                 for a_idx, act in enumerate(sub_actions):
-                    if state.stop_event.is_set():
+                    if state.app_state.stop_event.is_set():
                         return
                     app.highlight_active_step(idx, sub_idx=a_idx)
                     if not dispatch_action(

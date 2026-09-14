@@ -48,7 +48,7 @@ def save_profile_file(name: str, target_state=None, ext=CONFIG_EXT, dir_path=_DE
     if target_state is None and "app_state" in kwargs:
         target_state = kwargs["app_state"]
     if target_state is None:
-        target_state = state
+        target_state = state.app_state
     safe_name = sanitize_profile_name(name)
     if not safe_name:
         raise ValueError("無效的設定檔名稱！")
@@ -70,7 +70,7 @@ def load_profile_file(name: str, target_state=None, ext=CONFIG_EXT, dir_path=_DE
     if target_state is None and "app_state" in kwargs:
         target_state = kwargs["app_state"]
     if target_state is None:
-        target_state = state
+        target_state = state.app_state
     safe_name = sanitize_profile_name(name)
     fn = os.path.join(dir_path, f"{safe_name}{ext}")
     if not os.path.exists(fn):
