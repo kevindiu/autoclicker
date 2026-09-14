@@ -927,7 +927,7 @@ def prompt_edit_periodic_task(app, task=None):
         built_act = build_action_dict()
         if not built_act:
             return
-        app.execute_single_action(built_act, f"[試跑定時動作]")
+        app.run_in_test_thread("定時動作", lambda: app.execute_single_action(built_act, "[試跑定時動作]"))
 
     def on_ok():
         trigger_mode = var_trigger_mode.get()

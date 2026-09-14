@@ -158,16 +158,20 @@ VK_MAP = {
 # ==============================================================================
 # 動作執行與安全輔助函數
 # ==============================================================================
-def safe_sleep(seconds):
-    """具備中止感知的安全等待"""
-    end = time.time() + float(seconds)
-    while time.time() < end:
-        if state.stop_event.is_set():
-            return False
-        if not state.is_testing and not state.is_running():
-            return False
-        time.sleep(0.02)
-    return True
+def safe_sleep(seconds, stop_event=None):
+    """具備中止感知的安全等待 (利用 threading.Event.wait 實現即時感知與零 CPU 消耗的非阻塞休眠)
+    
+    :param seconds: 等待秒數
+    :param stop_event: 可選的中止事件，預設使用 state.stop_event
+    :return: 若正常等待完畢回傳 True；若中途收到中止信號回傳 False
+    """
+    sec = max(0.0, float(seconds))
+    ev = stop_event if stop_event is not None else state.stop_event
+    if sec == 0:
+        return not ev.is_set()
+    # Event.wait 在被 set() 觸發中止時回傳 True，在超時（正常完成等待）時回傳 False
+    interrupted = ev.wait(timeout=sec)
+    return not interrupted
 
 def emergency_release_all():
     """全面釋放背景與前台的所有可能卡住的滑鼠與鍵盤狀態"""

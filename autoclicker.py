@@ -10,7 +10,7 @@ import pyautogui
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 
-from theme import UITheme, resource_path, WINDOW_TITLE, BASE_WINDOW_TITLE, CONFIG_EXT
+from theme import UITheme, LogTag, resource_path, WINDOW_TITLE, BASE_WINDOW_TITLE, CONFIG_EXT
 import state
 from state import format_action_summary
 from win32_api import (
@@ -30,26 +30,6 @@ import config_manager
 import dialogs
 import engine
 
-# ==============================================================================
-# 全域資料與相容別名動態代理 (解決 L40-47 模組級淺引用在 reset / 重新賦值後斷裂問題)
-# ==============================================================================
-_STATE_PROXY_ATTRS = (
-    "combos", "steps", "variables", "periodic_tasks",
-    "active_steps", "active_combos", "active_variables", "active_periodic_tasks",
-    "running_lock", "steps_lock", "stop_event", "target_hwnd",
-    "is_testing", "reload_requested", "currently_held_keys",
-    "currently_held_keys_lock", "periodic_timers", "periodic_timers_lock",
-    "running"
-)
-
-def __getattr__(name):
-    """PEP 562 模組層級動態屬性委派：始終即時指向 state 的當前資料，避免 reset / 重新賦值淺引用斷裂"""
-    if name in _STATE_PROXY_ATTRS or hasattr(state, name):
-        return getattr(state, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-def __dir__():
-    return sorted(set(globals().keys()) | set(_STATE_PROXY_ATTRS) | set(dir(state)))
 
 # ==============================================================================
 # 原生 Tkinter GUI 主應用程式
@@ -227,6 +207,7 @@ class App(tk.Tk):
             except tk.TclError:
                 pass
 
+        tasks_executed = 0
         while True:
             try:
                 fn = self.ui_task_queue.get_nowait()
@@ -234,8 +215,9 @@ class App(tk.Tk):
                 break
             try:
                 fn()
+                tasks_executed += 1
             except Exception as e:
-                self.append_log("警示", f"UI 任務執行失敗: {e}")
+                self.append_log(LogTag.ALERT, f"UI 任務執行失敗: {e}")
 
         # 定時週期任務即時倒數與設定值更新 (每 200ms 刷新一次)
         now_ts = time.time()
@@ -247,10 +229,13 @@ class App(tk.Tk):
                 except tk.TclError:
                     pass
                 except Exception as e:
-                    self.append_log("警示", f"定時任務倒數更新異常: {e}")
+                    self.append_log(LogTag.ALERT, f"定時任務倒數更新異常: {e}")
 
+        # 動態輪詢間隔：有活動或運行/試跑時 50ms 高頻響應，空閒時 200ms 節能輪詢
+        is_active = bool(log_items) or (tasks_executed > 0) or state.is_running() or state.is_in_testing()
+        next_interval = 50 if is_active else 200
         if not self.is_closing:
-            self.after(50, self.poll_ui_queues)
+            self.after(next_interval, self.poll_ui_queues)
 
     def append_log(self, tag, text):
         """線程安全地推送一筆格式化日誌至執行日誌佇列"""
@@ -272,17 +257,19 @@ class App(tk.Tk):
             except tk.TclError:
                 pass
 
-    def set_status(self, msg):
-        """將狀態與操作回饋訊息統一寫入執行日誌，杜絕訊息被靜默丟棄"""
+    def set_status(self, msg, tag=None):
+        """將狀態與操作回饋訊息統一寫入執行日誌，支援明確 tag 或智慧關鍵字自動分類"""
         if not self.is_closing and msg:
             s_msg = str(msg).strip()
-            if any(w in s_msg for w in ("失敗", "異常", "錯誤", "請先", "未綁定", "找不到", "無法")):
-                tag = "警示"
+            if tag is not None:
+                final_tag = tag
+            elif any(w in s_msg for w in ("失敗", "異常", "錯誤", "請先", "未綁定", "找不到", "無法")):
+                final_tag = LogTag.ALERT
             elif "試跑" in s_msg:
-                tag = "試跑"
+                final_tag = LogTag.TEST
             else:
-                tag = "系統"
-            self.append_log(tag, s_msg)
+                final_tag = LogTag.INFO
+            self.append_log(final_tag, s_msg)
         return msg
 
     def run_on_ui_thread(self, fn):
@@ -315,13 +302,14 @@ class App(tk.Tk):
         self.run_on_ui_thread(_u)
 
     def run_in_test_thread(self, task_name, task_fn):
-        """統一的非同步試跑安全守衛與執行緒啟動器"""
-        if state.is_running():
-            return self.set_status("巨集正在循環執行中，請先停止再試跑！")
-        if state.is_testing:
-            return self.set_status("已有試跑任務正在執行中，請稍候！")
+        """統一的非同步試跑安全守衛與執行緒啟動器 (原子化狀態校驗與切換，杜絕 check-then-act 競態)"""
+        ok, reason = state.try_start_testing()
+        if not ok:
+            if reason == "running":
+                return self.set_status("巨集正在循環執行中，請先停止再試跑！")
+            else:
+                return self.set_status("已有試跑任務正在執行中，請稍候！")
 
-        state.is_testing = True
         state.stop_event.clear()
         self.set_running_ui(True, is_test=True)
 
@@ -343,24 +331,47 @@ class App(tk.Tk):
         threading.Thread(target=_worker, daemon=True).start()
 
     def track_mouse_live(self):
-        """實時監控游標坐標並更新 HUD (具備坐標變更感知，無移動不消耗重繪資源)"""
+        """實時監控游標坐標並更新 HUD (具備坐標變更感知與動態休眠，降低系統調用消耗)"""
         if self.is_closing:
             return
+        next_interval = 200
         try:
+            # 視窗最小化時停止高頻追蹤，進入休眠輪詢
+            if hasattr(self, "state") and self.state() == "iconic":
+                if not self.is_closing:
+                    self.after(1000, self.track_mouse_live)
+                return
+
             pos = pyautogui.position()
-            if IS_WINDOWS and state.target_hwnd and getattr(self, "cached_use_rel", True) and user32:
-                pt = POINT(int(pos.x), int(pos.y))
-                user32.ScreenToClient(state.target_hwnd, ctypes.byref(pt))
-                new_text = f"游標實時坐標(相對): ({pt.x}, {pt.y})"
+            cur_raw = (int(pos.x), int(pos.y))
+            last_raw = getattr(self, "_last_raw_mouse_pos", None)
+            is_moved = (cur_raw != last_raw)
+            self._last_raw_mouse_pos = cur_raw
+
+            # 僅在游標位置變更或首度初始化時執行 Win32 ScreenToClient 轉換與 UI 渲染
+            if is_moved or not hasattr(self, "_last_mouse_hud_text"):
+                if IS_WINDOWS and state.target_hwnd and getattr(self, "cached_use_rel", True) and user32:
+                    pt = POINT(cur_raw[0], cur_raw[1])
+                    user32.ScreenToClient(state.target_hwnd, ctypes.byref(pt))
+                    new_text = f"游標實時坐標(相對): ({pt.x}, {pt.y})"
+                else:
+                    new_text = f"游標實時坐標(螢幕): ({cur_raw[0]}, {cur_raw[1]})"
+                if new_text != getattr(self, "_last_mouse_hud_text", None):
+                    self._last_mouse_hud_text = new_text
+                    self.lbl_mouse_hud.config(text=new_text)
+
+            # 動態輪詢頻率：運行或試跑時 150ms；游標移動中 200ms；游標靜止時 400ms 降低 Win32 API 調用
+            if state.is_running() or state.is_in_testing():
+                next_interval = 150
+            elif is_moved:
+                next_interval = 200
             else:
-                new_text = f"游標實時坐標(螢幕): ({pos.x}, {pos.y})"
-            if new_text != getattr(self, "_last_mouse_hud_text", None):
-                self._last_mouse_hud_text = new_text
-                self.lbl_mouse_hud.config(text=new_text)
+                next_interval = 400
         except (tk.TclError, OSError, AttributeError):
-            pass
+            next_interval = 400
+
         if not self.is_closing:
-            self.after(150, self.track_mouse_live)
+            self.after(next_interval, self.track_mouse_live)
 
     def force_bring_window_to_front(self, hwnd):
         """強制喚醒並將目標視窗置頂最前"""
@@ -1092,12 +1103,7 @@ class App(tk.Tk):
     def trigger_hot_reload(self):
         """若巨集運行中，同步最新草稿至背景實例快照，並於下一輪自動生效"""
         if state.is_running():
-            with state.steps_lock:
-                state.active_steps = copy.deepcopy(state.steps)
-                state.active_combos = copy.deepcopy(state.combos)
-                state.active_variables = copy.deepcopy(state.variables)
-                state.active_periodic_tasks = copy.deepcopy(state.periodic_tasks)
-                state.reload_requested = True
+            state.get_state().snapshot_active(reload_requested=True)
 
     def _move_list_item(self, lst, idx, delta, refresh_cb, item_name="項目"):
         if idx is None:
@@ -1512,10 +1518,14 @@ class App(tk.Tk):
 
     # ======================= 主執行引擎 =======================
     def toggle_run(self):
-        if state.is_running() or state.is_testing:
+        with state.running_lock:
+            is_active = state.is_running() or state.is_testing
             was_test = state.is_testing
-            state.set_running(False)
-            state.is_testing = False
+            if is_active:
+                state.set_running(False)
+                state.is_testing = False
+
+        if is_active:
             state.stop_event.set()
             emergency_release_all()
             self.set_running_ui(False)
@@ -1526,12 +1536,7 @@ class App(tk.Tk):
             has_enabled_periodic = any(pt.get("enabled", True) for pt in state.periodic_tasks)
             if not state.steps and not has_enabled_periodic:
                 return self.set_status("掛機流程清單與定時任務均為空，請先加入步驟或定時任務！")
-            with state.steps_lock:
-                state.active_steps = copy.deepcopy(state.steps)
-                state.active_combos = copy.deepcopy(state.combos)
-                state.active_variables = copy.deepcopy(state.variables)
-                state.active_periodic_tasks = copy.deepcopy(state.periodic_tasks)
-                state.reload_requested = False
+            state.get_state().snapshot_active(reload_requested=False)
             state.stop_event.clear()
             state.set_running(True)
             self.set_running_ui(True)
@@ -1545,10 +1550,19 @@ class App(tk.Tk):
         engine.macro_worker_loop(self)
 
 # ==============================================================================
-# 模組類別包裝 (保證 autoclicker 屬性讀寫均動態委派至 state，杜絕淺引用斷裂)
+# 模組自訂類別包裝 (唯一狀態代理：保證 autoclicker 屬性讀寫均動態委派至 state，杜絕淺引用斷裂)
 # ==============================================================================
+_STATE_PROXY_ATTRS = (
+    "combos", "steps", "variables", "periodic_tasks",
+    "active_steps", "active_combos", "active_variables", "active_periodic_tasks",
+    "running_lock", "steps_lock", "stop_event", "target_hwnd",
+    "is_testing", "reload_requested", "currently_held_keys",
+    "currently_held_keys_lock", "periodic_timers", "periodic_timers_lock",
+    "running"
+)
+
 class _AutoclickerModule(sys.modules[__name__].__class__):
-    """自訂模組類別，攔截模組屬性讀寫，保證別名與 state 保持 100% 雙向動態同步"""
+    """自訂模組類別，統一攔截模組屬性讀寫，保證別名與 state 保持 100% 雙向動態同步"""
     def __getattr__(self, name):
         if name in _STATE_PROXY_ATTRS or hasattr(state, name):
             return getattr(state, name)

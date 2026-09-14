@@ -90,18 +90,3 @@ def load_profile_file(name: str, app_state=None, ext=CONFIG_EXT, dir_path=_DEFAU
 
     return data
 
-def get_data_snapshot(app_state=None) -> str:
-    """獲取當前設定資料的序列化字串 (唯一實現委派至 AppState.get_data_snapshot，避免重複與分歧)"""
-    target = app_state if app_state is not None else state.get_state()
-    if hasattr(target, "get_data_snapshot"):
-        return target.get_data_snapshot()
-    return state.get_state().get_data_snapshot()
-
-def has_unsaved_changes(last_saved_snapshot: str, app_state=None) -> bool:
-    """檢查當前記憶體中的設定相較於最後儲存狀態是否有更新 (委派至 AppState 唯一實現)"""
-    target = app_state if app_state is not None else state.get_state()
-    if hasattr(target, "has_unsaved_changes"):
-        return target.has_unsaved_changes(last_saved_snapshot)
-    if not last_saved_snapshot:
-        return False
-    return get_data_snapshot(target) != last_saved_snapshot

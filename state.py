@@ -25,9 +25,9 @@ class AppState:
         self.active_periodic_tasks = [] # 背景定時任務運行實例快照 (Active Periodic Snapshot)
 
         # 3. 執行期旗標與執行緒同步物件 (Flags & Thread Synchronization)
-        self.running_lock = threading.Lock()
+        self.running_lock = threading.RLock()
         self._running = False
-        self.is_testing = False
+        self._is_testing = False
         self.reload_requested = False
         self.steps_lock = threading.Lock() # 保護 active_steps, active_combos, active_variables 與 active_periodic_tasks
         self.stop_event = threading.Event()
@@ -46,6 +46,8 @@ class AppState:
         """線程安全地設定巨集運行狀態"""
         with self.running_lock:
             self._running = bool(val)
+            if not self._running and not self._is_testing:
+                self.stop_event.set()
 
     @property
     def running(self) -> bool:
@@ -56,6 +58,47 @@ class AppState:
     def running(self, val: bool):
         self.set_running(val)
 
+    def is_in_testing(self) -> bool:
+        """線程安全地檢查是否處於試跑狀態"""
+        with self.running_lock:
+            return self._is_testing
+
+    def set_testing(self, val: bool):
+        """線程安全地設定試跑狀態"""
+        with self.running_lock:
+            self._is_testing = bool(val)
+            if not self._is_testing and not self._running:
+                self.stop_event.set()
+
+    @property
+    def is_testing(self) -> bool:
+        """線程安全之試跑狀態屬性"""
+        with self.running_lock:
+            return self._is_testing
+
+    @is_testing.setter
+    def is_testing(self, val: bool):
+        self.set_testing(val)
+
+    def try_start_testing(self) -> tuple:
+        """原子操作：嘗試啟動試跑狀態。
+        若巨集正在循環運行中，回傳 (False, "running")；
+        若已有試跑任務進行中，回傳 (False, "testing")；
+        若均未運行，則原子地設定 _is_testing = True 並回傳 (True, "ok")。
+        徹底消除 check-then-act 競態條件。
+        """
+        with self.running_lock:
+            if self._running:
+                return False, "running"
+            if self._is_testing:
+                return False, "testing"
+            self._is_testing = True
+            return True, "ok"
+
+    def stop_testing(self):
+        """線程安全地停止試跑狀態"""
+        self.set_testing(False)
+
     def reset_drafts(self):
         """清空主 UI 編輯器草稿資料"""
         self.combos.clear()
@@ -65,8 +108,9 @@ class AppState:
 
     def reset_runtime(self):
         """重設背景執行階段狀態、快照與旗標"""
-        self.set_running(False)
-        self.is_testing = False
+        with self.running_lock:
+            self._running = False
+            self._is_testing = False
         self.reload_requested = False
         self.target_hwnd = None
         self.stop_event.clear()
@@ -143,12 +187,11 @@ def get_state() -> AppState:
     return app_state
 
 def set_state(new_state: AppState):
-    """設定當前作用中的 AppState 實例，並同步更新模組屬性字典"""
+    """設定當前作用中的 AppState 實例"""
     global app_state
     if not isinstance(new_state, AppState):
         raise TypeError("new_state 必須是 AppState 的實例")
     app_state = new_state
-    _sync_module_dict(new_state)
 
 @contextmanager
 def use_state(temp_state: AppState):
@@ -167,6 +210,22 @@ def is_running() -> bool:
 def set_running(val: bool):
     """線程安全地設定巨集運行狀態 (向後相容捷徑)"""
     app_state.set_running(val)
+
+def is_in_testing() -> bool:
+    """線程安全地檢查是否處於試跑狀態 (向後相容捷徑)"""
+    return app_state.is_in_testing()
+
+def set_testing(val: bool):
+    """線程安全地設定試跑狀態 (向後相容捷徑)"""
+    app_state.set_testing(val)
+
+def try_start_testing() -> tuple:
+    """原子操作：嘗試啟動試跑狀態 (向後相容捷徑)"""
+    return app_state.try_start_testing()
+
+def stop_testing():
+    """線程安全地停止試跑狀態 (向後相容捷徑)"""
+    app_state.stop_testing()
 
 def reset():
     """完全重設當前全域狀態 (保證只進行原地修改，絕不重新賦值新物件)"""
@@ -287,26 +346,10 @@ def format_periodic_task_summary(task, current_variables=None, max_name_len=18):
 
 
 # ==============================================================================
-# 模組屬性包裝與向後相容橋接 (Module-level Proxy & Backward Compatibility)
+# 模組自訂類別包裝 (唯一狀態代理：將模組層級屬性讀寫統一且動態委派至作用中的 app_state 實例)
 # ==============================================================================
-_STATE_PROXY_ATTRS = (
-    "combos", "steps", "variables", "periodic_tasks",
-    "active_steps", "active_combos", "active_variables", "active_periodic_tasks",
-    "running_lock", "steps_lock", "stop_event", "target_hwnd",
-    "is_testing", "reload_requested", "currently_held_keys",
-    "currently_held_keys_lock", "periodic_timers", "periodic_timers_lock"
-)
-
-def _sync_module_dict(state_obj: AppState):
-    """將 AppState 的屬性同步登記至模組層級字典，確保原有直接存取方式 100% 相容且高效"""
-    mod = sys.modules[__name__]
-    for attr in _STATE_PROXY_ATTRS:
-        mod.__dict__[attr] = getattr(state_obj, attr)
-
-# 初始化模組層級字典中的參照
-_sync_module_dict(app_state)
-
 class _StateModule(sys.modules[__name__].__class__):
+    """自訂模組類別，統一攔截模組屬性讀寫，保證模組層級存取與 app_state 保持 100% 雙向動態同步"""
     @property
     def running(self):
         return app_state.running
@@ -314,6 +357,14 @@ class _StateModule(sys.modules[__name__].__class__):
     @running.setter
     def running(self, val):
         app_state.running = val
+
+    @property
+    def is_testing(self):
+        return app_state.is_testing
+
+    @is_testing.setter
+    def is_testing(self, val):
+        app_state.is_testing = val
 
     def __getattr__(self, name):
         if hasattr(app_state, name):
@@ -325,8 +376,6 @@ class _StateModule(sys.modules[__name__].__class__):
             super().__setattr__(name, value)
         elif hasattr(app_state, name):
             setattr(app_state, name, value)
-            if name in _STATE_PROXY_ATTRS:
-                self.__dict__[name] = value
         else:
             super().__setattr__(name, value)
 

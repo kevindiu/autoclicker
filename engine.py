@@ -331,6 +331,9 @@ def macro_worker_loop(app):
     round_idx = 1
     with state.steps_lock:
         active_pts = copy.deepcopy(state.active_periodic_tasks)
+        current_steps = copy.deepcopy(state.active_steps)
+        current_combos = copy.deepcopy(state.active_combos)
+        current_variables = copy.deepcopy(state.active_variables)
 
     start_time = time.time()
     periodic_tasks_runtime = []
@@ -344,15 +347,12 @@ def macro_worker_loop(app):
 
     try:
         # 首輪開始前：若有設定「啟動時立即首發」的定時任務，先檢查執行一次
-        with state.steps_lock:
-            init_vars = copy.deepcopy(state.active_variables)
-            init_combos = copy.deepcopy(state.active_combos)
-        first_next_idx = 0 if state.active_steps else None
+        first_next_idx = 0 if current_steps else None
         if not check_and_run_due_periodic_tasks(
             app,
             periodic_tasks_runtime,
-            init_vars,
-            init_combos,
+            current_variables,
+            current_combos,
             round_prefix="啟動首發: ",
             next_step_idx=first_next_idx,
             current_round=0,
@@ -370,12 +370,12 @@ def macro_worker_loop(app):
                 break
 
             with state.steps_lock:
-                current_steps = copy.deepcopy(state.active_steps)
-                current_combos = copy.deepcopy(state.active_combos)
-                current_variables = copy.deepcopy(state.active_variables)
                 was_reloaded = state.reload_requested
-                state.reload_requested = False
                 if was_reloaded:
+                    state.reload_requested = False
+                    current_steps = copy.deepcopy(state.active_steps)
+                    current_combos = copy.deepcopy(state.active_combos)
+                    current_variables = copy.deepcopy(state.active_variables)
                     latest_pts = copy.deepcopy(state.active_periodic_tasks)
 
             if was_reloaded:

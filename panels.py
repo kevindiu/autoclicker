@@ -374,21 +374,6 @@ class LeftPanel(tk.Frame):
             if widget is not None:
                 setattr(app, name, widget)
 
-    # ======================= 公開組件存取 API =======================
-    def get_tree_vars(self):
-        return self.tree_vars
-
-    def get_cbo_profile(self):
-        return self.cbo_profile
-
-    def get_cbo_window(self):
-        return self.cbo_window
-
-    def get_combo_listbox(self):
-        return self.combo_listbox
-
-    def get_combo_act_listbox(self):
-        return self.combo_act_listbox
 
 
 # ==============================================================================
@@ -772,24 +757,3 @@ class RightPanel(tk.Frame):
             if widget is not None:
                 setattr(app, name, widget)
 
-    # ======================= 公開組件存取 API =======================
-    def get_step_listbox(self):
-        return self.step_listbox
-
-    def get_lbl_empty_steps(self):
-        return getattr(self, "lbl_empty_steps", None)
-
-    def get_periodic_listbox(self):
-        return self.periodic_listbox
-
-    def get_periodic_task_view(self):
-        return self.periodic_task_view
-
-    def get_txt_log(self):
-        return self.txt_log
-
-    def get_lbl_mouse_hud(self):
-        return self.lbl_mouse_hud
-
-    def get_btn_toggle(self):
-        return self.btn_toggle
