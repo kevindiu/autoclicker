@@ -20,6 +20,7 @@ from win32_api import (
     WNDENUMPROC,
     emergency_release_all,
     force_bring_window_to_front,
+    is_window_alive,
     VK_SPACE,
     VK_ESCAPE,
     KEY_PRESSED_MASK
@@ -401,16 +402,24 @@ class App(tk.Tk):
                 force_bring_window_to_front(hwnd_self)
 
     def locate_target_window(self):
-        """定位並閃爍目標遊戲視窗"""
+        """定位並閃爍目標遊戲視窗 (非同步背景閃爍，杜絕 UI 主執行緒凍結)"""
         if not IS_WINDOWS or not state.target_hwnd or not user32:
             return self.set_status("未綁定有效視窗，無法定位！")
 
+        hwnd = state.target_hwnd
         try:
-            force_bring_window_to_front(state.target_hwnd)
-            for _ in range(4):
-                user32.FlashWindow(state.target_hwnd, True)
-                time.sleep(0.08)
-            self.set_status(f"已定位並閃爍視窗 HWND: {state.target_hwnd}")
+            force_bring_window_to_front(hwnd)
+            def _flash_worker():
+                for _ in range(4):
+                    if not is_window_alive(hwnd):
+                        break
+                    try:
+                        user32.FlashWindow(hwnd, True)
+                    except (OSError, ctypes.ArgumentError):
+                        break
+                    time.sleep(0.08)
+            threading.Thread(target=_flash_worker, daemon=True).start()
+            self.set_status(f"已定位並閃爍視窗 HWND: {hwnd}")
         except Exception as e:
             self.set_status(f"定位失敗: {e}")
             self.append_log("警示", f"視窗定位失敗: {e}")
@@ -635,9 +644,22 @@ class App(tk.Tk):
     def refresh_window_dropdown(self):
         win_list = self.get_window_list()
         items, target_idx = [], 0
+        current_hwnd = state.target_hwnd
+        found_target = False
+        found_fallback = False
+        fallback_idx = 0
+
         for i, (hwnd, title) in enumerate(win_list):
             items.append(f"[{hwnd}] {title}")
-            if "水滸" in title or "online" in title.lower(): target_idx = i
+            if current_hwnd is not None and hwnd == current_hwnd:
+                target_idx = i
+                found_target = True
+            elif not found_fallback and ("水滸" in title or "online" in title.lower()):
+                fallback_idx = i
+                found_fallback = True
+
+        if not found_target and found_fallback:
+            target_idx = fallback_idx
 
         if not items:
             items, state.target_hwnd = ["未偵測到任何視窗"], None

@@ -220,7 +220,6 @@ def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, 
     if not periodic_tasks_runtime:
         return True
 
-    now = time.time()
     for idx, pt in enumerate(periodic_tasks_runtime):
         if not pt.get("enabled", True):
             continue
@@ -231,6 +230,7 @@ def check_and_run_due_periodic_tasks(app, periodic_tasks_runtime, current_vars, 
         if interval <= 0:
             interval = 1.0
 
+        now = time.time()
         last_run = pt.get("last_run", 0.0)
         if now - last_run >= interval:
             if not state.is_running() or state.stop_event.is_set():
@@ -362,7 +362,7 @@ def macro_worker_loop(app):
                 app.highlight_active_step(idx)
                 pfx = f"第 {round_idx} 輪: "
 
-                stype = step["type"]
+                stype = step.get("type")
                 step_ok = True
                 if stype == "combo":
                     c_name = step.get("name", "組合")

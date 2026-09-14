@@ -439,6 +439,7 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
         var_y = tk.StringVar(value=str(action.get("y", 0)))
         curr_btn = "右鍵" if action.get("btn") == "right" else "左鍵"
         var_btn = tk.StringVar(value=curr_btn)
+        var_rel = [action.get("rel", True)]
 
         coord_vars = [k for k, v in state.variables.items() if v.get("type") == "coord"]
         opt_vars = ["(不引用 / 固定坐標)"] + coord_vars
@@ -458,6 +459,8 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
                     var_y.set(str(v_val.get("y", 0)))
                     if "btn" in v_val:
                         var_btn.set("右鍵" if v_val.get("btn") == "right" else "左鍵")
+                    if "rel" in v_val:
+                        var_rel[0] = v_val.get("rel", True)
         cbo_ref.bind("<<ComboboxSelected>>", on_ref_change)
 
         tk.Label(f, text="按鍵類型:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL).grid(row=1, column=0, padx=6, pady=3, sticky="e")
@@ -489,6 +492,7 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
                 dialog.grab_set()
                 var_x.set(str(rx))
                 var_y.set(str(ry))
+                var_rel[0] = rel
                 app.set_status(f"已更新點擊位置: ({rx}, {ry})")
 
             def on_cancel_space():
@@ -508,7 +512,7 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
                 action["x"] = int(var_x.get().strip())
                 action["y"] = int(var_y.get().strip())
                 action["btn"] = "right" if var_btn.get() == "右鍵" else "left"
-                action["rel"] = action.get("rel", True)
+                action["rel"] = var_rel[0]
                 chosen = var_ref.get()
                 if chosen in coord_vars:
                     action["var_name"] = chosen
@@ -709,6 +713,7 @@ def prompt_edit_periodic_task(app, task=None):
     var_x = tk.StringVar(value=str(act.get("x", 0)))
     var_y = tk.StringVar(value=str(act.get("y", 0)))
     var_btn = tk.StringVar(value="右鍵" if act.get("btn") == "right" else "左鍵")
+    var_rel = [act.get("rel", True)]
 
     var_wait = tk.StringVar(value=str(act.get("sec", 1.0)))
 
@@ -794,6 +799,7 @@ def prompt_edit_periodic_task(app, task=None):
                     dialog.grab_set()
                     var_x.set(str(rx))
                     var_y.set(str(ry))
+                    var_rel[0] = rel
                     app.set_status(f"定時點擊取點成功: ({rx}, {ry})")
 
                 def on_cancel_space():
@@ -860,7 +866,7 @@ def prompt_edit_periodic_task(app, task=None):
                 x = int(var_x.get().strip())
                 y = int(var_y.get().strip())
                 btn = "right" if var_btn.get() == "右鍵" else "left"
-                return {"type": "click", "x": x, "y": y, "btn": btn, "rel": True}
+                return {"type": "click", "x": x, "y": y, "btn": btn, "rel": var_rel[0]}
             except ValueError:
                 messagebox.showerror("錯誤", "坐標 X 與 Y 必須輸入整數！", parent=dialog)
                 return None

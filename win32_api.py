@@ -266,7 +266,10 @@ def post_bg_key(hwnd, key_str):
             user32.PostMessageW(hwnd, WM_KEYDOWN, vk, lparam_down)
             safe_sleep(0.06)
         finally:
-            user32.PostMessageW(hwnd, WM_KEYUP, vk, lparam_up)
+            try:
+                user32.PostMessageW(hwnd, WM_KEYUP, vk, lparam_up)
+            except (OSError, ctypes.ArgumentError):
+                pass
             with state.currently_held_keys_lock:
                 state.currently_held_keys.discard(("bg", hwnd, vk))
 
