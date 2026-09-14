@@ -1,6 +1,7 @@
 import copy
 import time
 import uuid
+from contextlib import contextmanager
 import tkinter as tk
 from tkinter import ttk, messagebox
 
@@ -41,6 +42,20 @@ def restore_dialog(dialog):
             dialog.grab_set()
     except tk.TclError:
         pass
+
+@contextmanager
+def dialog_hidden(dialog):
+    """上下文管理器：隱藏對話框，並在區塊結束或異常時自動恢復顯示與焦點"""
+    try:
+        if dialog and dialog.winfo_exists():
+            dialog.grab_release()
+            dialog.withdraw()
+    except tk.TclError:
+        pass
+    try:
+        yield dialog
+    finally:
+        restore_dialog(dialog)
 
 def start_dialog_capture(dialog, app, on_finish_coord, btn="left"):
     """輔助函式：隱藏對話框進行太空鍵取點，取點完成或取消時自動恢復對話框顯示與焦點"""
@@ -103,7 +118,7 @@ def prompt_variable_dialog(app, edit_name=None):
     r_name.pack(fill="x", pady=(0, 8))
     tk.Label(r_name, text="變數名稱:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL_BOLD, width=8, anchor="e").pack(side="left", padx=(0, 8))
     var_name = tk.StringVar(value=edit_name if is_edit else "")
-    e_name = tk.Entry(r_name, textvariable=var_name, bg=UITheme.BG_INPUT, fg="#fff", font=UITheme.FONT_NORMAL, relief="flat")
+    e_name = tk.Entry(r_name, textvariable=var_name, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, font=UITheme.FONT_NORMAL, relief="flat")
     e_name.pack(side="left", fill="x", expand=True)
     if is_edit:
         e_name.config(state="disabled", fg=UITheme.TEXT_MUTED)
@@ -167,18 +182,18 @@ def prompt_variable_dialog(app, edit_name=None):
             r_coords.pack(fill="x", pady=(2, 5))
 
             tk.Label(r_coords, text="X:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 4))
-            e_x = tk.Entry(r_coords, textvariable=var_x, width=7, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL)
+            e_x = tk.Entry(r_coords, textvariable=var_x, width=7, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL)
             e_x.pack(side="left", padx=(0, 12))
 
             tk.Label(r_coords, text="Y:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 4))
-            e_y = tk.Entry(r_coords, textvariable=var_y, width=7, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL)
+            e_y = tk.Entry(r_coords, textvariable=var_y, width=7, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL)
             e_y.pack(side="left", padx=(0, 4))
 
             btn_rec = tk.Button(
                 f_val_box,
                 text="◎ 瞄準取點 (Space)",
                 bg=UITheme.ACCENT_GREEN,
-                fg="#fff",
+                fg=UITheme.TEXT_WHITE,
                 activebackground=UITheme.ACCENT_GREEN_HOVER,
                 font=UITheme.FONT_NORMAL_BOLD,
                 relief="flat",
@@ -190,7 +205,7 @@ def prompt_variable_dialog(app, edit_name=None):
             r_k = tk.Frame(f_val_box, bg=UITheme.BG_PANEL)
             r_k.pack(fill="x", pady=6)
             tk.Label(r_k, text="按鍵名稱:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 8))
-            e_k = tk.Entry(r_k, textvariable=var_key, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL)
+            e_k = tk.Entry(r_k, textvariable=var_key, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL)
             e_k.pack(side="left", fill="x", expand=True)
             tk.Label(f_val_box, text="(例: f1, 1, z, space, enter)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(anchor="w")
 
@@ -198,7 +213,7 @@ def prompt_variable_dialog(app, edit_name=None):
             r_w = tk.Frame(f_val_box, bg=UITheme.BG_PANEL)
             r_w.pack(fill="x", pady=6)
             tk.Label(r_w, text="停頓時間 (秒):", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 8))
-            e_w = tk.Entry(r_w, textvariable=var_wait, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL)
+            e_w = tk.Entry(r_w, textvariable=var_wait, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL)
             e_w.pack(side="left", fill="x", expand=True)
             tk.Label(f_val_box, text="(例: 0.5, 1.0, 2.5)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(anchor="w")
 
@@ -295,7 +310,7 @@ def prompt_edit_combo_dialog(app, combo_step, step_idx=None):
         r1,
         text="[ ➔ 展開為獨立步驟到掛機流程 ]",
         bg=UITheme.ACCENT_CYAN,
-        fg="#fff",
+        fg=UITheme.TEXT_WHITE,
         activebackground=UITheme.ACCENT_CYAN_HOVER,
         font=UITheme.FONT_SMALL_BOLD,
         relief="flat",
@@ -326,7 +341,7 @@ def prompt_edit_combo_dialog(app, combo_step, step_idx=None):
             refresh_sub_list(select_idx=0 if working_actions else None)
             app.set_status(f"已載入範本 [{combo_name}] 的子動作清單")
 
-    tk.Button(r2, text="套用範本動作", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, font=UITheme.FONT_SMALL_BOLD, relief="flat", padx=6, command=do_load_tpl).pack(side="left", padx=4)
+    tk.Button(r2, text="套用範本動作", bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, font=UITheme.FONT_SMALL_BOLD, relief="flat", padx=6, command=do_load_tpl).pack(side="left", padx=4)
 
     # 中間主工作區 (左邊子步驟清單，右邊垂直操作按鈕列)
     f_mid = tk.Frame(dialog, bg=UITheme.BG_PANEL, padx=12, pady=4)
@@ -345,7 +360,7 @@ def prompt_edit_combo_dialog(app, combo_step, step_idx=None):
         bg=UITheme.BG_DARK,
         fg=UITheme.TEXT_MAIN,
         selectbackground=UITheme.ACCENT_BLUE,
-        selectforeground="#fff",
+        selectforeground=UITheme.TEXT_WHITE,
         bd=0,
         highlightthickness=0,
         font=UITheme.FONT_NORMAL,
@@ -418,12 +433,12 @@ def prompt_edit_combo_dialog(app, combo_step, step_idx=None):
         act = working_actions[idx]
         app.run_in_test_thread(f"組合動作 #{idx+1}", lambda: app.execute_single_action(act, f"[{combo_name}#{idx+1}]"))
 
-    tk.Button(f_btns, text="▲ 上移", width=12, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=lambda: do_move_sub(-1)).pack(fill="x", pady=2)
-    tk.Button(f_btns, text="▼ 下移", width=12, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=lambda: do_move_sub(1)).pack(fill="x", pady=2)
-    tk.Button(f_btns, text="▶ 試跑動作", width=12, bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_test_sub).pack(fill="x", pady=2)
-    tk.Button(f_btns, text="✎ 修改", width=12, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_edit_sub).pack(fill="x", pady=2)
-    tk.Button(f_btns, text="⎘ 複製", width=12, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_dup_sub).pack(fill="x", pady=2)
-    tk.Button(f_btns, text="✕ 刪除", width=12, bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_del_sub).pack(fill="x", pady=(2, 6))
+    tk.Button(f_btns, text="▲ 上移", width=12, bg=UITheme.BTN_GRAY, fg=UITheme.TEXT_WHITE, activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=lambda: do_move_sub(-1)).pack(fill="x", pady=2)
+    tk.Button(f_btns, text="▼ 下移", width=12, bg=UITheme.BTN_GRAY, fg=UITheme.TEXT_WHITE, activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=lambda: do_move_sub(1)).pack(fill="x", pady=2)
+    tk.Button(f_btns, text="▶ 試跑動作", width=12, bg=UITheme.ACCENT_INDIGO, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_test_sub).pack(fill="x", pady=2)
+    tk.Button(f_btns, text="✎ 修改", width=12, bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_edit_sub).pack(fill="x", pady=2)
+    tk.Button(f_btns, text="⎘ 複製", width=12, bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_dup_sub).pack(fill="x", pady=2)
+    tk.Button(f_btns, text="✕ 刪除", width=12, bg=UITheme.ACCENT_RED, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_del_sub).pack(fill="x", pady=(2, 6))
 
     def on_save():
         combo_step["name"] = combo_name
@@ -486,11 +501,11 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
         cbo_btn.grid(row=1, column=1, padx=6, pady=3, sticky="w")
 
         tk.Label(f, text="X 坐標:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL).grid(row=2, column=0, padx=6, pady=3, sticky="e")
-        e_x = tk.Entry(f, textvariable=var_x, width=10, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL)
+        e_x = tk.Entry(f, textvariable=var_x, width=10, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL)
         e_x.grid(row=2, column=1, padx=6, pady=3, sticky="w")
 
         tk.Label(f, text="Y 坐標:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL).grid(row=3, column=0, padx=6, pady=3, sticky="e")
-        e_y = tk.Entry(f, textvariable=var_y, width=10, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL)
+        e_y = tk.Entry(f, textvariable=var_y, width=10, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL)
         e_y.grid(row=3, column=1, padx=6, pady=3, sticky="w")
 
         btn_rec = tk.Button(f, text="◎ 重新瞄準取點 (Space)", width=24, bg=UITheme.ACCENT_GREEN, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_GREEN_HOVER, font=UITheme.FONT_NORMAL_BOLD)
@@ -543,7 +558,7 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
         cbo_ref.bind("<<ComboboxSelected>>", on_ref_change)
 
         tk.Label(f, text="按鍵名稱:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL).grid(row=1, column=0, padx=6, pady=6, sticky="e")
-        e_k = tk.Entry(f, textvariable=var_k, width=12, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL)
+        e_k = tk.Entry(f, textvariable=var_k, width=12, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL)
         e_k.grid(row=1, column=1, padx=6, pady=6)
         e_k.focus_set()
 
@@ -580,7 +595,7 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
         cbo_ref.bind("<<ComboboxSelected>>", on_ref_change)
 
         tk.Label(f, text="等待秒數:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL).grid(row=1, column=0, padx=6, pady=6, sticky="e")
-        e_w = tk.Entry(f, textvariable=var_w, width=10, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL)
+        e_w = tk.Entry(f, textvariable=var_w, width=10, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL)
         e_w.grid(row=1, column=1, padx=6, pady=6)
         e_w.focus_set()
 
@@ -657,7 +672,7 @@ def prompt_edit_periodic_task(app, task=None):
     r1.pack(fill="x", pady=2)
     tk.Label(r1, text="任務名稱:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL_BOLD, width=8, anchor="e").pack(side="left", padx=(0, 6))
     var_name = tk.StringVar(value=init_name)
-    e_name = tk.Entry(r1, textvariable=var_name, bg=UITheme.BG_INPUT, fg="#fff", font=UITheme.FONT_NORMAL, relief="flat")
+    e_name = tk.Entry(r1, textvariable=var_name, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, font=UITheme.FONT_NORMAL, relief="flat")
     e_name.pack(side="left", fill="x", expand=True)
 
     # 觸發模式 (按時間秒數 vs 按循環輪次)
@@ -674,7 +689,7 @@ def prompt_edit_periodic_task(app, task=None):
 
     var_interval = tk.StringVar(value=init_interval)
     var_round = tk.StringVar(value=init_round_interval)
-    e_trigger_val = tk.Entry(r2, textvariable=var_interval, width=8, bg=UITheme.BG_INPUT, fg="#fff", font=UITheme.FONT_NORMAL, relief="flat")
+    e_trigger_val = tk.Entry(r2, textvariable=var_interval, width=8, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, font=UITheme.FONT_NORMAL, relief="flat")
     e_trigger_val.pack(side="left", padx=(0, 4))
     lbl_unit_hint = tk.Label(r2, text="秒 (例如: 30 或 2.5)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL)
     lbl_unit_hint.pack(side="left")
@@ -818,40 +833,24 @@ def prompt_edit_periodic_task(app, task=None):
             ttk.Combobox(r_c1, textvariable=var_btn, values=["左鍵", "右鍵"], width=6, state="readonly").pack(side="left", padx=(0, 8))
 
             tk.Label(r_c1, text="X:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_NORMAL).pack(side="left", padx=(4, 2))
-            tk.Entry(r_c1, textvariable=var_x, width=6, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 6))
+            tk.Entry(r_c1, textvariable=var_x, width=6, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 6))
             tk.Label(r_c1, text="Y:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_NORMAL).pack(side="left", padx=(4, 2))
-            tk.Entry(r_c1, textvariable=var_y, width=6, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left")
+            tk.Entry(r_c1, textvariable=var_y, width=6, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL).pack(side="left")
 
             r_c2 = tk.Frame(f_dynamic, bg=UITheme.BG_PANEL)
             r_c2.pack(fill="x", pady=4)
-            btn_rec = tk.Button(r_c2, text="◎ 重新瞄準取點 (Space)", bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, font=UITheme.FONT_NORMAL_BOLD, relief="flat", padx=8)
+            btn_rec = tk.Button(r_c2, text="◎ 重新瞄準取點 (Space)", bg=UITheme.ACCENT_GREEN, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_GREEN_HOVER, font=UITheme.FONT_NORMAL_BOLD, relief="flat", padx=8)
             btn_rec.pack(fill="x", padx=4)
 
             def do_rec():
-                if state.is_running():
-                    app.set_status("巨集正在循環執行中，為免干擾滑鼠瞄準，請先停止運行再取點！")
-                    return
-                dialog.grab_release()
-                dialog.withdraw()
-
                 def on_finish_space(rx, ry, rel):
-                    dialog.deiconify()
-                    dialog.lift()
-                    dialog.focus_force()
-                    dialog.grab_set()
                     var_x.set(str(rx))
                     var_y.set(str(ry))
                     var_rel[0] = rel
                     app.set_status(f"定時點擊取點成功: ({rx}, {ry})")
 
-                def on_cancel_space():
-                    dialog.deiconify()
-                    dialog.lift()
-                    dialog.focus_force()
-                    dialog.grab_set()
-
                 target_btn = "right" if var_btn.get() == "右鍵" else "left"
-                app.capture_pos_space(on_finish_space, on_cancel_space, btn=target_btn)
+                start_dialog_capture(dialog, app, on_finish_space, btn=target_btn)
 
             btn_rec.config(command=do_rec)
 
@@ -859,7 +858,7 @@ def prompt_edit_periodic_task(app, task=None):
             row = tk.Frame(f_dynamic, bg=UITheme.BG_PANEL)
             row.pack(fill="x", pady=6)
             tk.Label(row, text="等待秒數:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(4, 6))
-            e_w = tk.Entry(row, textvariable=var_wait, width=8, bg=UITheme.BG_INPUT, fg="#fff", font=UITheme.FONT_NORMAL, relief="flat")
+            e_w = tk.Entry(row, textvariable=var_wait, width=8, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, font=UITheme.FONT_NORMAL, relief="flat")
             e_w.pack(side="left", padx=(0, 6))
             tk.Label(row, text="秒 (大於 0 的數字)", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(side="left")
 
@@ -983,7 +982,7 @@ def prompt_edit_periodic_task(app, task=None):
         dialog.destroy()
 
     _add_dialog_buttons(dialog, on_ok, extra_left_buttons=[
-        {"text": "▶ 試跑動作", "bg": UITheme.ACCENT_INDIGO, "fg": "#fff",
+        {"text": "▶ 試跑動作", "bg": UITheme.ACCENT_INDIGO, "fg": UITheme.TEXT_WHITE,
          "activebackground": UITheme.ACCENT_INDIGO_HOVER, "relief": "flat",
          "font": UITheme.FONT_SMALL_BOLD, "padx": 6, "command": do_test}
     ])

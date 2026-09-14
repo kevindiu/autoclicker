@@ -83,7 +83,7 @@ class VarTable(tk.Frame):
         l1.pack(side="left", padx=2)
         l2 = tk.Label(rf, text=t_disp, bg=self.bg, fg=UITheme.CYAN_SUB, font=UITheme.FONT_SMALL_BOLD, width=9, anchor="center")
         l2.pack(side="left", padx=2)
-        l3 = tk.Label(rf, text=v_str, bg=self.bg, fg="#e5e7eb", font=UITheme.FONT_SMALL, anchor="w")
+        l3 = tk.Label(rf, text=v_str, bg=self.bg, fg=UITheme.TEXT_LIGHT, font=UITheme.FONT_SMALL, anchor="w")
         l3.pack(side="left", fill="x", expand=True, padx=2)
 
         for w in (rf, l1, l2, l3):

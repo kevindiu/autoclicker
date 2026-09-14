@@ -29,6 +29,13 @@ from panels import LeftPanel, RightPanel
 import config_manager
 import dialogs
 import engine
+from controllers import (
+    BaseController,
+    VarController,
+    ComboController,
+    StepController,
+    PeriodicTaskController
+)
 
 
 # ==============================================================================
@@ -110,6 +117,12 @@ class App(tk.Tk):
         self.grid_columnconfigure(0, weight=1, uniform="main_cols")
         self.grid_columnconfigure(1, weight=1, uniform="main_cols")
         self.grid_rowconfigure(0, weight=1)
+
+        # 初始化控制器 (Controllers: 職責解耦)
+        self.var_ctrl = VarController(self)
+        self.combo_ctrl = ComboController(self)
+        self.step_ctrl = StepController(self)
+        self.periodic_ctrl = PeriodicTaskController(self)
 
         self.build_left_panel()
         self.build_right_panel()
@@ -725,779 +738,185 @@ class App(tk.Tk):
                 state.target_hwnd = None
                 self.append_log("警示", f"視窗綁定解析失敗: {e}")
 
-    # ======================= 變數管理邏輯 =======================
+    # ==========================================================================
+    # 控制器方法委派 (Controller Delegation - 100% 向後相容)
+    # ==========================================================================
+
+    # --- 常用變數管理 (VarController) ---
     def refresh_variables_table(self, select_name=None):
-        """重新整理變數表格一覽與關聯下拉選單"""
-        if not hasattr(self, "tree_vars"):
-            return
-        for item in self.tree_vars.get_children():
-            self.tree_vars.delete(item)
-
-        type_display = {"coord": "[坐標]", "key": "[按鍵]", "wait": "[停頓]"}
-
-        for name, data in state.variables.items():
-            t_key = data.get("type", "coord")
-            t_disp = type_display.get(t_key, t_key)
-            val = data.get("value")
-
-            if t_key == "coord":
-                if isinstance(val, dict):
-                    btn_tag = "右鍵·" if val.get("btn") == "right" else "左鍵·"
-                    v_str = f"{btn_tag}({val.get('x', 0)}, {val.get('y', 0)})"
-                else:
-                    v_str = str(val)
-            elif t_key == "key":
-                v_str = str(val).upper()
-            elif t_key == "wait":
-                v_str = f"{val} 秒"
-            else:
-                v_str = str(val)
-
-            self.tree_vars.insert("", "end", iid=name, values=(name, t_disp, v_str))
-
-        if select_name and hasattr(self.tree_vars, "select"):
-            self.tree_vars.select(select_name)
-
-        var_names = list(state.variables.keys())
-        if hasattr(self, "cbo_combo_add_var"):
-            self.cbo_combo_add_var["values"] = var_names
-            if var_names:
-                if self.var_combo_ref_var.get() not in var_names:
-                    self.cbo_combo_add_var.current(0)
-            else:
-                self.var_combo_ref_var.set("")
-
-        if hasattr(self, "cbo_step_add_var"):
-            self.cbo_step_add_var["values"] = var_names
-            if var_names:
-                if self.var_step_ref_var.get() not in var_names:
-                    self.cbo_step_add_var.current(0)
-            else:
-                self.var_step_ref_var.set("")
+        return self.var_ctrl.refresh_variables_table(select_name)
 
     def add_variable_dialog(self):
-        """新增變數入口"""
-        self.prompt_variable_dialog(None)
+        return self.var_ctrl.add_variable_dialog()
 
     def edit_selected_variable(self):
-        """修改所選變數入口"""
-        sel = self.tree_vars.selection()
-        if not sel:
-            return self.set_status("請先在表格中選擇要修改的變數")
-        var_name = sel[0]
-        self.prompt_variable_dialog(var_name)
+        return self.var_ctrl.edit_selected_variable()
 
     def delete_selected_variable(self):
-        """刪除所選變數"""
-        sel = self.tree_vars.selection()
-        if not sel:
-            return self.set_status("請先在表格中選擇要刪除的變數")
-        var_name = sel[0]
-        if not messagebox.askyesno("刪除變數", f"請問是否確定刪除變數「{var_name}」？\n若已有動作引用此變數，執行時將自動回退至固定值。", parent=self):
-            return
-        state.variables.pop(var_name, None)
-        self.trigger_hot_reload()
-        self.refresh_variables_table()
-        self.refresh_combo_actions_list()
-        self.update_step_list()
-        self.append_log("系統", f"🗑 已刪除變數：【{var_name}】")
+        return self.var_ctrl.delete_selected_variable()
 
     def move_variable(self, delta):
-        sel = self.tree_vars.selection()
-        if not sel:
-            return self.set_status("請先在常用變數庫點選要移動的變數！")
-        sel_name = sel[0]
-        keys = list(state.variables.keys())
-        if sel_name not in keys:
-            return
-        idx = keys.index(sel_name)
-        target = idx + delta
-        if 0 <= target < len(keys):
-            keys[idx], keys[target] = keys[target], keys[idx]
-            new_vars = {k: state.variables[k] for k in keys}
-            state.variables.clear()
-            state.variables.update(new_vars)
-            with state.steps_lock:
-                state.active_variables = copy.deepcopy(state.variables)
-                state.reload_requested = True
-            self.refresh_variables_table(select_name=sel_name)
-            direction = "上移" if delta < 0 else "下移"
-            self.set_status(f"已將變數【{sel_name}】{direction}至 #{target+1}")
-            self.trigger_hot_reload()
-        else:
-            self.set_status("已在變數清單最頂或最底，無法再移動！")
+        return self.var_ctrl.move_variable(delta)
 
     def _build_variable_action(self, var_name):
-        """根據變數名稱與類型，組裝對應的動作字典與提示描述，若無效則回傳 (None, None)"""
-        if not var_name or var_name not in state.variables:
-            return None, None
-        v_info = state.variables[var_name]
-        v_type = v_info.get("type", "coord")
-        v_val = v_info.get("value")
-
-        if v_type == "coord":
-            px = v_val.get("x", 0) if isinstance(v_val, dict) else 0
-            py = v_val.get("y", 0) if isinstance(v_val, dict) else 0
-            btn = v_val.get("btn", "left") if isinstance(v_val, dict) else "left"
-            btn_cn = "右鍵" if btn == "right" else "左鍵"
-            new_act = {
-                "type": "click",
-                "btn": btn,
-                "x": px,
-                "y": py,
-                "rel": self.var_use_rel.get(),
-                "var_name": var_name
-            }
-            desc = f"【{var_name}】({btn_cn}點擊)"
-        elif v_type == "key":
-            new_act = {
-                "type": "key",
-                "key": str(v_val),
-                "var_name": var_name
-            }
-            desc = f"【{var_name}】(按鍵[{str(v_val).upper()}])"
-        elif v_type == "wait":
-            try: sec = float(v_val)
-            except (ValueError, TypeError): sec = 1.0
-            new_act = {
-                "type": "wait",
-                "sec": sec,
-                "var_name": var_name
-            }
-            desc = f"【{var_name}】(停頓{sec}s)"
-        else:
-            return None, None
-
-        return new_act, desc
+        return self.var_ctrl._build_variable_action(var_name)
 
     def add_variable_to_main_steps(self):
-        """將表格中所選定的變數以引用方式直接加入掛機流程"""
-        sel = self.tree_vars.selection()
-        if not sel:
-            return self.set_status("請先在表格中選擇要加入流程的變數！")
-        var_name = sel[0]
-        new_act, desc = self._build_variable_action(var_name)
-        if not new_act:
-            return self.set_status("找不到所選變數或變數無效！")
-        ins = self.get_main_insert_index()
-        self._insert_action_to_target(new_act, is_combo=False, success_msg=f"已將變數{desc} 加入掛機流程 #{ins+1}")
+        return self.var_ctrl.add_variable_to_main_steps()
 
     def combo_add_variable_action(self):
-        """將選定的變數以引用方式加入當前選取組合"""
-        var_name = self.var_combo_ref_var.get().strip()
-        new_act, desc = self._build_variable_action(var_name)
-        if not new_act:
-            return self.set_status("請先選擇要引用的變數！")
-        if self.get_selected_combo_idx() is None:
-            return self.set_status("請先在左邊清單選擇要加入動作的組合！")
-        self._insert_action_to_target(new_act, is_combo=True, success_msg=f"已在組合加入引用變數{desc}")
+        return self.var_ctrl.combo_add_variable_action()
 
-    # ======================= 組合管理邏輯 =======================
+    # --- 技能組合管理 (ComboController) ---
     def get_selected_combo_idx(self):
-        sel = self.combo_listbox.curselection()
-        return sel[0] if sel and 0 <= sel[0] < len(state.combos) else None
+        return self.combo_ctrl.get_selected_combo_idx()
 
     def refresh_call_combo_dropdown(self):
-        idx = self.get_selected_combo_idx()
-        curr_name = state.combos[idx]["name"] if idx is not None else None
-        avail = [c["name"] for c in state.combos if c["name"] != curr_name]
-        if hasattr(self, "cbo_call_combo"):
-            self.cbo_call_combo["values"] = avail
-            if avail:
-                if self.var_combo_to_call.get() not in avail:
-                    self.cbo_call_combo.current(0)
-            else:
-                self.var_combo_to_call.set("")
-
-        all_combos = [c["name"] for c in state.combos]
-        if hasattr(self, "cbo_step_call_combo"):
-            self.cbo_step_call_combo["values"] = all_combos
-            if all_combos:
-                if self.var_step_combo_to_call.get() not in all_combos:
-                    self.cbo_step_call_combo.current(0)
-            else:
-                self.var_step_combo_to_call.set("")
+        return self.combo_ctrl.refresh_call_combo_dropdown()
 
     def refresh_combo_list(self, select_idx=None):
-        self.combo_listbox.delete(0, tk.END)
-        for i, c in enumerate(state.combos):
-            act_count = len(c.get("actions", []))
-            self.combo_listbox.insert(tk.END, f"{c['name']} ({act_count}動作)")
-        if select_idx is not None and 0 <= select_idx < len(state.combos):
-            self.combo_listbox.selection_set(select_idx)
-            self.on_combo_select()
-        else:
-            self.refresh_call_combo_dropdown()
+        return self.combo_ctrl.refresh_combo_list(select_idx)
 
     def on_combo_select(self, event=None):
-        idx = self.get_selected_combo_idx()
-        if idx is None:
-            self.lbl_combo_editing.config(text="【組合動作: 未選取】")
-            self.combo_act_listbox.delete(0, tk.END)
-            self.refresh_call_combo_dropdown()
-            return
-        c = state.combos[idx]
-        self.var_combo_name.set(c["name"])
-        self.lbl_combo_editing.config(text=f"【編輯: {c['name']}】")
-        self.refresh_combo_actions_list()
-        self.refresh_call_combo_dropdown()
+        return self.combo_ctrl.on_combo_select(event)
 
     def add_new_combo(self):
-        name = self.var_combo_name.get().strip()
-        if not name:
-            count = len(state.combos) + 1
-            name = f"組合{count}"
-            while any(c["name"] == name for c in state.combos):
-                count += 1
-                name = f"組合{count}"
-        elif any(c["name"] == name for c in state.combos):
-            messagebox.showwarning("名稱重覆", f"組合名稱「{name}」已存在！請使用其他名稱。", parent=self)
-            return
-
-        state.combos.append({"name": name, "actions": []})
-        self.refresh_combo_list(select_idx=len(state.combos)-1)
-        self.set_status(f"已建立新組合: [{name}]")
-        self.trigger_hot_reload()
+        return self.combo_ctrl.add_new_combo()
 
     def duplicate_selected_combo(self):
-        idx = self.get_selected_combo_idx()
-        if idx is None: return self.set_status("請先在左邊清單點選要複製的組合！")
-        orig = state.combos[idx]
-        base_name = orig["name"]
-        new_name = f"{base_name}_副本"
-        count = 1
-        while any(c["name"] == new_name for c in state.combos):
-            count += 1
-            new_name = f"{base_name}_副本{count}"
-
-        state.combos.insert(idx + 1, {"name": new_name, "actions": copy.deepcopy(orig.get("actions", []))})
-        self.refresh_combo_list(select_idx=idx + 1)
-        self.set_status(f"已複製組合 [{base_name}] 為 [{new_name}]")
-        self.trigger_hot_reload()
+        return self.combo_ctrl.duplicate_selected_combo()
 
     def rename_selected_combo(self):
-        idx = self.get_selected_combo_idx()
-        if idx is None: return self.set_status("請先在左邊點選要改名的組合！")
-        new_name = self.var_combo_name.get().strip()
-        if not new_name:
-            messagebox.showwarning("名稱錯誤", "組合名稱不能為空！", parent=self)
-            return
-        old_name = state.combos[idx]["name"]
-        if new_name == old_name:
-            self.set_status(f"組合名稱未變更: [{old_name}]")
-            return
-        if any(c["name"] == new_name for c in state.combos):
-            messagebox.showwarning("名稱重覆", f"組合名稱「{new_name}」已存在！請使用其他名稱。", parent=self)
-            return
-
-        state.combos[idx]["name"] = new_name
-
-        for c in state.combos:
-            for act in c.get("actions", []):
-                if act.get("type") == "call_combo" and act.get("target_name") == old_name:
-                    act["target_name"] = new_name
-
-        sync_cnt = 0
-        for s in state.steps:
-            if s.get("type") == "call_combo" and s.get("target_name") == old_name:
-                s["target_name"] = new_name
-                sync_cnt += 1
-            elif s.get("type") == "combo":
-                if s.get("name") == old_name:
-                    s["name"] = new_name
-                    sync_cnt += 1
-                for act in s.get("actions", []):
-                    if act.get("type") == "call_combo" and act.get("target_name") == old_name:
-                        act["target_name"] = new_name
-
-        if sync_cnt > 0: self.update_step_list()
-        self.refresh_combo_list(select_idx=idx)
-        self.set_status(f"已將組合改名為 [{new_name}]，同步刷新了關聯步驟")
-        self.trigger_hot_reload()
+        return self.combo_ctrl.rename_selected_combo()
 
     def delete_selected_combo(self):
-        idx = self.get_selected_combo_idx()
-        if idx is None: return
-        name = state.combos[idx]["name"]
-        act_cnt = len(state.combos[idx].get("actions", []))
-        if not messagebox.askyesno("刪除組合確認", f"確定要刪除組合【{name}】嗎？組合內的所有動作將會一併清除！", parent=self):
-            return
-        del state.combos[idx]
-        new_sel = min(idx, len(state.combos) - 1) if state.combos else None
-        self.refresh_combo_list(select_idx=new_sel)
-        self.on_combo_select()
-        self.update_step_list()
-        self.append_log("系統", f"🗑 已刪除技能組合【{name}】（內含 {act_cnt} 個動作）")
-        self.trigger_hot_reload()
+        return self.combo_ctrl.delete_selected_combo()
 
     def add_combo_to_main_steps(self):
-        idx = self.get_selected_combo_idx()
-        if idx is None: return self.set_status("請先在左邊選擇要加入的組合！")
-        c = state.combos[idx]
-        if not c.get("actions"): return self.set_status(f"組合 [{c['name']}] 內尚未加入任何動作！")
-
-        ins = self.get_main_insert_index()
-        state.steps.insert(ins, {"type": "combo", "name": c["name"], "actions": copy.deepcopy(c["actions"])})
-        self.update_step_list(select_idx=ins)
-        self.set_status(f"已將組合 [{c['name']}] 加入掛機流程 #{ins+1}")
-        self.trigger_hot_reload()
+        return self.combo_ctrl.add_combo_to_main_steps()
 
     def move_combo(self, delta):
-        c_idx = self.get_selected_combo_idx()
-        if c_idx is None:
-            return self.set_status("請先在組合清單點選要移動的組合！")
-        def _refresh(target):
-            self.refresh_combo_list(select_idx=target)
-        self._move_list_item(state.combos, c_idx, delta, _refresh, item_name="技能組合")
+        return self.combo_ctrl.move_combo(delta)
 
-    # ======================= 組合動作邏輯 =======================
     def get_selected_action_idx(self):
-        sel = self.combo_act_listbox.curselection()
-        return sel[0] if sel else None
+        return self.combo_ctrl.get_selected_action_idx()
 
     def refresh_combo_actions_list(self, select_idx=None):
-        self.combo_act_listbox.delete(0, tk.END)
-        idx = self.get_selected_combo_idx()
-        if idx is None:
-            return
-        actions = state.combos[idx].get("actions", [])
-        for i, act in enumerate(actions):
-            self.combo_act_listbox.insert(tk.END, format_action_summary(act, index=i))
-        if select_idx is not None and 0 <= select_idx < len(actions):
-            self.combo_act_listbox.selection_set(select_idx)
-            self.combo_act_listbox.see(select_idx)
+        return self.combo_ctrl.refresh_combo_actions_list(select_idx)
 
     def sync_combo_actions_to_main_steps(self, combo_name, new_actions):
-        sync_cnt = 0
-        for s in state.steps:
-            if s.get("type") == "combo" and s.get("name") == combo_name:
-                s["actions"] = copy.deepcopy(new_actions)
-                sync_cnt += 1
-        if sync_cnt > 0: self.update_step_list()
+        return self.combo_ctrl.sync_combo_actions_to_main_steps(combo_name, new_actions)
 
     def test_run_selected_combo_action(self):
-        c_idx = self.get_selected_combo_idx()
-        a_idx = self.get_selected_action_idx()
-        if c_idx is None or a_idx is None:
-            return self.set_status("請先選擇要試跑的組合動作！")
-        act = state.combos[c_idx]["actions"][a_idx]
-        self.run_in_test_thread(f"組合動作 #{a_idx+1}", lambda: self.execute_single_action(act, f"組合動作#{a_idx+1}"))
+        return self.combo_ctrl.test_run_selected_combo_action()
 
     def test_run_current_combo(self):
-        c_idx = self.get_selected_combo_idx()
-        if c_idx is None:
-            return self.set_status("請先選擇要試跑的組合！")
-        c = state.combos[c_idx]
-        sub_actions = c.get("actions", [])
-        if not sub_actions:
-            return self.set_status(f"組合 [{c['name']}] 內無任何動作可試跑！")
-
-        def _run():
-            for a_idx, act in enumerate(sub_actions):
-                if state.stop_event.is_set(): break
-                self.execute_single_action(act, f"[{c['name']}#{a_idx+1}]")
-
-        self.run_in_test_thread(f"組合 [{c['name']}]", _run)
-
-    # ======================= 熱更新同步與清單動作輔助函數 =======================
-    def trigger_hot_reload(self):
-        """若巨集運行中，同步最新草稿至背景實例快照，並於下一輪自動生效"""
-        if state.is_running():
-            state.get_state().snapshot_active(reload_requested=True)
-
-    def _move_list_item(self, lst, idx, delta, refresh_cb, item_name="項目"):
-        if idx is None:
-            return self.set_status(f"請先在清單點選要移動的{item_name}！")
-        target = idx + delta
-        if 0 <= target < len(lst):
-            lst[idx], lst[target] = lst[target], lst[idx]
-            refresh_cb(target)
-            direction = "上移" if delta < 0 else "下移"
-            self.set_status(f"已將{item_name} #{idx+1} {direction}至 #{target+1}")
-            self.trigger_hot_reload()
-        else:
-            self.set_status("已在清單最頂或最底，無法再移動！")
-
-    def _duplicate_list_item(self, lst, idx, refresh_cb, item_name="項目"):
-        if idx is None: return self.set_status(f"請先在清單點選要複製的{item_name}！")
-        lst.insert(idx + 1, copy.deepcopy(lst[idx]))
-        refresh_cb(idx + 1)
-        self.set_status(f"已複製{item_name} #{idx+1}")
-        self.trigger_hot_reload()
-
-    def _delete_list_item(self, lst, idx, refresh_cb, item_name="項目"):
-        if idx is None or not (0 <= idx < len(lst)):
-            return self.set_status(f"請先在清單點選要刪除的{item_name}！")
-        removed_item = lst[idx]
-        del lst[idx]
-        new_sel = min(idx, len(lst) - 1) if lst else None
-        refresh_cb(new_sel)
-
-        item_desc = ""
-        if isinstance(removed_item, dict):
-            item_desc = f": {format_action_summary(removed_item)}"
-
-        self.append_log("系統", f"🗑 已移除{item_name} #{idx+1}{item_desc}")
-        self.trigger_hot_reload()
-
-    def _clear_list_items(self, lst, confirm_msg, refresh_cb, status_msg):
-        if not lst: return self.set_status(f"{status_msg}本來就是空的")
-        if messagebox.askyesno("清空確認", confirm_msg, parent=self):
-            cnt = len(lst)
-            lst.clear()
-            refresh_cb(None)
-            self.append_log("系統", f"🗑 已清空{status_msg}（共移除 {cnt} 個步驟/動作）")
-            self.trigger_hot_reload()
-
-    def _insert_action_to_target(self, action_dict, is_combo=False, success_msg=""):
-        if is_combo:
-            idx = self.get_selected_combo_idx()
-            if idx is None: return self.set_status("請先選取一個組合！")
-            actions = state.combos[idx].setdefault("actions", [])
-            sel = self.get_selected_action_idx()
-            ins = sel + 1 if sel is not None else len(actions)
-            actions.insert(ins, action_dict)
-            self.refresh_combo_actions_list(select_idx=ins)
-            self.refresh_combo_list(select_idx=idx)
-            self.sync_combo_actions_to_main_steps(state.combos[idx]["name"], actions)
-            if success_msg: self.set_status(success_msg)
-            self.trigger_hot_reload()
-            return ins
-        else:
-            ins = self.get_main_insert_index()
-            state.steps.insert(ins, action_dict)
-            self.update_step_list(ins)
-            if success_msg: self.set_status(success_msg)
-            self.trigger_hot_reload()
-            return ins
-
-    def add_click_action(self, is_combo=False):
-        if state.is_running():
-            return self.set_status("巨集正在循環執行中，為免干擾滑鼠瞄準，請先停止運行再取點！")
-        if is_combo and self.get_selected_combo_idx() is None:
-            return self.set_status("請先選取一個組合！")
-        btn_var = self.var_combo_btn if is_combo else self.var_step_btn
-        target_btn = "right" if btn_var.get() == "右鍵" else "left"
-        btn_cn = "右鍵" if target_btn == "right" else "左鍵"
-
-        def cb(x, y, rel):
-            if is_combo:
-                msg = f"已在組合加入{btn_cn}點擊 ({x},{y})"
-            else:
-                ins = self.get_main_insert_index()
-                msg = f"已成功新增{btn_cn}點擊位置到第 #{ins+1} 步"
-            self._insert_action_to_target({"type": "click", "btn": target_btn, "x": x, "y": y, "rel": rel}, is_combo=is_combo, success_msg=msg)
-
-        self.capture_pos_space(cb, btn=target_btn)
-
-    def add_manual_click(self, is_combo=False):
-        if is_combo and self.get_selected_combo_idx() is None:
-            return self.set_status("請先選取一個組合！")
-        var_x = self.var_combo_manual_x if is_combo else self.var_step_manual_x
-        var_y = self.var_combo_manual_y if is_combo else self.var_step_manual_y
-        try:
-            x = int(var_x.get().strip())
-            y = int(var_y.get().strip())
-        except ValueError:
-            return self.set_status("X 和 Y 必須輸入整數！")
-
-        btn_var = self.var_combo_btn if is_combo else self.var_step_btn
-        target_btn = "right" if btn_var.get() == "右鍵" else "left"
-        btn_cn = "右鍵" if target_btn == "right" else "左鍵"
-
-        if is_combo:
-            msg = f"已手動在組合加入{btn_cn}點擊: ({x}, {y})"
-        else:
-            ins = self.get_main_insert_index()
-            msg = f"已手動插入{btn_cn}點擊到掛機流程 #{ins+1}: ({x}, {y})"
-
-        self._insert_action_to_target({"type": "click", "btn": target_btn, "x": x, "y": y, "rel": self.var_use_rel.get()}, is_combo=is_combo, success_msg=msg)
+        return self.combo_ctrl.test_run_current_combo()
 
     def edit_selected_combo_action(self):
-        c_idx = self.get_selected_combo_idx()
-        a_idx = self.get_selected_action_idx()
-        if c_idx is None or a_idx is None: return self.set_status("請先選擇組合動作！")
-
-        act = state.combos[c_idx]["actions"][a_idx]
-        curr_combo_name = state.combos[c_idx]["name"]
-        avail_combos = [c["name"] for c in state.combos if c["name"] != curr_combo_name]
-
-        if self.prompt_edit_action(act, available_combos=avail_combos):
-            self.refresh_combo_actions_list(select_idx=a_idx)
-            self.sync_combo_actions_to_main_steps(state.combos[c_idx]["name"], state.combos[c_idx]["actions"])
-            self.set_status(f"已成功更新組合動作 #{a_idx+1}")
-            self.trigger_hot_reload()
-
-    def add_key_action(self, is_combo=False):
-        if is_combo and self.get_selected_combo_idx() is None:
-            return self.set_status("請先選取一個組合！")
-        key_var = self.var_combo_act_key if is_combo else self.var_step_key
-        key = key_var.get().strip().lower()
-        if not key: return
-        if is_combo:
-            msg = f"已在組合加入按鍵 [{key.upper()}]"
-        else:
-            ins = self.get_main_insert_index()
-            msg = f"已插入按鍵到掛機流程 #{ins+1}: [{key.upper()}]"
-        self._insert_action_to_target({"type": "key", "key": key}, is_combo=is_combo, success_msg=msg)
-
-    def add_wait_action(self, is_combo=False):
-        if is_combo and self.get_selected_combo_idx() is None:
-            return self.set_status("請先選取一個組合！")
-        wait_var = self.var_combo_act_wait if is_combo else self.var_step_wait
-        try:
-            sec = float(wait_var.get())
-            if sec <= 0: raise ValueError
-        except ValueError:
-            return self.set_status("停頓秒數必須大於0！")
-        if is_combo:
-            msg = f"已在組合加入停頓 {sec} 秒"
-        else:
-            ins = self.get_main_insert_index()
-            msg = f"已插入等待到掛機流程 #{ins+1}: {sec} 秒"
-        self._insert_action_to_target({"type": "wait", "sec": sec}, is_combo=is_combo, success_msg=msg)
-
-    def combo_add_call_action(self):
-        idx = self.get_selected_combo_idx()
-        if idx is None: return self.set_status("請先選取一個組合！")
-        target_name = self.var_combo_to_call.get().strip()
-        if not target_name: return self.set_status("請先在下拉選單選擇要呼叫的組合！")
-        if target_name == state.combos[idx]["name"]: return self.set_status("不能在組合內呼叫自己！")
-        self._insert_action_to_target({"type": "call_combo", "target_name": target_name}, is_combo=True, success_msg=f"已在組合加入呼叫: [{target_name}]")
-
-    def step_add_call_combo_action(self):
-        """在掛機流程中加入呼叫組合步驟"""
-        target_name = self.var_step_combo_to_call.get().strip()
-        if not target_name:
-            return self.set_status("請先在下拉選單選擇要呼叫的組合！")
-        ins = self.get_main_insert_index()
-        self._insert_action_to_target(
-            {"type": "call_combo", "target_name": target_name},
-            is_combo=False,
-            success_msg=f"已插入呼叫組合到掛機流程 #{ins+1}: [{target_name}]"
-        )
-
-    def step_add_variable_action(self):
-        """在掛機流程中加入引用變數動作"""
-        var_name = self.var_step_ref_var.get().strip()
-        new_act, desc = self._build_variable_action(var_name)
-        if not new_act:
-            return self.set_status("請先在下拉選單選擇要引用的變數！")
-        ins = self.get_main_insert_index()
-        self._insert_action_to_target(new_act, is_combo=False, success_msg=f"已插入引用變數到掛機流程 #{ins+1}: {desc}")
+        return self.combo_ctrl.edit_selected_combo_action()
 
     def move_combo_action(self, delta):
-        c_idx = self.get_selected_combo_idx()
-        if c_idx is None: return self.set_status("請先在左邊清單選取一個組合！")
-        a_idx = self.get_selected_action_idx()
-        actions = state.combos[c_idx]["actions"]
-        def _refresh(target):
-            self.refresh_combo_actions_list(select_idx=target)
-            self.sync_combo_actions_to_main_steps(state.combos[c_idx]["name"], actions)
-        self._move_list_item(actions, a_idx, delta, _refresh, item_name="組合動作")
+        return self.combo_ctrl.move_combo_action(delta)
 
     def duplicate_combo_action(self):
-        c_idx = self.get_selected_combo_idx()
-        if c_idx is None: return self.set_status("請先在左邊清單選取一個組合！")
-        a_idx = self.get_selected_action_idx()
-        actions = state.combos[c_idx]["actions"]
-        def _refresh(target):
-            self.refresh_combo_actions_list(select_idx=target)
-            self.refresh_combo_list(select_idx=c_idx)
-            self.sync_combo_actions_to_main_steps(state.combos[c_idx]["name"], actions)
-        self._duplicate_list_item(actions, a_idx, _refresh, item_name="組合動作")
+        return self.combo_ctrl.duplicate_combo_action()
 
     def delete_combo_action(self):
-        c_idx = self.get_selected_combo_idx()
-        if c_idx is None: return self.set_status("請先在左邊清單選取一個組合！")
-        a_idx = self.get_selected_action_idx()
-        actions = state.combos[c_idx]["actions"]
-        def _refresh(target):
-            self.refresh_combo_actions_list(select_idx=target)
-            self.refresh_combo_list(select_idx=c_idx)
-            self.sync_combo_actions_to_main_steps(state.combos[c_idx]["name"], actions)
-        self._delete_list_item(actions, a_idx, _refresh, item_name="組合動作")
+        return self.combo_ctrl.delete_combo_action()
 
     def clear_combo_actions(self):
-        c_idx = self.get_selected_combo_idx()
-        if c_idx is None: return
-        actions = state.combos[c_idx].get("actions", [])
-        def _refresh(_):
-            self.refresh_combo_actions_list()
-            self.refresh_combo_list(select_idx=c_idx)
-            self.sync_combo_actions_to_main_steps(state.combos[c_idx]["name"], [])
-        self._clear_list_items(actions, f"請問是否清空組合 [{state.combos[c_idx]['name']}] 的所有動作？", _refresh, "組合所有動作")
+        return self.combo_ctrl.clear_combo_actions()
 
-    # ======================= 自動循環清單（掛機流程）邏輯 =======================
+    def combo_add_call_action(self):
+        return self.combo_ctrl.combo_add_call_action()
+
+    # --- 熱更新與清單通用操作 ---
+    def trigger_hot_reload(self):
+        return self.step_ctrl.trigger_hot_reload()
+
+    def _move_list_item(self, lst, idx, delta, refresh_cb, item_name="項目"):
+        return self.step_ctrl._move_list_item(lst, idx, delta, refresh_cb, item_name=item_name)
+
+    def _duplicate_list_item(self, lst, idx, refresh_cb, item_name="項目"):
+        return self.step_ctrl._duplicate_list_item(lst, idx, refresh_cb, item_name=item_name)
+
+    def _delete_list_item(self, lst, idx, refresh_cb, item_name="項目"):
+        return self.step_ctrl._delete_list_item(lst, idx, refresh_cb, item_name=item_name)
+
+    def _clear_list_items(self, lst, confirm_msg, refresh_cb, status_msg):
+        return self.step_ctrl._clear_list_items(lst, confirm_msg, refresh_cb, status_msg)
+
+    def _insert_action_to_target(self, action_dict, is_combo=False, success_msg=""):
+        return self.step_ctrl._insert_action_to_target(action_dict, is_combo=is_combo, success_msg=success_msg)
+
+    # --- 掛機主步驟管理 (StepController) ---
     def get_main_insert_index(self):
-        sel = self.step_listbox.curselection()
-        return sel[0] + 1 if sel else len(state.steps)
+        return self.step_ctrl.get_main_insert_index()
 
     def update_step_list(self, select_idx=None):
-        self.step_listbox.delete(0, tk.END)
-        for i, s in enumerate(state.steps):
-            self.step_listbox.insert(tk.END, format_action_summary(s, index=i))
-        last_idx = getattr(self, "last_active_step_idx", None)
-        if last_idx is not None and 0 <= last_idx < len(state.steps):
-            try:
-                self.step_listbox.itemconfigure(last_idx, background="#2a4365", foreground="#63b3ed")
-            except tk.TclError:
-                pass
-        if select_idx is not None and 0 <= select_idx < len(state.steps):
-            self.step_listbox.selection_set(select_idx)
-            self.step_listbox.see(select_idx)
+        return self.step_ctrl.update_step_list(select_idx)
 
-        # 空清單視覺引導 (Empty State Placeholder)
-        lbl_empty = getattr(self, "lbl_empty_steps", None)
-        if lbl_empty:
-            if len(state.steps) == 0:
-                lbl_empty.place(relx=0.5, rely=0.5, anchor="center")
-                lbl_empty.lift()
-            else:
-                lbl_empty.place_forget()
+    def add_click_action(self, is_combo=False):
+        return self.step_ctrl.add_click_action(is_combo=is_combo)
+
+    def add_manual_click(self, is_combo=False):
+        return self.step_ctrl.add_manual_click(is_combo=is_combo)
+
+    def add_key_action(self, is_combo=False):
+        return self.step_ctrl.add_key_action(is_combo=is_combo)
+
+    def add_wait_action(self, is_combo=False):
+        return self.step_ctrl.add_wait_action(is_combo=is_combo)
+
+    def step_add_call_combo_action(self):
+        return self.step_ctrl.step_add_call_combo_action()
+
+    def step_add_variable_action(self):
+        return self.step_ctrl.step_add_variable_action()
 
     def test_run_selected_main_step(self):
-        sel = self.step_listbox.curselection()
-        if not sel:
-            return self.set_status("請先在清單中選擇要試跑的主步驟！")
-        idx = sel[0]
-        s = state.steps[idx]
-
-        def _run():
-            if s.get("type") == "combo":
-                c_name = s.get("name", "組合")
-                sub_actions = s.get("actions", [])
-                if not sub_actions:
-                    return self.set_status(f"組合 [{c_name}] 內無任何動作！")
-                for sub_idx, sub_act in enumerate(sub_actions):
-                    if state.stop_event.is_set(): break
-                    self.execute_single_action(sub_act, f"[{c_name}#{sub_idx+1}]")
-            else:
-                self.execute_single_action(s, f"步驟#{idx+1}")
-
-        self.run_in_test_thread(f"步驟 #{idx+1}", _run)
+        return self.step_ctrl.test_run_selected_main_step()
 
     def test_run_execution_flow(self):
-        """一次性試跑整個掛機執行流程（所有主步驟依序執行一輪）"""
-        if not state.steps:
-            return self.set_status("掛機流程清單內無任何步驟可試跑！")
-        self.run_in_test_thread("掛機流程", lambda: engine.test_run_execution_flow_worker(self))
+        return self.step_ctrl.test_run_execution_flow()
 
     def edit_selected_main_step(self):
-        sel = self.step_listbox.curselection()
-        if not sel: return self.set_status("請先在掛機流程選擇步驟！")
-        idx = sel[0]
-        if self.prompt_edit_action(state.steps[idx], step_idx=idx):
-            self.update_step_list(idx)
-            self.set_status(f"已成功更新主步驟 #{idx+1}")
-            self.trigger_hot_reload()
+        return self.step_ctrl.edit_selected_main_step()
 
     def move_main_step(self, delta):
-        sel = self.step_listbox.curselection()
-        idx = sel[0] if sel else None
-        self._move_list_item(state.steps, idx, delta, self.update_step_list, item_name="主步驟")
+        return self.step_ctrl.move_main_step(delta)
 
     def duplicate_main_step(self):
-        sel = self.step_listbox.curselection()
-        idx = sel[0] if sel else None
-        self._duplicate_list_item(state.steps, idx, self.update_step_list, item_name="主步驟")
+        return self.step_ctrl.duplicate_main_step()
 
     def delete_main_step(self):
-        sel = self.step_listbox.curselection()
-        idx = sel[0] if sel else None
-        self._delete_list_item(state.steps, idx, self.update_step_list, item_name="主步驟")
+        return self.step_ctrl.delete_main_step()
 
     def clear_main_steps(self):
-        self._clear_list_items(state.steps, "請問是否清空整個掛機流程？\n清空後未儲存的內容無法還原！", self.update_step_list, "掛機流程")
+        return self.step_ctrl.clear_main_steps()
 
-    # ======================= 定時週期任務管理邏輯 =======================
+    # --- 定時週期任務管理 (PeriodicTaskController) ---
     def update_periodic_list(self, select_idx=None):
-        if not hasattr(self, "periodic_listbox"):
-            return
-        self.periodic_listbox.delete(0, tk.END)
-        for pt in state.periodic_tasks:
-            self.periodic_listbox.insert(tk.END, pt)
-        if select_idx is not None and 0 <= select_idx < len(state.periodic_tasks):
-            self.periodic_listbox.selection_set(select_idx)
-            self.periodic_listbox.see(select_idx)
+        return self.periodic_ctrl.update_periodic_list(select_idx)
 
     def add_new_periodic_task(self):
-        new_pt = dialogs.prompt_edit_periodic_task(self, task=None)
-        if new_pt:
-            state.periodic_tasks.append(new_pt)
-            new_idx = len(state.periodic_tasks) - 1
-            self.update_periodic_list(new_idx)
-            self.set_status(f"已新增定時任務：【{new_pt.get('name')}】(每 {new_pt.get('interval')} 秒)")
-            self.trigger_hot_reload()
+        return self.periodic_ctrl.add_new_periodic_task()
 
     def edit_selected_periodic_task(self):
-        sel = self.periodic_listbox.curselection()
-        if not sel:
-            return self.set_status("請先在定時任務清單中選擇任務！")
-        idx = sel[0]
-        updated_pt = dialogs.prompt_edit_periodic_task(self, task=state.periodic_tasks[idx])
-        if updated_pt:
-            state.periodic_tasks[idx] = updated_pt
-            self.update_periodic_list(idx)
-            self.set_status(f"已更新定時任務 #{idx+1}：【{updated_pt.get('name')}】")
-            self.trigger_hot_reload()
+        return self.periodic_ctrl.edit_selected_periodic_task()
 
     def toggle_selected_periodic_task(self):
-        sel = self.periodic_listbox.curselection()
-        if not sel:
-            return self.set_status("請先在定時任務清單中選擇要開關的任務！")
-        idx = sel[0]
-        pt = state.periodic_tasks[idx]
-        pt["enabled"] = not pt.get("enabled", True)
-        st_text = "啟用" if pt["enabled"] else "停用"
-        self.update_periodic_list(idx)
-        self.set_status(f"已將定時任務【{pt.get('name')}】切換為 [{st_text}]")
-        self.trigger_hot_reload()
+        return self.periodic_ctrl.toggle_selected_periodic_task()
 
     def duplicate_selected_periodic_task(self):
-        sel = self.periodic_listbox.curselection()
-        if not sel:
-            return self.set_status("請先在定時任務清單中選擇要複製的任務！")
-        idx = sel[0]
-        copied_pt = copy.deepcopy(state.periodic_tasks[idx])
-        copied_pt["id"] = f"pt_{int(time.time()*1000)}_{uuid.uuid4().hex[:6]}"
-        copied_pt["name"] = f"{copied_pt.get('name', '任務')}_副本"
-        state.periodic_tasks.insert(idx + 1, copied_pt)
-        self.update_periodic_list(idx + 1)
-        self.set_status(f"已複製定時任務至 #{idx+2}")
-        self.trigger_hot_reload()
+        return self.periodic_ctrl.duplicate_selected_periodic_task()
 
     def delete_selected_periodic_task(self):
-        sel = self.periodic_listbox.curselection()
-        if not sel:
-            return self.set_status("請先在定時任務清單中選擇要刪除的任務！")
-        idx = sel[0]
-        name = state.periodic_tasks[idx].get("name", "未命名")
-        if not messagebox.askyesno("刪除定時任務確認", f"確定要刪除定時任務【{name}】嗎？\n刪除後無法還原！", parent=self):
-            return
-        del state.periodic_tasks[idx]
-        new_sel = min(idx, len(state.periodic_tasks) - 1) if state.periodic_tasks else None
-        self.update_periodic_list(new_sel)
-        self.append_log("系統", f"🗑 已刪除定時任務 #{idx+1}：【{name}】")
-        self.trigger_hot_reload()
+        return self.periodic_ctrl.delete_selected_periodic_task()
 
     def test_run_selected_periodic_task(self):
-        sel = self.periodic_listbox.curselection()
-        if not sel:
-            return self.set_status("請先在定時任務清單中選擇要試跑的任務！")
-        idx = sel[0]
-        pt = state.periodic_tasks[idx]
-        t_name = pt.get("name", "定時任務")
-        act = pt.get("action", {})
-
-        def _do_test_pt():
-            try:
-                self.highlight_active_periodic_task(idx)
-                self.execute_single_action(act, f"[定時試跑: {t_name}]")
-            finally:
-                self.clear_active_periodic_task_highlight()
-
-        self.run_in_test_thread(f"定時任務【{t_name}】", _do_test_pt)
+        return self.periodic_ctrl.test_run_selected_periodic_task()
 
     # ======================= 動作執行調度器委派 =======================
     def dispatch_action(self, act, parent_desc, current_vars=None, current_combos=None, depth=0, visited_set=None, is_test=False, round_prefix=""):

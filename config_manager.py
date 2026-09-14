@@ -43,9 +43,12 @@ def ensure_default_profile(ext=CONFIG_EXT, dir_path=_DEFAULT_DIR):
         except OSError:
             pass
 
-def save_profile_file(name: str, app_state=None, ext=CONFIG_EXT, dir_path=_DEFAULT_DIR) -> str:
+def save_profile_file(name: str, target_state=None, ext=CONFIG_EXT, dir_path=_DEFAULT_DIR, **kwargs) -> str:
     """將狀態資料儲存為 .shm 設定檔 (採用暫存檔 + 原子替換保護，防止寫入中斷損毀)"""
-    target_state = app_state if app_state is not None else state
+    if target_state is None and "app_state" in kwargs:
+        target_state = kwargs["app_state"]
+    if target_state is None:
+        target_state = state
     safe_name = sanitize_profile_name(name)
     if not safe_name:
         raise ValueError("無效的設定檔名稱！")
@@ -62,9 +65,12 @@ def save_profile_file(name: str, app_state=None, ext=CONFIG_EXT, dir_path=_DEFAU
     os.replace(temp_fn, fn)
     return fn
 
-def load_profile_file(name: str, app_state=None, ext=CONFIG_EXT, dir_path=_DEFAULT_DIR) -> dict:
+def load_profile_file(name: str, target_state=None, ext=CONFIG_EXT, dir_path=_DEFAULT_DIR, **kwargs) -> dict:
     """從 .shm 設定檔載入設定資料，並自動補齊缺失之欄位與 ID (具備 null 值防禦)"""
-    target_state = app_state if app_state is not None else state
+    if target_state is None and "app_state" in kwargs:
+        target_state = kwargs["app_state"]
+    if target_state is None:
+        target_state = state
     safe_name = sanitize_profile_name(name)
     fn = os.path.join(dir_path, f"{safe_name}{ext}")
     if not os.path.exists(fn):

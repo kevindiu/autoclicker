@@ -43,9 +43,9 @@ class LeftPanel(tk.Frame):
         tk.Label(r1, text="設定檔:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left")
         self.cbo_profile = ttk.Combobox(r1, textvariable=app.var_profile_name, width=14, state="readonly")
         self.cbo_profile.pack(side="left", padx=(3, 3))
-        tk.Button(r1, text="載入", width=4, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.load_config).pack(side="left", padx=1)
-        tk.Button(r1, text="儲存", width=4, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.save_config).pack(side="left", padx=1)
-        tk.Button(r1, text="+ 新增", width=5, bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.create_new_profile).pack(side="left", padx=(1, 8))
+        tk.Button(r1, text="載入", width=4, bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.load_config).pack(side="left", padx=1)
+        tk.Button(r1, text="儲存", width=4, bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.save_config).pack(side="left", padx=1)
+        tk.Button(r1, text="+ 新增", width=5, bg=UITheme.ACCENT_GREEN, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.create_new_profile).pack(side="left", padx=(1, 8))
 
         tk.Checkbutton(r1, text="背景掛機", variable=app.var_use_bg, bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, selectcolor=UITheme.BG_PANEL, activebackground=UITheme.BG_PANEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=2)
         tk.Checkbutton(r1, text="相對坐標", variable=app.var_use_rel, bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, selectcolor=UITheme.BG_PANEL, activebackground=UITheme.BG_PANEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=2)
@@ -58,14 +58,14 @@ class LeftPanel(tk.Frame):
         self.cbo_window = ttk.Combobox(r2, textvariable=app.var_window, width=16, state="readonly")
         self.cbo_window.pack(side="left", padx=(3, 3), fill="x", expand=True)
         self.cbo_window.bind("<<ComboboxSelected>>", app.on_window_select)
-        tk.Button(r2, text="↻ 重新整理", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, padx=4, command=app.refresh_window_dropdown).pack(side="left", padx=1)
-        tk.Button(r2, text="◎ 定位視窗", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, padx=4, command=app.locate_target_window).pack(side="left", padx=(1, 8))
+        tk.Button(r2, text="↻ 重新整理", bg=UITheme.BTN_GRAY, fg=UITheme.TEXT_WHITE, activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, padx=4, command=app.refresh_window_dropdown).pack(side="left", padx=1)
+        tk.Button(r2, text="◎ 定位視窗", bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, padx=4, command=app.locate_target_window).pack(side="left", padx=(1, 8))
 
         tk.Label(r2, text="偏差校正:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left")
         tk.Label(r2, text="X:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_NORMAL).pack(side="left", padx=(3, 1))
-        tk.Entry(r2, textvariable=app.var_offset_x, width=3, bg=UITheme.BG_INPUT, fg="#ffffff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
+        tk.Entry(r2, textvariable=app.var_offset_x, width=3, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
         tk.Label(r2, text="Y:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_NORMAL).pack(side="left", padx=(3, 1))
-        tk.Entry(r2, textvariable=app.var_offset_y, width=3, bg=UITheme.BG_INPUT, fg="#ffffff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
+        tk.Entry(r2, textvariable=app.var_offset_y, width=3, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
 
         # 垂直 PanedWindow 將「常用變數庫」與「技能組合庫」連接
         pw_left = tk.PanedWindow(
@@ -109,7 +109,7 @@ class LeftPanel(tk.Frame):
             col_v_btns,
             text="➔ 加入掛機流程",
             bg=UITheme.ACCENT_BLUE,
-            fg="#fff",
+            fg=UITheme.TEXT_WHITE,
             activebackground=UITheme.ACCENT_BLUE_HOVER,
             font=UITheme.FONT_SMALL_BOLD,
             relief="flat",
@@ -123,7 +123,7 @@ class LeftPanel(tk.Frame):
             col_v_btns,
             text="+ 新增變數",
             bg=UITheme.ACCENT_GREEN,
-            fg="#fff",
+            fg=UITheme.TEXT_WHITE,
             activebackground=UITheme.ACCENT_GREEN_HOVER,
             font=UITheme.FONT_SMALL_BOLD,
             relief="flat",
@@ -136,7 +136,7 @@ class LeftPanel(tk.Frame):
             col_v_btns,
             text="✎ 修改變數",
             bg=UITheme.ACCENT_BLUE,
-            fg="#fff",
+            fg=UITheme.TEXT_WHITE,
             activebackground=UITheme.ACCENT_BLUE_HOVER,
             font=UITheme.FONT_SMALL_BOLD,
             relief="flat",
@@ -149,7 +149,7 @@ class LeftPanel(tk.Frame):
             col_v_btns,
             text="✕ 刪除變數",
             bg=UITheme.ACCENT_RED,
-            fg="#fff",
+            fg=UITheme.TEXT_WHITE,
             activebackground=UITheme.ACCENT_RED_HOVER,
             font=UITheme.FONT_SMALL_BOLD,
             relief="flat",
@@ -162,7 +162,7 @@ class LeftPanel(tk.Frame):
             col_v_btns,
             text="▲ 上移",
             bg=UITheme.BTN_GRAY,
-            fg="#fff",
+            fg=UITheme.TEXT_WHITE,
             activebackground=UITheme.BTN_GRAY_HOVER,
             font=UITheme.FONT_SMALL_BOLD,
             relief="flat",
@@ -175,7 +175,7 @@ class LeftPanel(tk.Frame):
             col_v_btns,
             text="▼ 下移",
             bg=UITheme.BTN_GRAY,
-            fg="#fff",
+            fg=UITheme.TEXT_WHITE,
             activebackground=UITheme.BTN_GRAY_HOVER,
             font=UITheme.FONT_SMALL_BOLD,
             relief="flat",
@@ -210,23 +210,23 @@ class LeftPanel(tk.Frame):
 
         tk.Label(f_cl, text="【組合清單】", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_NORMAL_BOLD).pack(anchor="w")
 
-        tk.Entry(f_cl, textvariable=app.var_combo_name, bg=UITheme.BG_INPUT, fg="#fff", font=UITheme.FONT_NORMAL, relief="flat").pack(fill="x", pady=(2, 2))
+        tk.Entry(f_cl, textvariable=app.var_combo_name, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, font=UITheme.FONT_NORMAL, relief="flat").pack(fill="x", pady=(2, 2))
 
         cr_btns = tk.Frame(f_cl, bg=UITheme.BG_PANEL)
         cr_btns.pack(fill="x", pady=(0, 2))
-        tk.Button(cr_btns, text="+ 新增", bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=1, command=app.add_new_combo).pack(side="left", fill="x", expand=True, padx=(0, 1))
-        tk.Button(cr_btns, text="✎ 改名", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=1, command=app.rename_selected_combo).pack(side="left", fill="x", expand=True, padx=1)
-        tk.Button(cr_btns, text="⎘ 複製", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=1, command=app.duplicate_selected_combo).pack(side="left", fill="x", expand=True, padx=(1, 0))
+        tk.Button(cr_btns, text="+ 新增", bg=UITheme.ACCENT_GREEN, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=1, command=app.add_new_combo).pack(side="left", fill="x", expand=True, padx=(0, 1))
+        tk.Button(cr_btns, text="✎ 改名", bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=1, command=app.rename_selected_combo).pack(side="left", fill="x", expand=True, padx=1)
+        tk.Button(cr_btns, text="⎘ 複製", bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=1, command=app.duplicate_selected_combo).pack(side="left", fill="x", expand=True, padx=(1, 0))
 
         cr_act = tk.Frame(f_cl, bg=UITheme.BG_PANEL)
         cr_act.pack(side="bottom", fill="x", pady=(1, 0))
-        tk.Button(cr_act, text="➔ 加入掛機流程", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, font=UITheme.FONT_SMALL_BOLD, pady=1, command=app.add_combo_to_main_steps).pack(side="left", fill="x", expand=True, padx=(0, 2))
-        tk.Button(cr_act, text="✕ 刪除", bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, font=UITheme.FONT_SMALL_BOLD, pady=1, command=app.delete_selected_combo).pack(side="right")
+        tk.Button(cr_act, text="➔ 加入掛機流程", bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, font=UITheme.FONT_SMALL_BOLD, pady=1, command=app.add_combo_to_main_steps).pack(side="left", fill="x", expand=True, padx=(0, 2))
+        tk.Button(cr_act, text="✕ 刪除", bg=UITheme.ACCENT_RED, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_RED_HOVER, font=UITheme.FONT_SMALL_BOLD, pady=1, command=app.delete_selected_combo).pack(side="right")
 
         cr_order = tk.Frame(f_cl, bg=UITheme.BG_PANEL)
         cr_order.pack(side="bottom", fill="x", pady=(1, 1))
-        tk.Button(cr_order, text="▲ 上移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=1, command=lambda: app.move_combo(-1)).pack(side="left", fill="x", expand=True, padx=(0, 1))
-        tk.Button(cr_order, text="▼ 下移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=1, command=lambda: app.move_combo(1)).pack(side="left", fill="x", expand=True, padx=(1, 0))
+        tk.Button(cr_order, text="▲ 上移", bg=UITheme.BTN_GRAY, fg=UITheme.TEXT_WHITE, activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=1, command=lambda: app.move_combo(-1)).pack(side="left", fill="x", expand=True, padx=(0, 1))
+        tk.Button(cr_order, text="▼ 下移", bg=UITheme.BTN_GRAY, fg=UITheme.TEXT_WHITE, activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=1, command=lambda: app.move_combo(1)).pack(side="left", fill="x", expand=True, padx=(1, 0))
 
         f_cl_box = tk.Frame(f_cl, bg=UITheme.BG_DARK)
         f_cl_box.pack(side="top", fill="both", expand=True, pady=2)
@@ -236,7 +236,7 @@ class LeftPanel(tk.Frame):
             bg=UITheme.BG_DARK,
             fg=UITheme.TEXT_MAIN,
             selectbackground=UITheme.ACCENT_BLUE,
-            selectforeground="#fff",
+            selectforeground=UITheme.TEXT_WHITE,
             bd=0,
             highlightthickness=0,
             font=UITheme.FONT_NORMAL,
@@ -257,7 +257,7 @@ class LeftPanel(tk.Frame):
         f_cr_top.pack(fill="x", pady=(0, 2))
         self.lbl_combo_editing = tk.Label(f_cr_top, text="【組合動作: 未選取】", bg=UITheme.BG_PANEL, fg=UITheme.CYAN_SUB, font=UITheme.FONT_NORMAL_BOLD)
         self.lbl_combo_editing.pack(side="left")
-        tk.Button(f_cr_top, text="▶ 試跑組合", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, font=UITheme.FONT_SMALL_BOLD, relief="flat", padx=6, command=app.test_run_current_combo).pack(side="right")
+        tk.Button(f_cr_top, text="▶ 試跑組合", bg=UITheme.ACCENT_INDIGO, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_INDIGO_HOVER, font=UITheme.FONT_SMALL_BOLD, relief="flat", padx=6, command=app.test_run_current_combo).pack(side="right")
 
         # 動作建立面板
         f_action_card = tk.LabelFrame(f_cr, text=" 加入動作 ", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL_BOLD, padx=5, pady=2)
@@ -267,14 +267,14 @@ class LeftPanel(tk.Frame):
         r_click = tk.Frame(f_action_card, bg=UITheme.BG_PANEL)
         r_click.pack(fill="x", pady=1)
         ttk.Combobox(r_click, textvariable=app.var_combo_btn, values=["左鍵", "右鍵"], width=4, state="readonly").pack(side="left", padx=(0, 2))
-        btn_combo_add_click = tk.Button(r_click, text="+ 瞄準取點", bg=UITheme.ACCENT_GREEN, fg="#fff", font=UITheme.FONT_NORMAL_BOLD, activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", padx=6, command=lambda: app.add_click_action(is_combo=True))
+        btn_combo_add_click = tk.Button(r_click, text="+ 瞄準取點", bg=UITheme.ACCENT_GREEN, fg=UITheme.TEXT_WHITE, font=UITheme.FONT_NORMAL_BOLD, activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", padx=6, command=lambda: app.add_click_action(is_combo=True))
         btn_combo_add_click.pack(side="left", padx=1, fill="x", expand=True)
 
         tk.Label(r_click, text="X:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(side="left", padx=(3, 1))
-        tk.Entry(r_click, textvariable=app.var_combo_manual_x, width=4, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
+        tk.Entry(r_click, textvariable=app.var_combo_manual_x, width=4, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
         tk.Label(r_click, text="Y:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(side="left", padx=(1, 1))
-        tk.Entry(r_click, textvariable=app.var_combo_manual_y, width=4, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
-        tk.Button(r_click, text="+ 手動", width=5, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: app.add_manual_click(is_combo=True)).pack(side="left", padx=(2, 0))
+        tk.Entry(r_click, textvariable=app.var_combo_manual_y, width=4, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
+        tk.Button(r_click, text="+ 手動", width=5, bg=UITheme.BTN_GRAY, fg=UITheme.TEXT_WHITE, activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: app.add_manual_click(is_combo=True)).pack(side="left", padx=(2, 0))
 
         # 2. 按鍵與等待行
         r_fast = tk.Frame(f_action_card, bg=UITheme.BG_PANEL)
@@ -282,13 +282,13 @@ class LeftPanel(tk.Frame):
 
         f_k = tk.Frame(r_fast, bg=UITheme.BG_PANEL)
         f_k.pack(side="left", fill="x", expand=True, padx=(0, 2))
-        tk.Entry(f_k, textvariable=app.var_combo_act_key, width=5, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 2))
-        tk.Button(f_k, text="+ 按鍵", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", padx=4, font=UITheme.FONT_SMALL_BOLD, command=lambda: app.add_key_action(is_combo=True)).pack(side="left", fill="x", expand=True)
+        tk.Entry(f_k, textvariable=app.var_combo_act_key, width=5, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 2))
+        tk.Button(f_k, text="+ 按鍵", bg=UITheme.BTN_GRAY, fg=UITheme.TEXT_WHITE, activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", padx=4, font=UITheme.FONT_SMALL_BOLD, command=lambda: app.add_key_action(is_combo=True)).pack(side="left", fill="x", expand=True)
 
         f_w = tk.Frame(r_fast, bg=UITheme.BG_PANEL)
         f_w.pack(side="left", fill="x", expand=True, padx=(2, 0))
-        tk.Entry(f_w, textvariable=app.var_combo_act_wait, width=4, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 2))
-        tk.Button(f_w, text="+ 停頓(s)", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", padx=4, font=UITheme.FONT_SMALL_BOLD, command=lambda: app.add_wait_action(is_combo=True)).pack(side="left", fill="x", expand=True)
+        tk.Entry(f_w, textvariable=app.var_combo_act_wait, width=4, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 2))
+        tk.Button(f_w, text="+ 停頓(s)", bg=UITheme.BTN_GRAY, fg=UITheme.TEXT_WHITE, activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", padx=4, font=UITheme.FONT_SMALL_BOLD, command=lambda: app.add_wait_action(is_combo=True)).pack(side="left", fill="x", expand=True)
 
         # 3. 呼叫組合與引用變數
         r_comb = tk.Frame(f_action_card, bg=UITheme.BG_PANEL)
@@ -298,13 +298,13 @@ class LeftPanel(tk.Frame):
         f_call.pack(side="left", fill="x", expand=True, padx=(0, 2))
         self.cbo_call_combo = ttk.Combobox(f_call, textvariable=app.var_combo_to_call, width=10, state="readonly")
         self.cbo_call_combo.pack(side="left", fill="x", expand=True, padx=(0, 1))
-        tk.Button(f_call, text="+ 呼叫組合", width=7, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.combo_add_call_action).pack(side="left")
+        tk.Button(f_call, text="+ 呼叫組合", width=7, bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.combo_add_call_action).pack(side="left")
 
         f_var = tk.Frame(r_comb, bg=UITheme.BG_PANEL)
         f_var.pack(side="left", fill="x", expand=True, padx=(2, 0))
         self.cbo_combo_add_var = ttk.Combobox(f_var, textvariable=app.var_combo_ref_var, width=10, state="readonly")
         self.cbo_combo_add_var.pack(side="left", fill="x", expand=True, padx=(0, 1))
-        tk.Button(f_var, text="+ 引用變數", width=8, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.combo_add_variable_action).pack(side="left")
+        tk.Button(f_var, text="+ 引用變數", width=8, bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.combo_add_variable_action).pack(side="left")
 
         # 底部管理工具列
         cr_act_ctrl = tk.Frame(f_cr, bg=UITheme.BG_PANEL)
@@ -313,13 +313,13 @@ class LeftPanel(tk.Frame):
         cr_act_ctrl.grid_columnconfigure(1, weight=1)
         cr_act_ctrl.grid_columnconfigure(2, weight=1)
 
-        tk.Button(cr_act_ctrl, text="▲ 上移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: app.move_combo_action(-1)).grid(row=0, column=0, padx=1, pady=1, sticky="nsew")
-        tk.Button(cr_act_ctrl, text="▼ 下移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: app.move_combo_action(1)).grid(row=0, column=1, padx=1, pady=1, sticky="nsew")
-        tk.Button(cr_act_ctrl, text="▶ 試跑", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.test_run_selected_combo_action).grid(row=0, column=2, padx=1, pady=1, sticky="nsew")
+        tk.Button(cr_act_ctrl, text="▲ 上移", bg=UITheme.BTN_GRAY, fg=UITheme.TEXT_WHITE, activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: app.move_combo_action(-1)).grid(row=0, column=0, padx=1, pady=1, sticky="nsew")
+        tk.Button(cr_act_ctrl, text="▼ 下移", bg=UITheme.BTN_GRAY, fg=UITheme.TEXT_WHITE, activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: app.move_combo_action(1)).grid(row=0, column=1, padx=1, pady=1, sticky="nsew")
+        tk.Button(cr_act_ctrl, text="▶ 試跑", bg=UITheme.ACCENT_INDIGO, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.test_run_selected_combo_action).grid(row=0, column=2, padx=1, pady=1, sticky="nsew")
 
-        tk.Button(cr_act_ctrl, text="✎ 修改", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.edit_selected_combo_action).grid(row=1, column=0, padx=1, pady=1, sticky="nsew")
-        tk.Button(cr_act_ctrl, text="⎘ 複製", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.duplicate_combo_action).grid(row=1, column=1, padx=1, pady=1, sticky="nsew")
-        tk.Button(cr_act_ctrl, text="✕ 刪除", bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.delete_combo_action).grid(row=1, column=2, padx=1, pady=1, sticky="nsew")
+        tk.Button(cr_act_ctrl, text="✎ 修改", bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.edit_selected_combo_action).grid(row=1, column=0, padx=1, pady=1, sticky="nsew")
+        tk.Button(cr_act_ctrl, text="⎘ 複製", bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.duplicate_combo_action).grid(row=1, column=1, padx=1, pady=1, sticky="nsew")
+        tk.Button(cr_act_ctrl, text="✕ 刪除", bg=UITheme.ACCENT_RED, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.delete_combo_action).grid(row=1, column=2, padx=1, pady=1, sticky="nsew")
 
         # 動作清單
         f_cr_box = tk.Frame(f_cr, bg=UITheme.BG_DARK)
@@ -331,7 +331,7 @@ class LeftPanel(tk.Frame):
             bg=UITheme.BG_DARK,
             fg=UITheme.TEXT_MAIN,
             selectbackground=UITheme.ACCENT_BLUE,
-            selectforeground="#fff",
+            selectforeground=UITheme.TEXT_WHITE,
             bd=0,
             highlightthickness=0,
             font=UITheme.FONT_NORMAL,
@@ -413,25 +413,25 @@ class RightPanel(tk.Frame):
         sr_click = tk.Frame(f_step, bg=UITheme.BG_PANEL)
         sr_click.pack(fill="x", pady=1)
         ttk.Combobox(sr_click, textvariable=app.var_step_btn, values=["左鍵", "右鍵"], width=4, state="readonly").pack(side="left", padx=(0, 2))
-        btn_step_click = tk.Button(sr_click, text="+ 瞄準取點", bg=UITheme.ACCENT_GREEN, fg="#fff", font=UITheme.FONT_NORMAL_BOLD, activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", padx=6, command=lambda: app.add_click_action(is_combo=False))
+        btn_step_click = tk.Button(sr_click, text="+ 瞄準取點", bg=UITheme.ACCENT_GREEN, fg=UITheme.TEXT_WHITE, font=UITheme.FONT_NORMAL_BOLD, activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", padx=6, command=lambda: app.add_click_action(is_combo=False))
         btn_step_click.pack(side="left", padx=1, fill="x", expand=True)
         tk.Label(sr_click, text="X:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(side="left", padx=(4, 1))
-        tk.Entry(sr_click, textvariable=app.var_step_manual_x, width=4, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
+        tk.Entry(sr_click, textvariable=app.var_step_manual_x, width=4, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
         tk.Label(sr_click, text="Y:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_MUTED, font=UITheme.FONT_SMALL).pack(side="left", padx=(1, 1))
-        tk.Entry(sr_click, textvariable=app.var_step_manual_y, width=4, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
-        tk.Button(sr_click, text="+ 手動", width=5, bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: app.add_manual_click(is_combo=False)).pack(side="left", padx=(2, 0))
+        tk.Entry(sr_click, textvariable=app.var_step_manual_y, width=4, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=1)
+        tk.Button(sr_click, text="+ 手動", width=5, bg=UITheme.BTN_GRAY, fg=UITheme.TEXT_WHITE, activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: app.add_manual_click(is_combo=False)).pack(side="left", padx=(2, 0))
 
         sr = tk.Frame(f_step, bg=UITheme.BG_PANEL)
         sr.pack(fill="x", pady=1)
         f_sk = tk.Frame(sr, bg=UITheme.BG_PANEL)
         f_sk.pack(side="left", fill="x", expand=True, padx=(0, 2))
-        tk.Entry(f_sk, textvariable=app.var_step_key, width=5, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 2))
-        tk.Button(f_sk, text="+ 按鍵", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", padx=4, font=UITheme.FONT_SMALL_BOLD, command=lambda: app.add_key_action(is_combo=False)).pack(side="left", fill="x", expand=True)
+        tk.Entry(f_sk, textvariable=app.var_step_key, width=5, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 2))
+        tk.Button(f_sk, text="+ 按鍵", bg=UITheme.BTN_GRAY, fg=UITheme.TEXT_WHITE, activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", padx=4, font=UITheme.FONT_SMALL_BOLD, command=lambda: app.add_key_action(is_combo=False)).pack(side="left", fill="x", expand=True)
 
         f_sw = tk.Frame(sr, bg=UITheme.BG_PANEL)
         f_sw.pack(side="left", fill="x", expand=True, padx=(2, 0))
-        tk.Entry(f_sw, textvariable=app.var_step_wait, width=4, bg=UITheme.BG_INPUT, fg="#fff", relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 2))
-        tk.Button(f_sw, text="+ 停頓(s)", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", padx=4, font=UITheme.FONT_SMALL_BOLD, command=lambda: app.add_wait_action(is_combo=False)).pack(side="left", fill="x", expand=True)
+        tk.Entry(f_sw, textvariable=app.var_step_wait, width=4, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 2))
+        tk.Button(f_sw, text="+ 停頓(s)", bg=UITheme.BTN_GRAY, fg=UITheme.TEXT_WHITE, activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", padx=4, font=UITheme.FONT_SMALL_BOLD, command=lambda: app.add_wait_action(is_combo=False)).pack(side="left", fill="x", expand=True)
 
         # 3. 呼叫組合與引用變數
         sr_comb = tk.Frame(f_step, bg=UITheme.BG_PANEL)
@@ -441,13 +441,13 @@ class RightPanel(tk.Frame):
         f_scall.pack(side="left", fill="x", expand=True, padx=(0, 2))
         self.cbo_step_call_combo = ttk.Combobox(f_scall, textvariable=app.var_step_combo_to_call, width=10, state="readonly")
         self.cbo_step_call_combo.pack(side="left", fill="x", expand=True, padx=(0, 1))
-        tk.Button(f_scall, text="+ 呼叫組合", width=7, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.step_add_call_combo_action).pack(side="left")
+        tk.Button(f_scall, text="+ 呼叫組合", width=7, bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.step_add_call_combo_action).pack(side="left")
 
         f_svar = tk.Frame(sr_comb, bg=UITheme.BG_PANEL)
         f_svar.pack(side="left", fill="x", expand=True, padx=(2, 0))
         self.cbo_step_add_var = ttk.Combobox(f_svar, textvariable=app.var_step_ref_var, width=10, state="readonly")
         self.cbo_step_add_var.pack(side="left", fill="x", expand=True, padx=(0, 1))
-        tk.Button(f_svar, text="+ 引用變數", width=8, bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.step_add_variable_action).pack(side="left")
+        tk.Button(f_svar, text="+ 引用變數", width=8, bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.step_add_variable_action).pack(side="left")
 
         # 3. 底部固定控制區 (HUD 游標坐標 與 鎖定大小大按鈕)
         bot = tk.Frame(self, bg=UITheme.BG_PANEL)
@@ -465,7 +465,7 @@ class RightPanel(tk.Frame):
             f_btn_wrap,
             text="▶ 開始循環執行",
             bg=UITheme.ACCENT_GREEN,
-            fg="#ffffff",
+            fg=UITheme.TEXT_WHITE,
             font=UITheme.FONT_BIG_BTN,
             activebackground=UITheme.ACCENT_GREEN_HOVER,
             relief="flat",
@@ -506,7 +506,7 @@ class RightPanel(tk.Frame):
             f_seq_hdr,
             text="▶ 試跑流程",
             bg=UITheme.ACCENT_INDIGO,
-            fg="#fff",
+            fg=UITheme.TEXT_WHITE,
             activebackground=UITheme.ACCENT_INDIGO_HOVER,
             font=UITheme.FONT_SMALL_BOLD,
             relief="flat",
@@ -522,22 +522,22 @@ class RightPanel(tk.Frame):
         sr2.grid_columnconfigure(1, weight=1)
         sr2.grid_columnconfigure(2, weight=1)
 
-        self.btn_main_up = tk.Button(sr2, text="▲ 上移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: app.move_main_step(-1))
+        self.btn_main_up = tk.Button(sr2, text="▲ 上移", bg=UITheme.BTN_GRAY, fg=UITheme.TEXT_WHITE, activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: app.move_main_step(-1))
         self.btn_main_up.grid(row=0, column=0, padx=1, pady=1, sticky="nsew")
 
-        self.btn_main_down = tk.Button(sr2, text="▼ 下移", bg=UITheme.BTN_GRAY, fg="#fff", activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: app.move_main_step(1))
+        self.btn_main_down = tk.Button(sr2, text="▼ 下移", bg=UITheme.BTN_GRAY, fg=UITheme.TEXT_WHITE, activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=lambda: app.move_main_step(1))
         self.btn_main_down.grid(row=0, column=1, padx=1, pady=1, sticky="nsew")
 
-        self.btn_main_test = tk.Button(sr2, text="▶ 試跑", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.test_run_selected_main_step)
+        self.btn_main_test = tk.Button(sr2, text="▶ 試跑", bg=UITheme.ACCENT_INDIGO, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.test_run_selected_main_step)
         self.btn_main_test.grid(row=0, column=2, padx=1, pady=1, sticky="nsew")
 
-        self.btn_main_edit = tk.Button(sr2, text="✎ 修改", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.edit_selected_main_step)
+        self.btn_main_edit = tk.Button(sr2, text="✎ 修改", bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.edit_selected_main_step)
         self.btn_main_edit.grid(row=1, column=0, padx=1, pady=1, sticky="nsew")
 
-        self.btn_main_dup = tk.Button(sr2, text="⎘ 複製", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.duplicate_main_step)
+        self.btn_main_dup = tk.Button(sr2, text="⎘ 複製", bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.duplicate_main_step)
         self.btn_main_dup.grid(row=1, column=1, padx=1, pady=1, sticky="nsew")
 
-        self.btn_main_del = tk.Button(sr2, text="✕ 刪除", bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.delete_main_step)
+        self.btn_main_del = tk.Button(sr2, text="✕ 刪除", bg=UITheme.ACCENT_RED, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.delete_main_step)
         self.btn_main_del.grid(row=1, column=2, padx=1, pady=1, sticky="nsew")
 
         # 流程清單
@@ -550,7 +550,7 @@ class RightPanel(tk.Frame):
             bg=UITheme.BG_DARK,
             fg=UITheme.TEXT_MAIN,
             selectbackground=UITheme.ACCENT_BLUE,
-            selectforeground="#fff",
+            selectforeground=UITheme.TEXT_WHITE,
             bd=0,
             highlightthickness=0,
             font=UITheme.FONT_NORMAL,
@@ -597,7 +597,7 @@ class RightPanel(tk.Frame):
             f_pt_hdr,
             text="+ 新增",
             bg=UITheme.ACCENT_GREEN,
-            fg="#fff",
+            fg=UITheme.TEXT_WHITE,
             activebackground=UITheme.ACCENT_GREEN_HOVER,
             font=UITheme.FONT_SMALL_BOLD,
             relief="flat",
@@ -613,13 +613,13 @@ class RightPanel(tk.Frame):
         pt_ctrl.grid_columnconfigure(1, weight=1)
         pt_ctrl.grid_columnconfigure(2, weight=1)
 
-        tk.Button(pt_ctrl, text="+ 新增", bg=UITheme.ACCENT_GREEN, fg="#fff", activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.add_new_periodic_task).grid(row=0, column=0, padx=1, pady=1, sticky="nsew")
-        tk.Button(pt_ctrl, text="✎ 修改", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.edit_selected_periodic_task).grid(row=0, column=1, padx=1, pady=1, sticky="nsew")
-        tk.Button(pt_ctrl, text="✓ 開關", bg=UITheme.ACCENT_CYAN, fg="#fff", activebackground=UITheme.ACCENT_CYAN_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.toggle_selected_periodic_task).grid(row=0, column=2, padx=1, pady=1, sticky="nsew")
+        tk.Button(pt_ctrl, text="+ 新增", bg=UITheme.ACCENT_GREEN, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_GREEN_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.add_new_periodic_task).grid(row=0, column=0, padx=1, pady=1, sticky="nsew")
+        tk.Button(pt_ctrl, text="✎ 修改", bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.edit_selected_periodic_task).grid(row=0, column=1, padx=1, pady=1, sticky="nsew")
+        tk.Button(pt_ctrl, text="✓ 開關", bg=UITheme.ACCENT_CYAN, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_CYAN_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.toggle_selected_periodic_task).grid(row=0, column=2, padx=1, pady=1, sticky="nsew")
 
-        tk.Button(pt_ctrl, text="▶ 試跑", bg=UITheme.ACCENT_INDIGO, fg="#fff", activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.test_run_selected_periodic_task).grid(row=1, column=0, padx=1, pady=1, sticky="nsew")
-        tk.Button(pt_ctrl, text="⎘ 複製", bg=UITheme.ACCENT_BLUE, fg="#fff", activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.duplicate_selected_periodic_task).grid(row=1, column=1, padx=1, pady=1, sticky="nsew")
-        tk.Button(pt_ctrl, text="✕ 刪除", bg=UITheme.ACCENT_RED, fg="#fff", activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.delete_selected_periodic_task).grid(row=1, column=2, padx=1, pady=1, sticky="nsew")
+        tk.Button(pt_ctrl, text="▶ 試跑", bg=UITheme.ACCENT_INDIGO, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.test_run_selected_periodic_task).grid(row=1, column=0, padx=1, pady=1, sticky="nsew")
+        tk.Button(pt_ctrl, text="⎘ 複製", bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.duplicate_selected_periodic_task).grid(row=1, column=1, padx=1, pady=1, sticky="nsew")
+        tk.Button(pt_ctrl, text="✕ 刪除", bg=UITheme.ACCENT_RED, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, command=app.delete_selected_periodic_task).grid(row=1, column=2, padx=1, pady=1, sticky="nsew")
 
         # 定時清單
         f_list_pt = tk.Frame(f_pt, bg=UITheme.BG_DARK)
@@ -663,7 +663,7 @@ class RightPanel(tk.Frame):
             f_log_hdr,
             text="清空",
             bg=UITheme.BTN_GRAY,
-            fg="#fff",
+            fg=UITheme.TEXT_WHITE,
             activebackground=UITheme.BTN_GRAY_HOVER,
             relief="flat",
             font=UITheme.FONT_SMALL,

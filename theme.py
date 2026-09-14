@@ -50,6 +50,7 @@ class UITheme:
     ACCENT_CYAN_HOVER = "#0369a1"
 
     TEXT_WHITE = "#ffffff"       # 純白文字 (按鈕前景、高亮字樣)
+    TEXT_LIGHT = "#e5e7eb"       # 次亮淺灰文字
     SELECT_BG = "#1e3a5f"        # 深藍選取底色 (卡片、表格選中)
     SELECT_BORDER = "#38bdf8"    # 天藍選取邊框
 
