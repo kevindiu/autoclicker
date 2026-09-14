@@ -1085,7 +1085,6 @@ class App(tk.Tk):
     # ======================= 動作執行調度器委派 =======================
     def dispatch_action(self, act, parent_desc, current_vars=None, current_combos=None, depth=0, visited_set=None, is_test=False, round_prefix=""):
         return engine.dispatch_action(
-            self,
             act,
             parent_desc,
             current_vars=current_vars,
