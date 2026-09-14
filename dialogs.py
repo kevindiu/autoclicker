@@ -285,7 +285,7 @@ def prompt_variable_dialog(app, edit_name=None):
         app.set_status(f"已儲存變數: {name}")
         dialog.destroy()
 
-    _add_dialog_buttons(dialog, on_save, padx=0, pady=(4, 0))
+    _add_dialog_buttons(dialog, on_save, padx=0, pady=4)
 
     if not is_edit:
         e_name.focus_set()
