@@ -217,6 +217,59 @@ def sync_periodic_timers(periodic_tasks_runtime, active_task_id=None, current_ro
     with state.periodic_timers_lock:
         state.periodic_timers = timers
 
+class TriggerContext:
+    def __init__(self, current_round, is_round_end, is_startup):
+        self.current_round = current_round
+        self.is_round_end = is_round_end
+        self.is_startup = is_startup
+
+class TriggerStrategy:
+    def is_due(self, task, context):
+        return False
+    def get_log_message(self, task, context, round_prefix=""):
+        return ""
+
+class IntervalTriggerStrategy(TriggerStrategy):
+    def is_due(self, task, context):
+        if context.is_startup:
+            return task.get("run_on_start", False)
+        try:
+            interval = float(task.get("interval", 1.0))
+        except (ValueError, TypeError):
+            interval = 1.0
+        if interval <= 0: interval = 1.0
+        return time.time() - task.get("last_run", 0.0) >= interval
+
+    def get_log_message(self, task, context, round_prefix=""):
+        task_name = task.get("name", "").strip() or "定時任務"
+        interval = task.get("interval", 1.0)
+        return f"{round_prefix}任務【{task_name}】到期觸發 (每 {interval}s)"
+
+class RoundTriggerStrategy(TriggerStrategy):
+    def is_due(self, task, context):
+        if context.is_startup:
+            return task.get("run_on_start", False)
+        if not context.is_round_end:
+            return False
+        try:
+            round_interval = int(task.get("round_interval", 1))
+        except (ValueError, TypeError):
+            round_interval = 1
+        if round_interval < 1: round_interval = 1
+        return context.current_round - task.get("last_run_round", 0) >= round_interval
+
+    def get_log_message(self, task, context, round_prefix=""):
+        task_name = task.get("name", "").strip() or "定時任務"
+        if context.is_startup:
+            return f"{round_prefix}任務【{task_name}】啟動首發"
+        round_interval = task.get("round_interval", 1)
+        return f"{round_prefix}任務【{task_name}】達到第 {context.current_round} 輪觸發 (每 {round_interval} 輪)"
+
+def get_trigger_strategy(trigger_mode):
+    if trigger_mode == "round":
+        return RoundTriggerStrategy()
+    return IntervalTriggerStrategy()
+
 def check_and_run_due_periodic_tasks(
     app,
     periodic_tasks_runtime,
@@ -232,44 +285,15 @@ def check_and_run_due_periodic_tasks(
     if not periodic_tasks_runtime:
         return True
 
+    ctx = TriggerContext(current_round, is_round_end, is_startup)
+
     for idx, pt in enumerate(periodic_tasks_runtime):
         if not pt.get("enabled", True):
             continue
 
-        trigger_mode = pt.get("trigger_mode", "interval")
-        is_due = False
-
-        if is_startup:
-            # 啟動時首發判定
-            if pt.get("run_on_start", False):
-                is_due = True
-        elif trigger_mode == "round":
-            # 輪次觸發模式：僅在每輪結束 (is_round_end=True) 時檢查
-            if is_round_end:
-                try:
-                    round_interval = int(pt.get("round_interval", 1))
-                except (ValueError, TypeError):
-                    round_interval = 1
-                if round_interval < 1:
-                    round_interval = 1
-                last_run_round = pt.get("last_run_round", 0)
-                if current_round - last_run_round >= round_interval:
-                    is_due = True
-        else:
-            # 時間觸發模式：按時間戳記判定
-            try:
-                interval = float(pt.get("interval", 1.0))
-            except (ValueError, TypeError):
-                interval = 1.0
-            if interval <= 0:
-                interval = 1.0
-
-            now = time.time()
-            last_run = pt.get("last_run", 0.0)
-            if now - last_run >= interval:
-                is_due = True
-
-        if is_due:
+        strategy = get_trigger_strategy(pt.get("trigger_mode", "interval"))
+        
+        if strategy.is_due(pt, ctx):
             if not state.is_running() or state.stop_event.is_set():
                 return False
             if IS_WINDOWS and state.target_hwnd and not is_window_alive(state.target_hwnd):
@@ -277,15 +301,9 @@ def check_and_run_due_periodic_tasks(
             task_name = pt.get("name", "").strip() or "定時任務"
             pt_id = pt.get("id") or f"pt_idx_{idx}"
             act = pt.get("action", {})
-
             if hasattr(app, "append_log"):
-                if trigger_mode == "round" and not is_startup:
-                    round_interval = pt.get("round_interval", 1)
-                    app.append_log("定時", f"{round_prefix}任務【{task_name}】達到第 {current_round} 輪觸發 (每 {round_interval} 輪)")
-                else:
-                    interval = pt.get("interval", 1.0)
-                    app.append_log("定時", f"{round_prefix}任務【{task_name}】到期觸發 (每 {interval}s)")
-
+                log_msg = strategy.get_log_message(pt, ctx, round_prefix)
+                app.append_log("定時", log_msg)
             # 定時任務執行期間：
             # 1. 若有指定下一動 (next_step_idx)，在主畫面流程清單中以待命暖金色標記即將接續執行的動作，
             #    讓使用者一眼看清定時任務完結後會執行邊個動作；否則清除高亮
@@ -317,8 +335,7 @@ def check_and_run_due_periodic_tasks(
                 if hasattr(app, "clear_active_periodic_task_highlight"):
                     app.clear_active_periodic_task_highlight()
             pt["last_run"] = time.time()
-            if trigger_mode == "round":
-                pt["last_run_round"] = current_round
+            pt["last_run_round"] = current_round
             sync_periodic_timers(periodic_tasks_runtime, active_task_id=None, current_round=current_round)
             if not ok:
                 return False

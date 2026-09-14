@@ -11,6 +11,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 
 from theme import UITheme, LogTag, resource_path, WINDOW_TITLE, BASE_WINDOW_TITLE, CONFIG_EXT
+from events import EventBus, AppEvents
 import state
 from state import format_action_summary
 from win32_api import (
@@ -137,6 +138,16 @@ class App(tk.Tk):
         # 執行緒安全的 UI 通訊佇列
         self.ui_task_queue = queue.Queue()
         self.poll_ui_queues()
+
+        # EventBus Subscriptions
+        EventBus.subscribe(AppEvents.VARS_CHANGED, self._on_vars_changed)
+        EventBus.subscribe(AppEvents.COMBOS_CHANGED, self._on_combos_changed)
+        EventBus.subscribe(AppEvents.COMBO_ACTIONS_CHANGED, self._on_combo_actions_changed)
+        EventBus.subscribe(AppEvents.STEPS_CHANGED, self._on_steps_changed)
+        EventBus.subscribe(AppEvents.PERIODIC_TASKS_CHANGED, self._on_periodic_tasks_changed)
+        EventBus.subscribe(AppEvents.STATUS_MESSAGE, self.set_status)
+        EventBus.subscribe(AppEvents.LOG_MESSAGE, self.append_log)
+
 
     def apply_app_icon(self, target=None):
         """為指定視窗 (預設為主視窗) 套用應用程式圖示 (支援 Windows .ico 與通用 .png)"""
@@ -373,15 +384,16 @@ class App(tk.Tk):
                     self._last_mouse_hud_text = new_text
                     self.lbl_mouse_hud.config(text=new_text)
 
-            # 動態輪詢頻率：運行或試跑時 150ms；游標移動中 200ms；游標靜止時 400ms 降低 Win32 API 調用
+            # 動態輪詢頻率休眠優化：
+            # 若巨集穩定掛機中，將更新間隔拉長至 1000ms 節省 CPU 資源；游標移動時 200ms；靜止時 500ms。
             if state.is_running() or state.is_in_testing():
-                next_interval = 150
+                next_interval = 1000
             elif is_moved:
                 next_interval = 200
             else:
-                next_interval = 400
+                next_interval = 500
         except (tk.TclError, OSError, AttributeError):
-            next_interval = 400
+            next_interval = 1000
 
         if not self.is_closing:
             self.after(next_interval, self.track_mouse_live)
