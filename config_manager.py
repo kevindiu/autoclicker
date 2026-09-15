@@ -107,12 +107,80 @@ def validate_profile_data(data: dict) -> dict:
             "periodic_tasks": [],
         }
 
+    variables = data.get("variables") if isinstance(data.get("variables"), dict) else {}
+    combos = data.get("combos") if isinstance(data.get("combos"), list) else []
+    steps = data.get("steps") if isinstance(data.get("steps"), list) else []
+    periodic_tasks = data.get("periodic_tasks") if isinstance(data.get("periodic_tasks"), list) else []
+
     normalized = {
-        "variables": data.get("variables") if isinstance(data.get("variables"), dict) else {},
-        "combos": data.get("combos") if isinstance(data.get("combos"), list) else [],
-        "steps": data.get("steps") if isinstance(data.get("steps"), list) else [],
-        "periodic_tasks": data.get("periodic_tasks") if isinstance(data.get("periodic_tasks"), list) else [],
+        "variables": {},
+        "combos": [],
+        "steps": [],
+        "periodic_tasks": [],
     }
+
+    for name, item in variables.items():
+        if not isinstance(item, dict):
+            continue
+        v_type = item.get("type", "coord")
+        if v_type == "coord":
+            value = item.get("value")
+            if not isinstance(value, dict):
+                value = {"x": 0, "y": 0, "btn": "left", "rel": True}
+            normalized["variables"][name] = {
+                "type": "coord",
+                "value": {
+                    "x": int(value.get("x", 0)),
+                    "y": int(value.get("y", 0)),
+                    "btn": str(value.get("btn", "left")),
+                    "rel": bool(value.get("rel", True)),
+                },
+            }
+        elif v_type == "key":
+            normalized["variables"][name] = {"type": "key", "value": str(item.get("value", ""))}
+        elif v_type == "wait":
+            try:
+                wait_val = float(item.get("value", 1.0))
+            except (TypeError, ValueError):
+                wait_val = 1.0
+            normalized["variables"][name] = {"type": "wait", "value": wait_val}
+        else:
+            normalized["variables"][name] = {"type": "coord", "value": {"x": 0, "y": 0, "btn": "left", "rel": True}}
+
+    for combo in combos:
+        if not isinstance(combo, dict):
+            continue
+        normalized["combos"].append({
+            "name": str(combo.get("name", "")),
+            "actions": [
+                action for action in (combo.get("actions") or [])
+                if isinstance(action, dict)
+            ],
+        })
+
+    for step in steps:
+        if isinstance(step, dict):
+            normalized["steps"].append(step)
+
+    for task in periodic_tasks:
+        if not isinstance(task, dict):
+            continue
+        normalized_task = dict(task)
+        if not normalized_task.get("id"):
+            normalized_task["id"] = f"pt_{int(time.time()*1000)}_{len(normalized['periodic_tasks'])}"
+        if not normalized_task.get("name"):
+            normalized_task["name"] = f"定時任務_{len(normalized['periodic_tasks']) + 1}"
+        try:
+            normalized_task["interval"] = float(normalized_task.get("interval", 1.0))
+        except (TypeError, ValueError):
+            normalized_task["interval"] = 1.0
+        normalized_task["round_interval"] = int(normalized_task.get("round_interval", 1)) if isinstance(normalized_task.get("round_interval"), int) else 1
+        normalized_task["enabled"] = bool(normalized_task.get("enabled", True))
+        normalized_task["run_on_start"] = bool(normalized_task.get("run_on_start", False))
+        if "action" in normalized_task and not isinstance(normalized_task["action"], dict):
+            normalized_task["action"] = None
+        normalized["periodic_tasks"].append(normalized_task)
+
     return normalized
 
 

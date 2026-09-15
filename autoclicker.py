@@ -31,6 +31,12 @@ from panels import LeftPanel, RightPanel
 import config_manager
 import dialogs
 import engine
+from runtime_service import RuntimeService
+from window_service import WindowService
+from profile_service import ProfileService
+from input_service import InputService
+from hot_reload_service import HotReloadService
+from ui_feedback_service import UIFeedbackService
 from controllers import (
     BaseController,
     VarController,
@@ -127,6 +133,12 @@ class App(tk.Tk):
         self.combo_ctrl = ComboController(self)
         self.step_ctrl = StepController(self)
         self.periodic_ctrl = PeriodicTaskController(self)
+        self.runtime_service = RuntimeService(self)
+        self.window_service = WindowService(self)
+        self.profile_service = ProfileService(self)
+        self.input_service = InputService(self)
+        self.hot_reload_service = HotReloadService(self)
+        self.ui_feedback_service = UIFeedbackService(self)
 
         self.build_left_panel()
         self.build_right_panel()
@@ -619,164 +631,23 @@ class App(tk.Tk):
 
     # ======================= 取點防重入機制 + 頂部提示 =======================
     def capture_pos_space(self, on_finish, on_cancel=None, btn="left"):
-        """無干擾 Hover 取點模式：頂部浮動 HUD，按 Space 確定，按 ESC 取消"""
-        if not self.app_state.target_hwnd:
-            messagebox.showwarning("提示", "尚未綁定目標視窗，請先在上方選擇遊戲視窗！", parent=self)
-            if on_cancel: on_cancel()
-            return
-
-        btn_cn = "右鍵" if btn == "right" else "左鍵"
-        force_bring_window_to_front(self.app_state.target_hwnd)
-        self.set_status(f"【設定{btn_cn}點擊】遊戲已置頂！請將滑鼠指住目標，按 [SPACE 空白鍵] 確定")
-
-        banner = tk.Toplevel(self)
-        banner.overrideredirect(True)
-        banner.attributes("-topmost", True)
-        banner.configure(bg=UITheme.ACCENT_BLUE)
-
-        sw = self.winfo_screenwidth()
-        bw, bh = 780, 46
-        bx = max(0, (sw - bw) // 2)
-        by = 12
-        banner.geometry(f"{bw}x{bh}+{bx}+{by}")
-
-        inner_frame = tk.Frame(banner, bg=UITheme.BANNER_BG, padx=10, pady=4)
-        inner_frame.pack(fill="both", expand=True, padx=2, pady=2)
-
-        lbl_hud = tk.Label(
-            inner_frame,
-            text=f"【設定{btn_cn}點擊】將滑鼠指住目標 -> 按 [SPACE 空白鍵] 確定！(按 ESC 取消)",
-            bg=UITheme.BANNER_BG,
-            fg=UITheme.CYAN_TITLE,
-            font=UITheme.FONT_TITLE
-        )
-        lbl_hud.pack(fill="both", expand=True)
-
-        if user32:
-            user32.GetAsyncKeyState(VK_SPACE)
-            user32.GetAsyncKeyState(VK_ESCAPE)
-
-        is_handled = [False]
-
-        def poll_keys():
-            if not banner.winfo_exists() or is_handled[0]:
-                return
-
-            pos_x, pos_y = get_cursor_pos()
-            if self.app_state.target_hwnd and self.var_use_rel.get() and user32:
-                pt = POINT(int(pos_x), int(pos_y))
-                user32.ScreenToClient(self.app_state.target_hwnd, ctypes.byref(pt))
-                coord_desc = f"({pt.x}, {pt.y})"
-                rx, ry, rel = pt.x, pt.y, True
-            else:
-                coord_desc = f"({pos_x}, {pos_y})"
-                rx, ry, rel = pos_x, pos_y, False
-
-            lbl_hud.config(text=f"【設定{btn_cn}點擊】滑鼠指住目標 -> 按 [SPACE 空白鍵] 確定！(坐標: {coord_desc} | ESC 取消)")
-
-            if user32:
-                if user32.GetAsyncKeyState(VK_SPACE) & KEY_PRESSED_MASK:
-                    is_handled[0] = True
-                    banner.destroy()
-                    self.force_bring_self_to_front()
-                    self.set_status(f"已成功設定{btn_cn}位置: ({rx}, {ry})")
-                    on_finish(rx, ry, rel)
-                    return
-
-                if user32.GetAsyncKeyState(VK_ESCAPE) & KEY_PRESSED_MASK:
-                    is_handled[0] = True
-                    banner.destroy()
-                    self.force_bring_self_to_front()
-                    self.set_status("已取消設定位置")
-                    if on_cancel: on_cancel()
-                    return
-
-            banner.after(30, poll_keys)
-
-        self.after(150, poll_keys)
+        return self.input_service.capture_pos_space(on_finish, on_cancel=on_cancel, btn=btn)
 
     # ======================= 主畫面執行步驟高亮跟隨 =======================
     def clear_active_step_highlight(self):
-        """清除主畫面掛機流程清單中當前步驟的高亮狀態 (例如定時任務插隊執行期間或停止執行時)"""
-        def _clear():
-            if self.is_closing: return
-            if hasattr(self, "step_listbox") and self.step_listbox.winfo_exists():
-                last_idx = getattr(self, "last_active_step_idx", None)
-                if last_idx is not None and 0 <= last_idx < self.step_listbox.size():
-                    try:
-                        self.step_listbox.itemconfigure(last_idx, background=UITheme.BG_DARK, foreground=UITheme.TEXT_MAIN)
-                    except tk.TclError:
-                        pass
-                self.last_active_step_idx = None
-        self.run_on_ui_thread(_clear)
+        return self.ui_feedback_service.clear_active_step_highlight()
 
     def highlight_active_step(self, idx, sub_idx=None):
-        """在主畫面清單中以獨立背景色高亮當前執行中的步驟，並根據設定自動滾動，絕不干擾使用者選取"""
-        if idx is None:
-            return self.clear_active_step_highlight()
-
-        def _hl():
-            if self.is_closing: return
-            if not hasattr(self, "step_listbox") or not self.step_listbox.winfo_exists():
-                return
-            lb = self.step_listbox
-            lb_sz = lb.size()
-            last_idx = getattr(self, "last_active_step_idx", None)
-            if last_idx is not None and 0 <= last_idx < lb_sz and last_idx != idx:
-                try:
-                    lb.itemconfigure(last_idx, background=UITheme.BG_DARK, foreground=UITheme.TEXT_MAIN)
-                except tk.TclError:
-                    pass
-
-            if 0 <= idx < lb_sz:
-                try:
-                    lb.itemconfigure(idx, background=UITheme.STEP_ACTIVE_BG, foreground=UITheme.STEP_ACTIVE_FG)
-                    self.last_active_step_idx = idx
-                    lb.see(idx)
-                except tk.TclError:
-                    pass
-        self.run_on_ui_thread(_hl)
+        return self.ui_feedback_service.highlight_active_step(idx, sub_idx=sub_idx)
 
     def highlight_pending_step(self, idx):
-        """在主畫面掛機流程清單中以待命色 (琥珀暖金) 標記即將在定時任務後接續執行的下一動作"""
-        def _pending():
-            if self.is_closing: return
-            if not hasattr(self, "step_listbox") or not self.step_listbox.winfo_exists():
-                return
-            lb = self.step_listbox
-            lb_sz = lb.size()
-            last_idx = getattr(self, "last_active_step_idx", None)
-            if last_idx is not None and 0 <= last_idx < lb_sz and last_idx != idx:
-                try:
-                    lb.itemconfigure(last_idx, background=UITheme.BG_DARK, foreground=UITheme.TEXT_MAIN)
-                except tk.TclError:
-                    pass
-
-            if 0 <= idx < lb_sz:
-                try:
-                    # 採用待命接續樣式：一眼看清定時任務結束後下一動跑哪一步！
-                    lb.itemconfigure(idx, background=UITheme.STEP_PENDING_BG, foreground=UITheme.STEP_PENDING_FG)
-                    self.last_active_step_idx = idx
-                    lb.see(idx)
-                except tk.TclError:
-                    pass
-        self.run_on_ui_thread(_pending)
+        return self.ui_feedback_service.highlight_pending_step(idx)
 
     def highlight_active_periodic_task(self, idx):
-        """在主畫面右側定時任務卡片清單中以專屬執行狀態 (翠綠光暈/深綠底) 高亮當前執行的定時任務"""
-        def _hl():
-            if self.is_closing: return
-            if hasattr(self, "periodic_listbox") and hasattr(self.periodic_listbox, "highlight_active_task"):
-                self.periodic_listbox.highlight_active_task(idx)
-        self.run_on_ui_thread(_hl)
+        return self.ui_feedback_service.highlight_active_periodic_task(idx)
 
     def clear_active_periodic_task_highlight(self):
-        """清除定時任務卡片的執行高亮狀態"""
-        def _clear():
-            if self.is_closing: return
-            if hasattr(self, "periodic_listbox") and hasattr(self.periodic_listbox, "clear_active_highlight"):
-                self.periodic_listbox.clear_active_highlight()
-        self.run_on_ui_thread(_clear)
+        return self.ui_feedback_service.clear_active_periodic_task_highlight()
 
     def _on_macro_stopped(self):
         """當背景巨集因故中止時，同步更新 UI 狀態"""
@@ -808,133 +679,29 @@ class App(tk.Tk):
 
     # ======================= 設定檔管理 (附帶 Schema 遷移) =======================
     def get_profile_files(self):
-        return config_manager.get_profile_files(CONFIG_EXT)
+        return self.profile_service.get_profile_files()
 
     def refresh_profiles(self, select_name=None):
-        config_manager.ensure_default_profile(CONFIG_EXT)
-        profiles = self.get_profile_files()
-        if not profiles:
-            profiles = ["default"]
-
-        self.cbo_profile["values"] = profiles
-        if select_name and select_name in profiles:
-            self.cbo_profile.set(select_name)
-        elif self.var_profile_name.get() in profiles:
-            self.cbo_profile.set(self.var_profile_name.get())
-        else:
-            self.cbo_profile.current(0)
+        return self.profile_service.refresh_profiles(select_name)
 
     def create_new_profile(self):
-        if self.app_state.is_running() or self.app_state.is_testing:
-            return self.set_status("巨集正在執行或試跑中，請先停止再新建設定檔！")
-        name = simpledialog.askstring("新建設定檔", "請輸入新設定檔名稱 (毋須輸入副檔名):", parent=self)
-        if not name or not name.strip(): return
-        name = name.strip()
-        fn = f"{name}{CONFIG_EXT}"
-        if os.path.exists(fn):
-            if not messagebox.askyesno("檔案覆蓋確認", f"設定檔「{name}」已存在！\n請問是否確認覆蓋原有設定？", parent=self):
-                return
-        try:
-            config_manager.save_profile_file(name, self.app_state, CONFIG_EXT)
-            self.refresh_profiles(select_name=name)
-            self.last_saved_snapshot = self.get_current_data_snapshot()
-            self.set_status(f"已新建並儲存至 {fn}")
-        except Exception as e:
-            self.set_status(f"新建失敗: {e}")
-            self.append_log("警示", f"新建設定檔失敗: {e}")
+        return self.profile_service.create_new_profile()
 
     def save_config(self):
-        name = self.var_profile_name.get().strip()
-        if not name: return self.set_status("請先選擇或新建設定檔")
-        fn = f"{name}{CONFIG_EXT}"
-        if os.path.exists(fn):
-            if not messagebox.askyesno("檔案覆蓋確認", f"請問是否確認覆蓋「{name}」的原有設定？", parent=self):
-                return self.set_status("已取消儲存")
-        try:
-            config_manager.save_profile_file(name, self.app_state, CONFIG_EXT)
-            self.set_status(f"已成功儲存至 {fn}")
-            self.refresh_profiles(select_name=name)
-            self.last_saved_snapshot = self.get_current_data_snapshot()
-        except Exception as e:
-            self.set_status(f"儲存失敗: {e}")
-            self.append_log("警示", f"儲存設定檔失敗: {e}")
+        return self.profile_service.save_config()
 
     def load_config(self):
-        if self.app_state.is_running() or self.app_state.is_testing:
-            return self.set_status("巨集正在執行或試跑中，請先停止再載入設定檔！")
-        name = self.var_profile_name.get().strip()
-        if not name: return
-        fn = f"{name}{CONFIG_EXT}"
-        if not os.path.exists(fn): return self.set_status(f"找不到檔案：{fn}")
-        try:
-            config_manager.load_profile_file(name, self.app_state, CONFIG_EXT)
-            self.refresh_variables_table()
-            self.refresh_combo_list()
-            self.refresh_combo_actions_list()
-            self.update_step_list()
-            self.update_periodic_list()
-            self.last_saved_snapshot = self.get_current_data_snapshot()
-            self.set_status(f"成功載入設定檔：{name}")
-        except Exception as e:
-            self.set_status(f"載入失敗: {e}")
-            self.append_log("警示", f"載入設定檔失敗: {e}")
+        return self.profile_service.load_config()
 
     # ======================= 視窗綁定 =======================
     def get_window_list(self):
-        if not user32:
-            return []
-        windows = []
-        def enum_proc(hwnd, lParam):
-            if user32.IsWindowVisible(hwnd) and user32.GetWindowTextLengthW(hwnd) > 0:
-                buff = ctypes.create_unicode_buffer(user32.GetWindowTextLengthW(hwnd) + 1)
-                user32.GetWindowTextW(hwnd, buff, len(buff))
-                t = buff.value.strip()
-                if t and BASE_WINDOW_TITLE not in t:
-                    windows.append((hwnd, t))
-            return True
-        cb = WNDENUMPROC(enum_proc)
-        user32.EnumWindows(cb, 0)
-        return windows
+        return self.window_service.get_window_list()
 
     def refresh_window_dropdown(self):
-        win_list = self.get_window_list()
-        items, target_idx = [], 0
-        current_hwnd = self.app_state.target_hwnd
-        found_target = False
-        found_fallback = False
-        fallback_idx = 0
-
-        for i, (hwnd, title) in enumerate(win_list):
-            items.append(f"[{hwnd}] {title}")
-            if current_hwnd is not None and hwnd == current_hwnd:
-                target_idx = i
-                found_target = True
-            elif not found_fallback and ("水滸" in title or "online" in title.lower()):
-                fallback_idx = i
-                found_fallback = True
-
-        if not found_target and found_fallback:
-            target_idx = fallback_idx
-
-        if not items:
-            items, self.app_state.target_hwnd = ["未偵測到任何視窗"], None
-        else:
-            self.app_state.target_hwnd = win_list[target_idx][0]
-
-        self.cbo_window["values"] = items
-        self.cbo_window.current(target_idx)
-        if self.app_state.target_hwnd:
-            self.set_status(f"已綁定目標視窗 HWND: {self.app_state.target_hwnd}")
+        return self.window_service.refresh_window_dropdown()
 
     def on_window_select(self, event=None):
-        val = self.var_window.get()
-        if val and val.startswith("["):
-            try:
-                self.app_state.target_hwnd = int(val.split("]")[0].replace("[", ""))
-                self.set_status(f"已綁定目標視窗 HWND: {self.app_state.target_hwnd}")
-            except (ValueError, IndexError) as e:
-                self.app_state.target_hwnd = None
-                self.append_log("警示", f"視窗綁定解析失敗: {e}")
+        return self.window_service.on_window_select(event)
 
     # ==========================================================================
     # 控制器方法委派 (Controller Delegation - 100% 向後相容)
@@ -1031,7 +798,7 @@ class App(tk.Tk):
 
     # --- 熱更新與清單通用操作 ---
     def trigger_hot_reload(self):
-        return self.step_ctrl.trigger_hot_reload()
+        return self.hot_reload_service.trigger_hot_reload()
 
     def _move_list_item(self, lst, idx, delta, refresh_cb, item_name="項目"):
         return self.step_ctrl._move_list_item(lst, idx, delta, refresh_cb, item_name=item_name)
@@ -1135,53 +902,16 @@ class App(tk.Tk):
 
     # ======================= 主執行引擎 =======================
     def _stop_macro_run_ui(self, was_test=False):
-        """UI 層僅負責停用事件與狀態回饋，真正的 runtime 停止邏輯交給 engine。"""
-        self.app_state.stop_event.set()
-        try:
-            engine.stop_macro_run(self.app_state, reason="手動停止")
-        except Exception as e:
-            self.append_log("系統", f"釋放按鍵例外: {e}")
-        self.set_running_ui(False)
-        msg = "試跑已手動中止！" if was_test else "已手動停止"
-        self.set_status(msg)
-        self.append_log("系統", f"⏹ 巨集{msg}")
+        return self.runtime_service._stop_macro_run_ui(was_test)
 
     def _start_macro_run_ui(self):
-        """UI 層僅負責啟動前檢查與啟動訊息，runtime 初始化由 engine 承擔。"""
-        has_enabled_periodic = any(getattr(pt, "enabled", True) for pt in self.app_state.periodic_tasks)
-        if not self.app_state.steps and not has_enabled_periodic:
-            return self.set_status("掛機流程清單與定時任務均為空，請先加入步驟或定時任務！")
-
-        self.app_state.snapshot_active(reload_requested=False)
-        engine.start_macro_run(self.app_state)
-        self.set_running_ui(True)
-        self.set_status("循環運作中...")
-        win_title = self.var_window.get() if hasattr(self, "var_window") else ""
-        mode_str = "後台模式" if self.app_state.use_bg else "前台模式"
-        self.append_log("系統", f"▶ 巨集啟動 ({mode_str} | 目標: {win_title})")
-        threading.Thread(target=self.macro_worker_loop, daemon=True).start()
+        return self.runtime_service._start_macro_run_ui()
 
     def toggle_run(self):
-        # 防連點保護
-        now = time.time()
-        if hasattr(self, "_last_toggle_time") and now - self._last_toggle_time < 0.5:
-            return
-        self._last_toggle_time = now
-
-        with self.app_state.running_lock:
-            is_active = self.app_state.is_running() or self.app_state.is_testing
-            was_test = self.app_state.is_testing
-            if is_active:
-                self.app_state.set_running(False)
-                self.app_state.is_testing = False
-
-        if is_active:
-            self._stop_macro_run_ui(was_test)
-        else:
-            self._start_macro_run_ui()
+        return self.runtime_service.toggle_run()
 
     def macro_worker_loop(self):
-        engine.macro_worker_loop(self.app_state)
+        return self.runtime_service.macro_worker_loop()
 
 
 if __name__ == "__main__":

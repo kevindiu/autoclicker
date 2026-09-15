@@ -67,6 +67,40 @@ class StateAndConfigRegressionTests(unittest.TestCase):
             self.assertEqual(app_state.periodic_tasks[0].name, "heal")
             self.assertTrue(app_state.periodic_tasks[0].id)
 
+    def test_validate_profile_data_normalizes_nested_invalid_data(self):
+        invalid = {
+            "variables": {"hp": {"type": "wait", "value": "bad"}},
+            "combos": [{"name": "combo", "actions": [{"type": "click", "x": "bad", "y": 1, "btn": "left", "rel": True}]}],
+            "steps": [{"type": "key", "key": 123}],
+            "periodic_tasks": [{"id": "pt1", "name": "heal", "interval": "bad", "action": {"type": "wait", "sec": "not-a-number"}}],
+        }
+
+        valid = config_manager.validate_profile_data(invalid)
+
+        self.assertEqual(valid["variables"]["hp"]["type"], "wait")
+        self.assertEqual(valid["combos"][0]["name"], "combo")
+        self.assertEqual(valid["steps"][0]["type"], "key")
+        self.assertEqual(valid["periodic_tasks"][0]["interval"], 1.0)
+
+    def test_event_bus_scopes_subscriptions_per_app(self):
+        events = __import__("events")
+        calls = []
+
+        def cb_a(*args, **kwargs):
+            calls.append(("a", args, kwargs))
+
+        def cb_b(*args, **kwargs):
+            calls.append(("b", args, kwargs))
+
+        events.EventBus.subscribe("demo", cb_a, scope="app_a")
+        events.EventBus.subscribe("demo", cb_b, scope="app_b")
+
+        events.EventBus.emit("demo", "payload", scope="app_a")
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0], "a")
+        self.assertEqual(calls[0][1], ("payload",))
+
     def test_hot_reload_flag_only_changes_under_steps_lock(self):
         app_state = _HotReloadState()
 
