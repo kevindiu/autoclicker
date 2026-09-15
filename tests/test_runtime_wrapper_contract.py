@@ -25,6 +25,8 @@ class RuntimeWrapperContractTests(unittest.TestCase):
         self.assertTrue(hasattr(engine, "stop_macro_run"))
         self.assertTrue(hasattr(engine, "prepare_runtime_state"))
         self.assertTrue(hasattr(engine, "run_macro_cycle"))
+        self.assertTrue(hasattr(engine, "bootstrap_macro_runtime"))
+        self.assertTrue(hasattr(engine, "shutdown_macro_runtime"))
 
 
 if __name__ == "__main__":

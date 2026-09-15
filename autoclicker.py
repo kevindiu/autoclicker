@@ -1136,6 +1136,33 @@ class App(tk.Tk):
         engine.execute_single_action(self.app_state, act, desc)
 
     # ======================= 主執行引擎 =======================
+    def _stop_macro_run_ui(self, was_test=False):
+        """UI 層僅負責停用事件與狀態回饋，真正的 runtime 停止邏輯交給 engine。"""
+        self.app_state.stop_event.set()
+        try:
+            engine.stop_macro_run(self.app_state, reason="手動停止")
+        except Exception as e:
+            self.append_log("系統", f"釋放按鍵例外: {e}")
+        self.set_running_ui(False)
+        msg = "試跑已手動中止！" if was_test else "已手動停止"
+        self.set_status(msg)
+        self.append_log("系統", f"⏹ 巨集{msg}")
+
+    def _start_macro_run_ui(self):
+        """UI 層僅負責啟動前檢查與啟動訊息，runtime 初始化由 engine 承擔。"""
+        has_enabled_periodic = any(getattr(pt, "enabled", True) for pt in self.app_state.periodic_tasks)
+        if not self.app_state.steps and not has_enabled_periodic:
+            return self.set_status("掛機流程清單與定時任務均為空，請先加入步驟或定時任務！")
+
+        self.app_state.snapshot_active(reload_requested=False)
+        engine.start_macro_run(self.app_state)
+        self.set_running_ui(True)
+        self.set_status("循環運作中...")
+        win_title = self.var_window.get() if hasattr(self, "var_window") else ""
+        mode_str = "後台模式" if self.app_state.use_bg else "前台模式"
+        self.append_log("系統", f"▶ 巨集啟動 ({mode_str} | 目標: {win_title})")
+        threading.Thread(target=self.macro_worker_loop, daemon=True).start()
+
     def toggle_run(self):
         # 防連點保護
         now = time.time()
@@ -1151,27 +1178,9 @@ class App(tk.Tk):
                 self.app_state.is_testing = False
 
         if is_active:
-            self.app_state.stop_event.set()
-            try:
-                engine.stop_macro_run(self.app_state, reason="手動停止")
-            except Exception as e:
-                self.append_log("系統", f"釋放按鍵例外: {e}")
-            self.set_running_ui(False)
-            msg = "試跑已手動中止！" if was_test else "已手動停止"
-            self.set_status(msg)
-            self.append_log("系統", f"⏹ 巨集{msg}")
+            self._stop_macro_run_ui(was_test)
         else:
-            has_enabled_periodic = any(getattr(pt, "enabled", True) for pt in self.app_state.periodic_tasks)
-            if not self.app_state.steps and not has_enabled_periodic:
-                return self.set_status("掛機流程清單與定時任務均為空，請先加入步驟或定時任務！")
-            self.app_state.snapshot_active(reload_requested=False)
-            engine.start_macro_run(self.app_state)
-            self.set_running_ui(True)
-            self.set_status("循環運作中...")
-            win_title = self.var_window.get() if hasattr(self, "var_window") else ""
-            mode_str = "後台模式" if self.app_state.use_bg else "前台模式"
-            self.append_log("系統", f"▶ 巨集啟動 ({mode_str} | 目標: {win_title})")
-            threading.Thread(target=self.macro_worker_loop, daemon=True).start()
+            self._start_macro_run_ui()
 
     def macro_worker_loop(self):
         engine.macro_worker_loop(self.app_state)

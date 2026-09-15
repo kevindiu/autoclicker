@@ -494,25 +494,14 @@ def _execute_round_steps(
 
 def macro_worker_loop(app_state: 'state.AppState') -> None:
     """背景巨集循環執行緒主迴圈"""
-    round_idx = 1
-    with app_state.steps_lock:
-        active_pts = state.fast_deepcopy(app_state.active_periodic_tasks)
-        current_steps = state.fast_deepcopy(app_state.active_steps)
-        current_combos = state.fast_deepcopy(app_state.active_combos)
-        current_variables = state.fast_deepcopy(app_state.active_variables)
-
-    start_time = time.time()
-    periodic_tasks_runtime = []
-    for pt in active_pts:
-        pt_copy = copy.deepcopy(pt)
-        # 若勾選「啟動時立即首發一次」，則設定 last_run 為 0，首度檢查時即觸發；否則設為 start_time，待滿 interval 秒後首發
-        pt_copy["last_run"] = 0.0 if pt.get("run_on_start", False) else start_time
-        pt_copy["last_run_round"] = 0
-        periodic_tasks_runtime.append(pt_copy)
-    sync_periodic_timers(app_state, periodic_tasks_runtime, current_round=0)
+    boot = bootstrap_macro_runtime(app_state)
+    round_idx = boot["round_idx"]
+    current_steps = boot["steps"]
+    current_combos = boot["combos"]
+    current_variables = boot["variables"]
+    periodic_tasks_runtime = boot["periodic_tasks_runtime"]
 
     try:
-        # 首輪開始前：若有設定「啟動時立即首發」的定時任務，先檢查執行一次
         first_next_idx = 0 if current_steps else None
         if not check_and_run_due_periodic_tasks(
             app_state,
@@ -549,19 +538,13 @@ def macro_worker_loop(app_state: 'state.AppState') -> None:
                 break
 
             if not current_steps:
-                # 若主流程為空但有啟用的定時任務，進行待命定時輪詢
                 if not check_and_run_due_periodic_tasks(app_state, periodic_tasks_runtime, current_variables, current_combos, round_prefix="", current_round=round_idx, is_round_end=False):
                     break
                 if not safe_sleep(app_state, 0.1, app_state.stop_event):
                     break
                 continue
 
-            if not _execute_round_steps(app_state, current_steps, current_variables, current_combos, periodic_tasks_runtime, round_idx):
-                break
-
-            # 輪次銜接時亦進行一次定時任務檢查（is_round_end=True，round 與 interval 任務皆判定）
-            next_step = 0 if current_steps else None
-            if not check_and_run_due_periodic_tasks(app_state, periodic_tasks_runtime, current_variables, current_combos, round_prefix=f"第 {round_idx} 輪結束: ", next_step_idx=next_step, current_round=round_idx, is_round_end=True):
+            if not run_macro_cycle(app_state, current_steps, current_combos, current_variables, periodic_tasks_runtime, round_idx):
                 break
 
             round_idx += 1
@@ -570,19 +553,12 @@ def macro_worker_loop(app_state: 'state.AppState') -> None:
     except Exception as e:
         EventBus.emit(AppEvents.LOG_MESSAGE, "警示", f"✕ 異常中斷: {e}")
     finally:
-        app_state.set_running(False)
-        with app_state.periodic_timers_lock:
-            app_state.periodic_timers.clear()
-        emergency_release_all(app_state)
-        
-        completed = round_idx - 1 if round_idx > 1 else (1 if round_idx == 1 and not app_state.stop_event.is_set() else 0)
-        EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"⏹ 巨集循環結束 (累計運行 {completed} 輪)")
-        EventBus.emit(AppEvents.MACRO_STOPPED)
+        shutdown_macro_runtime(app_state, round_idx)
 
-def start_macro_run(app_state: 'state.AppState', current_steps=None, current_combos=None, current_variables=None, round_idx=1):
-    """將執行啟動邏輯抽離到 engine 層，讓 App 只負責調度 UI 事件與啟動線程。"""
+def prepare_runtime_state(app_state: 'state.AppState', current_steps=None, current_combos=None, current_variables=None, round_idx=1):
+    """準備一個一致的執行快照，讓 App 只負責 UI 事件與執行緒切換。"""
     if app_state is None:
-        raise ValueError("start_macro_run requires an AppState instance")
+        raise ValueError("prepare_runtime_state requires an AppState instance")
 
     if current_steps is None:
         with app_state.steps_lock:
@@ -594,14 +570,91 @@ def start_macro_run(app_state: 'state.AppState', current_steps=None, current_com
         with app_state.steps_lock:
             current_variables = state.fast_deepcopy(app_state.active_variables)
 
-    app_state.stop_event.clear()
-    app_state.set_running(True)
     return {
         "steps": current_steps,
         "combos": current_combos,
         "variables": current_variables,
         "round_idx": round_idx,
     }
+
+
+def start_macro_run(app_state: 'state.AppState', current_steps=None, current_combos=None, current_variables=None, round_idx=1):
+    """啟動執行前準備與狀態切換，將 UI 與 runtime 分離。"""
+    if app_state is None:
+        raise ValueError("start_macro_run requires an AppState instance")
+
+    runtime = prepare_runtime_state(app_state, current_steps, current_combos, current_variables, round_idx)
+    app_state.stop_event.clear()
+    app_state.set_running(True)
+    return runtime
+
+
+def run_macro_cycle(app_state: 'state.AppState', current_steps, current_combos, current_variables, periodic_tasks_runtime, round_idx):
+    """執行單輪主流程，回傳是否應繼續運作。"""
+    if app_state is None:
+        raise ValueError("run_macro_cycle requires an AppState instance")
+
+    if not _execute_round_steps(app_state, current_steps, current_variables, current_combos, periodic_tasks_runtime, round_idx):
+        return False
+
+    next_step = 0 if current_steps else None
+    if not check_and_run_due_periodic_tasks(
+        app_state,
+        periodic_tasks_runtime,
+        current_variables,
+        current_combos,
+        round_prefix=f"第 {round_idx} 輪結束: ",
+        next_step_idx=next_step,
+        current_round=round_idx,
+        is_round_end=True,
+    ):
+        return False
+
+    return True
+
+
+def bootstrap_macro_runtime(app_state: 'state.AppState'):
+    """初始化 macro worker 的輪次快照與 periodic runtime 狀態，保持 App 無需直接處理底層執行狀態。"""
+    if app_state is None:
+        raise ValueError("bootstrap_macro_runtime requires an AppState instance")
+
+    with app_state.steps_lock:
+        active_pts = state.fast_deepcopy(app_state.active_periodic_tasks)
+        current_steps = state.fast_deepcopy(app_state.active_steps)
+        current_combos = state.fast_deepcopy(app_state.active_combos)
+        current_variables = state.fast_deepcopy(app_state.active_variables)
+
+    start_time = time.time()
+    periodic_tasks_runtime = []
+    for pt in active_pts:
+        pt_copy = copy.deepcopy(pt)
+        pt_copy["last_run"] = 0.0 if pt.get("run_on_start", False) else start_time
+        pt_copy["last_run_round"] = 0
+        periodic_tasks_runtime.append(pt_copy)
+    sync_periodic_timers(app_state, periodic_tasks_runtime, current_round=0)
+
+    return {
+        "steps": current_steps,
+        "combos": current_combos,
+        "variables": current_variables,
+        "periodic_tasks_runtime": periodic_tasks_runtime,
+        "round_idx": 1,
+    }
+
+
+def shutdown_macro_runtime(app_state: 'state.AppState', round_idx: int = 1):
+    """收尾 macro worker：清除定時器、釋放鍵盤/滑鼠狀態，保留 App 只在 UI 層發送停止事件。"""
+    if app_state is None:
+        raise ValueError("shutdown_macro_runtime requires an AppState instance")
+
+    app_state.set_running(False)
+    with app_state.periodic_timers_lock:
+        app_state.periodic_timers.clear()
+    emergency_release_all(app_state)
+    completed = round_idx - 1 if round_idx > 1 else (1 if round_idx == 1 and not app_state.stop_event.is_set() else 0)
+    EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"⏹ 巨集循環結束 (累計運行 {completed} 輪)")
+    EventBus.emit(AppEvents.MACRO_STOPPED)
+    return completed
 
 
 def stop_macro_run(app_state: 'state.AppState', reason: str = "manual"):
