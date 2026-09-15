@@ -24,7 +24,8 @@ from win32_api import (
     is_window_alive,
     VK_SPACE,
     VK_ESCAPE,
-    KEY_PRESSED_MASK
+    KEY_PRESSED_MASK,
+    require_windows_runtime
 )
 from panels import LeftPanel, RightPanel
 import config_manager
@@ -44,6 +45,7 @@ from controllers import (
 # ==============================================================================
 class App(tk.Tk):
     def __init__(self):
+        require_windows_runtime()
         super().__init__()
         self.title(WINDOW_TITLE)
         self.geometry("1280x750")
@@ -161,16 +163,12 @@ class App(tk.Tk):
         self.track_mouse_live()
 
     def apply_app_icon(self, target=None):
-        """為指定視窗 (預設為主視窗) 套用應用程式圖示 (支援 Windows .ico 與通用 .png)"""
+        """為指定視窗 (預設為主視窗) 套用 Windows 應用程式圖示。"""
         win = target or self
         try:
             ico_path = resource_path("app.ico")
-            png_path = resource_path("app.png")
-            if sys.platform == "win32" and os.path.exists(ico_path):
+            if os.path.exists(ico_path):
                 win.iconbitmap(ico_path)
-            elif os.path.exists(png_path):
-                img = tk.PhotoImage(file=png_path)
-                win.iconphoto(True, img)
         except (tk.TclError, OSError):
             pass
 
@@ -1187,18 +1185,22 @@ class App(tk.Tk):
 
 
 if __name__ == "__main__":
-    if sys.platform == "win32":
-        try:
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("sh.autoclicker.app.1.0")
-        except (AttributeError, OSError):
-            pass
+    try:
+        require_windows_runtime()
+    except RuntimeError as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("sh.autoclicker.app.1.0")
+    except (AttributeError, OSError):
+        pass
 
     try:
         app = App()
         app.mainloop()
     except tk.TclError as e:
         if "no display name" in str(e) or "DISPLAY" in str(e):
-            print("Autoclicker requires a graphical display. This environment has no DISPLAY available.", file=sys.stderr)
-            print("Run it on a desktop session (Windows/macOS/Linux with X11) or provide a virtual display.", file=sys.stderr)
+            print("Autoclicker requires a Windows desktop session with a graphical display.", file=sys.stderr)
             sys.exit(1)
         raise

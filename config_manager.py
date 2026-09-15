@@ -97,6 +97,25 @@ def save_profile_file(name: str, target_state=None, ext=CONFIG_EXT, dir_path=_DE
 
     return fn
 
+def validate_profile_data(data: dict) -> dict:
+    """驗證設定檔資料型別並做向後相容修正，避免舊資料或手動編輯下的型別錯誤造成後續資料損毀。"""
+    if not isinstance(data, dict):
+        return {
+            "variables": {},
+            "combos": [],
+            "steps": [],
+            "periodic_tasks": [],
+        }
+
+    normalized = {
+        "variables": data.get("variables") if isinstance(data.get("variables"), dict) else {},
+        "combos": data.get("combos") if isinstance(data.get("combos"), list) else [],
+        "steps": data.get("steps") if isinstance(data.get("steps"), list) else [],
+        "periodic_tasks": data.get("periodic_tasks") if isinstance(data.get("periodic_tasks"), list) else [],
+    }
+    return normalized
+
+
 def load_profile_file(name: str, target_state=None, ext=CONFIG_EXT, dir_path=_DEFAULT_DIR, **kwargs) -> dict:
     """從 .shm 設定檔載入設定資料，並自動補齊缺失之欄位與 ID (具備 null 值防禦)"""
     target_state = _resolve_target_state(target_state, **kwargs)
@@ -111,6 +130,8 @@ def load_profile_file(name: str, target_state=None, ext=CONFIG_EXT, dir_path=_DE
     if not isinstance(data, dict):
         raise ValueError(f"設定檔格式錯誤 (非 JSON 物件)：{fn}")
 
+    data = validate_profile_data(data)
+
     target_state.variables.clear()
     target_state.variables.update({k: Variable.from_dict(v) for k, v in (data.get("variables") or {}).items()})
 
@@ -122,9 +143,6 @@ def load_profile_file(name: str, target_state=None, ext=CONFIG_EXT, dir_path=_DE
 
     target_state.periodic_tasks.clear()
     periodic_tasks_raw = data.get("periodic_tasks") or []
-    if not isinstance(periodic_tasks_raw, list):
-        periodic_tasks_raw = []
-
     for p_idx, pt in enumerate(periodic_tasks_raw):
         if not isinstance(pt, dict):
             continue

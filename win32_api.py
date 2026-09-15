@@ -1,4 +1,5 @@
 import time
+import sys
 import ctypes
 from ctypes import wintypes
 from typing import Optional, Tuple, Any
@@ -168,6 +169,17 @@ if windll is not None:
         except (AttributeError, OSError):
             pass
 
+def is_windows_supported() -> bool:
+    """返回當前平台是否支援 Win32 執行路徑；非 Windows 直接拒絕以避免莫名其妙的執行錯誤。"""
+    return sys.platform == "win32" and user32 is not None
+
+
+def require_windows_runtime() -> None:
+    """明確要求 Windows+Win32 環境，若不符合則直接拋出可診斷錯誤。"""
+    if not is_windows_supported():
+        raise RuntimeError("此功能僅支援 Windows + Win32 環境，當前平台不支援背景點擊與鍵盤注入。")
+
+
 def get_cursor_pos() -> Tuple[int, int]:
     if user32:
         pt = POINT()
@@ -261,9 +273,11 @@ def emergency_release_all(app_state) -> None:
 
 def post_bg_click(app_state, hwnd: Any, client_x: int, client_y: int, offset_x: int = 0, offset_y: int = 0, btn: str = "left") -> Tuple[int, int]:
     """向指定視窗背景發送點擊訊息"""
-    if not hwnd or not user32:
+    if not hwnd:
         _get_pyautogui().click(client_x, client_y, button=btn)
         return int(client_x), int(client_y)
+    if not is_windows_supported():
+        require_windows_runtime()
     cx, cy = int(client_x) + offset_x, int(client_y) + offset_y
     lparam = to_lparam(((int(cy) & 0xFFFF) << 16) | (int(cx) & 0xFFFF))
 
@@ -285,7 +299,7 @@ def post_bg_click(app_state, hwnd: Any, client_x: int, client_y: int, offset_x: 
 
 def post_bg_key(app_state, hwnd: Any, key_str: str) -> None:
     """向指定視窗背景發送按鍵按下與放開訊息"""
-    if not hwnd or not user32:
+    if not hwnd:
         with app_state.currently_held_keys_lock:
             app_state.currently_held_keys.add(("fg", key_str))
         try:
@@ -298,6 +312,8 @@ def post_bg_key(app_state, hwnd: Any, key_str: str) -> None:
             with app_state.currently_held_keys_lock:
                 app_state.currently_held_keys.discard(("fg", key_str))
         return
+    if not is_windows_supported():
+        require_windows_runtime()
 
     k_lower = key_str.lower()
     vk = VK_MAP.get(k_lower)

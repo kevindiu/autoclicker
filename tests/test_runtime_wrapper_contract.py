@@ -1,10 +1,12 @@
 import unittest
+import sys
 
 from autoclicker import App
 import engine
 
 
 class RuntimeWrapperContractTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "win32", "GUI runtime contract requires Windows")
     def test_app_dispatch_action_passes_app_state(self):
         app = App()
         try:
@@ -13,6 +15,7 @@ class RuntimeWrapperContractTests(unittest.TestCase):
         finally:
             app.destroy()
 
+    @unittest.skipUnless(sys.platform == "win32", "GUI runtime contract requires Windows")
     def test_app_macro_worker_loop_uses_app_state(self):
         app = App()
         try:
@@ -21,6 +24,7 @@ class RuntimeWrapperContractTests(unittest.TestCase):
             app.destroy()
 
     def test_runtime_orchestration_helpers_are_exposed(self):
+        self.assertTrue(hasattr(engine, "RuntimeManager"))
         self.assertTrue(hasattr(engine, "start_macro_run"))
         self.assertTrue(hasattr(engine, "stop_macro_run"))
         self.assertTrue(hasattr(engine, "prepare_runtime_state"))

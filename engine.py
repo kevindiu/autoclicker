@@ -492,68 +492,119 @@ def _execute_round_steps(
 
     return True
 
+class RuntimeManager:
+    """集中管理巨集背景執行的啟動、熱重載、輪次執行與清理。"""
+    def __init__(self, app_state: 'state.AppState'):
+        if app_state is None:
+            raise ValueError("RuntimeManager requires an AppState instance")
+        self.app_state = app_state
+        self.current_steps = []
+        self.current_combos = []
+        self.current_variables = {}
+        self.periodic_tasks_runtime = []
+        self.round_idx = 1
+
+    def bootstrap(self):
+        boot = bootstrap_macro_runtime(self.app_state)
+        self.current_steps = boot["steps"]
+        self.current_combos = boot["combos"]
+        self.current_variables = boot["variables"]
+        self.periodic_tasks_runtime = boot["periodic_tasks_runtime"]
+        self.round_idx = boot["round_idx"]
+        return boot
+
+    def reload_if_needed(self):
+        if not self.app_state.reload_requested:
+            return False
+        with self.app_state.steps_lock:
+            self.current_steps, self.current_combos, self.current_variables = _apply_hot_reload(
+                self.app_state,
+                self.round_idx,
+                self.periodic_tasks_runtime,
+            )
+        return True
+
+    def run_cycle(self):
+        return run_macro_cycle(
+            self.app_state,
+            self.current_steps,
+            self.current_combos,
+            self.current_variables,
+            self.periodic_tasks_runtime,
+            self.round_idx,
+        )
+
+    def shutdown(self):
+        return shutdown_macro_runtime(self.app_state, self.round_idx)
+
+    def run(self) -> None:
+        self.bootstrap()
+
+        try:
+            first_next_idx = 0 if self.current_steps else None
+            if not check_and_run_due_periodic_tasks(
+                self.app_state,
+                self.periodic_tasks_runtime,
+                self.current_variables,
+                self.current_combos,
+                round_prefix="啟動首發: ",
+                next_step_idx=first_next_idx,
+                current_round=0,
+                is_round_end=False,
+                is_startup=True,
+            ):
+                return
+
+            while self.app_state.is_running() and not self.app_state.stop_event.is_set():
+                if self.app_state.target_hwnd and not is_window_alive(self.app_state.target_hwnd):
+                    msg = "目標遊戲視窗已關閉或崩潰，巨集已自動安全停止！"
+                    EventBus.emit(AppEvents.LOG_MESSAGE, "警示", f"✕ {msg}")
+                    self.app_state.set_running(False)
+                    break
+
+                with self.app_state.steps_lock:
+                    was_reloaded = self.app_state.reload_requested
+
+                if was_reloaded:
+                    self.reload_if_needed()
+
+                has_enabled_periodic = any(pt.get("enabled", True) for pt in self.periodic_tasks_runtime)
+                if not self.current_steps and not has_enabled_periodic:
+                    msg = "掛機流程清單與定時任務均為空，巨集已自動停止！"
+                    EventBus.emit(AppEvents.LOG_MESSAGE, "警示", msg)
+                    self.app_state.set_running(False)
+                    break
+
+                if not self.current_steps:
+                    if not check_and_run_due_periodic_tasks(
+                        self.app_state,
+                        self.periodic_tasks_runtime,
+                        self.current_variables,
+                        self.current_combos,
+                        round_prefix="",
+                        current_round=self.round_idx,
+                        is_round_end=False,
+                    ):
+                        break
+                    if not safe_sleep(self.app_state, 0.1, self.app_state.stop_event):
+                        break
+                    continue
+
+                if not self.run_cycle():
+                    break
+
+                self.round_idx += 1
+                if not safe_sleep(self.app_state, constants.SLEEP_TEST_MODE, self.app_state.stop_event):
+                    break
+        except Exception as e:
+            EventBus.emit(AppEvents.LOG_MESSAGE, "警示", f"✕ 異常中斷: {e}")
+        finally:
+            self.shutdown()
+
+
 def macro_worker_loop(app_state: 'state.AppState') -> None:
     """背景巨集循環執行緒主迴圈"""
-    boot = bootstrap_macro_runtime(app_state)
-    round_idx = boot["round_idx"]
-    current_steps = boot["steps"]
-    current_combos = boot["combos"]
-    current_variables = boot["variables"]
-    periodic_tasks_runtime = boot["periodic_tasks_runtime"]
-
-    try:
-        first_next_idx = 0 if current_steps else None
-        if not check_and_run_due_periodic_tasks(
-            app_state,
-            periodic_tasks_runtime,
-            current_variables,
-            current_combos,
-            round_prefix="啟動首發: ",
-            next_step_idx=first_next_idx,
-            current_round=0,
-            is_round_end=False,
-            is_startup=True
-        ):
-            return
-
-        while app_state.is_running() and not app_state.stop_event.is_set():
-            if app_state.target_hwnd and not is_window_alive(app_state.target_hwnd):
-                msg = "目標遊戲視窗已關閉或崩潰，巨集已自動安全停止！"
-                EventBus.emit(AppEvents.LOG_MESSAGE, "警示", f"✕ {msg}")
-                app_state.set_running(False)
-                break
-
-            with app_state.steps_lock:
-                was_reloaded = app_state.reload_requested
-
-            if was_reloaded:
-                with app_state.steps_lock:
-                    current_steps, current_combos, current_variables = _apply_hot_reload(app_state, round_idx, periodic_tasks_runtime)
-
-            has_enabled_periodic = any(pt.get("enabled", True) for pt in periodic_tasks_runtime)
-            if not current_steps and not has_enabled_periodic:
-                msg = "掛機流程清單與定時任務均為空，巨集已自動停止！"
-                EventBus.emit(AppEvents.LOG_MESSAGE, "警示", msg)
-                app_state.set_running(False)
-                break
-
-            if not current_steps:
-                if not check_and_run_due_periodic_tasks(app_state, periodic_tasks_runtime, current_variables, current_combos, round_prefix="", current_round=round_idx, is_round_end=False):
-                    break
-                if not safe_sleep(app_state, 0.1, app_state.stop_event):
-                    break
-                continue
-
-            if not run_macro_cycle(app_state, current_steps, current_combos, current_variables, periodic_tasks_runtime, round_idx):
-                break
-
-            round_idx += 1
-            if not safe_sleep(app_state, constants.SLEEP_TEST_MODE, app_state.stop_event):
-                break
-    except Exception as e:
-        EventBus.emit(AppEvents.LOG_MESSAGE, "警示", f"✕ 異常中斷: {e}")
-    finally:
-        shutdown_macro_runtime(app_state, round_idx)
+    RuntimeManager(app_state).run()
 
 def prepare_runtime_state(app_state: 'state.AppState', current_steps=None, current_combos=None, current_variables=None, round_idx=1):
     """準備一個一致的執行快照，讓 App 只負責 UI 事件與執行緒切換。"""

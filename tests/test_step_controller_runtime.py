@@ -1,4 +1,5 @@
 import unittest
+import sys
 from unittest.mock import patch
 
 import events
@@ -8,6 +9,7 @@ from models import KeyAction
 
 
 class StepControllerRuntimeTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "win32", "GUI runtime contract requires Windows")
     def test_test_run_execution_flow_passes_app_state(self):
         app = App()
         try:
@@ -21,6 +23,7 @@ class StepControllerRuntimeTests(unittest.TestCase):
         finally:
             app.destroy()
 
+    @unittest.skipUnless(sys.platform == "win32", "GUI runtime contract requires Windows")
     def test_app_closes_and_unsubscribes_events(self):
         app = App()
         app.on_close()
