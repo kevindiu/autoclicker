@@ -218,47 +218,88 @@ class AppState:
 # ==============================================================================
 # 文字格式化輔助函數
 # ==============================================================================
-def format_action_summary(app_state: 'AppState', act: Action, index=None, current_variables=None):
-    """統一格式化動作或步驟的文字描述，採用 100% 跨平台相容的通用標籤與符號"""
-    var_dict = current_variables if current_variables is not None else app_state.variables
-    atype = act.type
+def format_action_summary(app_state_or_act, act=None, index=None, current_variables=None):
+    """統一格式化動作或步驟的文字描述。
 
-    var_name = act.var_name
+    兼容兩種呼叫方式：
+    - format_action_summary(app_state, act, ...)  # 舊簽名
+    - format_action_summary(act, ...)              # 新簽名
+    - format_action_summary(removed_item)          # dict/Action 直接傳入
+    """
+    if act is None:
+        act = app_state_or_act
+        app_state = None
+    else:
+        app_state = app_state_or_act
+
+    if act is None:
+        return "[空動作]"
+
+    if isinstance(act, dict):
+        action_dict = act
+        atype = action_dict.get("type")
+        var_name = action_dict.get("var_name")
+        btn = action_dict.get("btn", "left")
+        rel = action_dict.get("rel", True)
+        x = action_dict.get("x", 0)
+        y = action_dict.get("y", 0)
+        key = action_dict.get("key", "")
+        sec = action_dict.get("sec", 0)
+        target_name = action_dict.get("target_name", "")
+        name = action_dict.get("name", "")
+        actions = action_dict.get("actions", [])
+    else:
+        action_dict = getattr(act, "__dict__", {})
+        atype = getattr(act, "type", None)
+        var_name = getattr(act, "var_name", None)
+        btn = getattr(act, "btn", "left")
+        rel = getattr(act, "rel", True)
+        x = getattr(act, "x", 0)
+        y = getattr(act, "y", 0)
+        key = getattr(act, "key", "")
+        sec = getattr(act, "sec", 0)
+        target_name = getattr(act, "target_name", "")
+        name = getattr(act, "name", "")
+        actions = getattr(act, "actions", [])
+
+    var_dict = current_variables
+    if var_dict is None:
+        var_dict = getattr(app_state, "variables", {}) if app_state is not None else {}
 
     if atype == "click":
         if var_name:
-            v_info = var_dict.get(var_name)
-            val = v_info.value if v_info else None
-            btn_key = val.get("btn", act.btn) if isinstance(val, dict) else act.btn
+            v_info = var_dict.get(var_name) if hasattr(var_dict, "get") else None
+            val = getattr(v_info, "value", None) if v_info is not None else None
+            btn_key = val.get("btn", btn) if isinstance(val, dict) else btn
             btn_tag = "右鍵" if btn_key == "right" else "左鍵"
-            cx = val.get("x", act.x) if isinstance(val, dict) else act.x
-            cy = val.get("y", act.y) if isinstance(val, dict) else act.y
+            cx = val.get("x", x) if isinstance(val, dict) else x
+            cy = val.get("y", y) if isinstance(val, dict) else y
             body = f"[點擊·{btn_tag}] -> 變數:【{var_name}】({cx},{cy})"
         else:
-            btn_tag = "右鍵" if act.btn == "right" else "左鍵"
-            prefix = "相對:" if act.rel else "絕對:"
-            body = f"[點擊·{btn_tag}] -> {prefix}({act.x},{act.y})"
+            btn_tag = "右鍵" if btn == "right" else "左鍵"
+            prefix = "相對:" if rel else "絕對:"
+            body = f"[點擊·{btn_tag}] -> {prefix}({x},{y})"
     elif atype == "key":
         if var_name:
-            v_info = var_dict.get(var_name)
-            val = v_info.value if v_info else act.key
+            v_info = var_dict.get(var_name) if hasattr(var_dict, "get") else None
+            val = getattr(v_info, "value", None) if v_info is not None else key
             k_str = str(val).upper()
             body = f"[按鍵] -> 變數:【{var_name}】[ {k_str} ]"
         else:
-            key_str = str(act.key).upper()
+            key_str = str(key).upper()
             body = f"[按鍵] -> [ {key_str} ]"
     elif atype == "wait":
         if var_name:
-            v_info = var_dict.get(var_name)
-            val = v_info.value if v_info else act.sec
+            v_info = var_dict.get(var_name) if hasattr(var_dict, "get") else None
+            val = getattr(v_info, "value", None) if v_info is not None else sec
             body = f"[停頓] -> 變數:【{var_name}】{val} 秒"
         else:
-            body = f"[停頓] -> {act.sec} 秒"
+            body = f"[停頓] -> {sec} 秒"
     elif atype == "call_combo":
-        body = f"↻ [呼叫] -> 組合:【{act.target_name}】"
+        body = f"↻ [呼叫] -> 組合:【{target_name}】"
     elif atype == "combo":
-        c_name = act.name if act.name else "組合"
-        act_cnt = len(act.actions)
+        c_name = name if name else "組合"
+        act_cnt = len(actions) if isinstance(actions, list) else 0
         body = f"◆ [組合: {c_name}] ({act_cnt}個動作)"
     else:
         body = f"[{atype}]"

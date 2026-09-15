@@ -329,8 +329,12 @@ def check_and_run_due_periodic_tasks(
         if not pt.enabled:
             continue
 
+        if getattr(pt, "action", None) is None:
+            EventBus.emit(AppEvents.LOG_MESSAGE, "警示", f"定時任務【{getattr(pt, 'name', '未命名任務').strip() or '未命名任務'}】沒有動作，已跳過")
+            continue
+
         strategy = get_trigger_strategy(pt.trigger_mode)
-        
+
         if strategy.is_due(pt, ctx):
             if not app_state.is_running() or app_state.stop_event.is_set():
                 return False
@@ -379,18 +383,19 @@ def check_and_run_due_periodic_tasks(
     return True
 
 def _apply_hot_reload(app_state: 'state.AppState', round_idx: int, periodic_tasks_runtime: List[PeriodicTask]) -> Tuple[List[Action], List[Combo], Dict[str, Variable]]:
-    """套用熱更新，並回傳最新的 steps, combos, variables"""
+    """套用熱更新，並回傳最新的 steps, combos, variables。保護空任務、舊定時器狀態與相容性。"""
     app_state.reload_requested = False
     current_steps = state.fast_deepcopy(app_state.active_steps)
     current_combos = state.fast_deepcopy(app_state.active_combos)
     current_variables = state.fast_deepcopy(app_state.active_variables)
     latest_pts = state.fast_deepcopy(app_state.active_periodic_tasks)
 
-    # 平滑套用熱更新，保留進行中定時任務的上次執行計時與輪次
-    existing_timers = {
-        getattr(pt, "id", None): (getattr(pt, "last_run", 0.0), getattr(pt, "last_run_round", 0))
-        for pt in periodic_tasks_runtime if getattr(pt, "id", None)
-    }
+    existing_timers = {}
+    for pt in periodic_tasks_runtime:
+        pt_id = getattr(pt, "id", None)
+        if pt_id:
+            existing_timers[pt_id] = (getattr(pt, "last_run", 0.0), getattr(pt, "last_run_round", 0))
+
     new_runtime = []
     now = time.time()
     for pt in latest_pts:
@@ -400,14 +405,17 @@ def _apply_hot_reload(app_state: 'state.AppState', round_idx: int, periodic_task
             setattr(pt_copy, "last_run", existing_timers[pt_id][0])
             setattr(pt_copy, "last_run_round", existing_timers[pt_id][1])
         else:
-            setattr(pt_copy, "last_run", 0.0 if getattr(pt, "run_on_start", False) else now)
+            setattr(pt_copy, "last_run", 0.0 if getattr(pt_copy, "run_on_start", False) else now)
             setattr(pt_copy, "last_run_round", round_idx)
+        if getattr(pt_copy, "action", None) is None:
+            setattr(pt_copy, "enabled", False)
         new_runtime.append(pt_copy)
+
     periodic_tasks_runtime[:] = new_runtime
     sync_periodic_timers(app_state, periodic_tasks_runtime, current_round=round_idx)
     msg = f"第 {round_idx} 輪: 已自動套用最新流程與定時任務！"
     EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"⚡ {msg}")
-    
+
     return current_steps, current_combos, current_variables
 
 def _execute_round_steps(
@@ -572,6 +580,8 @@ def macro_worker_loop(app_state: 'state.AppState') -> None:
 
 def test_run_execution_flow_worker(app_state: 'state.AppState'):
     """一次性試跑整個掛機執行流程的背景工作函式"""
+    if app_state is None:
+        raise ValueError("test_run_execution_flow_worker requires an AppState instance")
     try:
         steps_copy = app_state.test_steps
         combos_copy = app_state.test_combos

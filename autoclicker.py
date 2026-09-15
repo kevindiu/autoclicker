@@ -134,19 +134,23 @@ class App(tk.Tk):
         self.poll_ui_queues()
 
         # EventBus Subscriptions (必須在 load_config 前註冊，確保初始載入事件能正確觸發 UI 更新)
-        EventBus.subscribe(AppEvents.VARS_CHANGED, self._on_vars_changed)
-        EventBus.subscribe(AppEvents.COMBOS_CHANGED, self._on_combos_changed)
-        EventBus.subscribe(AppEvents.COMBO_ACTIONS_CHANGED, self._on_combo_actions_changed)
-        EventBus.subscribe(AppEvents.STEPS_CHANGED, self._on_steps_changed)
-        EventBus.subscribe(AppEvents.PERIODIC_TASKS_CHANGED, self._on_periodic_tasks_changed)
-        EventBus.subscribe(AppEvents.STATUS_MESSAGE, self.set_status)
-        EventBus.subscribe(AppEvents.LOG_MESSAGE, self.append_log)
-        EventBus.subscribe(AppEvents.HIGHLIGHT_STEP, self.highlight_active_step)
-        EventBus.subscribe(AppEvents.CLEAR_HIGHLIGHT_STEP, self.clear_active_step_highlight)
-        EventBus.subscribe(AppEvents.HIGHLIGHT_PENDING_STEP, self.highlight_pending_step)
-        EventBus.subscribe(AppEvents.HIGHLIGHT_PERIODIC_TASK, self.highlight_active_periodic_task)
-        EventBus.subscribe(AppEvents.CLEAR_HIGHLIGHT_PERIODIC_TASK, self.clear_active_periodic_task_highlight)
-        EventBus.subscribe(AppEvents.MACRO_STOPPED, self._on_macro_stopped)
+        self._event_callbacks = {
+            AppEvents.VARS_CHANGED: self._on_vars_changed,
+            AppEvents.COMBOS_CHANGED: self._on_combos_changed,
+            AppEvents.COMBO_ACTIONS_CHANGED: self._on_combo_actions_changed,
+            AppEvents.STEPS_CHANGED: self._on_steps_changed,
+            AppEvents.PERIODIC_TASKS_CHANGED: self._on_periodic_tasks_changed,
+            AppEvents.STATUS_MESSAGE: self.set_status,
+            AppEvents.LOG_MESSAGE: self.append_log,
+            AppEvents.HIGHLIGHT_STEP: self.highlight_active_step,
+            AppEvents.CLEAR_HIGHLIGHT_STEP: self.clear_active_step_highlight,
+            AppEvents.HIGHLIGHT_PENDING_STEP: self.highlight_pending_step,
+            AppEvents.HIGHLIGHT_PERIODIC_TASK: self.highlight_active_periodic_task,
+            AppEvents.CLEAR_HIGHLIGHT_PERIODIC_TASK: self.clear_active_periodic_task_highlight,
+            AppEvents.MACRO_STOPPED: self._on_macro_stopped,
+        }
+        for event_type, callback in self._event_callbacks.items():
+            EventBus.subscribe(event_type, callback)
 
         self.refresh_window_dropdown()
         self.refresh_profiles()
@@ -181,7 +185,12 @@ class App(tk.Tk):
         return self.app_state.has_unsaved_changes(self.last_saved_snapshot)
 
     def _on_vars_changed(self, select_name=None):
-        if not hasattr(self, "tree_vars"):
+        try:
+            if not self.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        if not hasattr(self, "tree_vars") or not self.tree_vars.winfo_exists():
             return
         for item in self.tree_vars.get_children():
             self.tree_vars.delete(item)
@@ -228,7 +237,12 @@ class App(tk.Tk):
                 self.var_step_ref_var.set("")
 
     def _on_combos_changed(self, select_idx=None):
-        if not hasattr(self, "combo_listbox"):
+        try:
+            if not self.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        if not hasattr(self, "combo_listbox") or not self.combo_listbox.winfo_exists():
             return
         self.combo_listbox.delete(0, tk.END)
         for i, c in enumerate(self.app_state.combos):
@@ -262,7 +276,12 @@ class App(tk.Tk):
                 self.var_step_combo_to_call.set("")
 
     def _on_combo_actions_changed(self, select_idx=None):
-        if not hasattr(self, "combo_act_listbox"):
+        try:
+            if not self.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        if not hasattr(self, "combo_act_listbox") or not self.combo_act_listbox.winfo_exists():
             return
         self.combo_act_listbox.delete(0, tk.END)
         idx = self.combo_ctrl.get_selected_combo_idx()
@@ -276,7 +295,12 @@ class App(tk.Tk):
             self.combo_act_listbox.see(select_idx)
 
     def _on_steps_changed(self, select_idx=None):
-        if not hasattr(self, "step_listbox"):
+        try:
+            if not self.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        if not hasattr(self, "step_listbox") or not self.step_listbox.winfo_exists():
             return
         self.step_listbox.delete(0, tk.END)
         for i, s in enumerate(self.app_state.steps):
@@ -301,7 +325,12 @@ class App(tk.Tk):
                 lbl_empty.place_forget()
 
     def _on_periodic_tasks_changed(self, select_idx=None):
-        if not hasattr(self, "periodic_listbox"):
+        try:
+            if not self.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        if not hasattr(self, "periodic_listbox") or not self.periodic_listbox.winfo_exists():
             return
         self.periodic_listbox.delete(0, tk.END)
         for pt in self.app_state.periodic_tasks:
@@ -309,6 +338,11 @@ class App(tk.Tk):
         if select_idx is not None and 0 <= select_idx < len(self.app_state.periodic_tasks):
             self.periodic_listbox.selection_set(select_idx)
             self.periodic_listbox.see(select_idx)
+
+    def _unsubscribe_event_callbacks(self):
+        """清理 EventBus 訂閱，避免已關閉視窗的 callback 挂在全域事件總線上。"""
+        for event_type, callback in getattr(self, "_event_callbacks", {}).items():
+            EventBus.unsubscribe(event_type, callback)
 
     def on_close(self):
         """主視窗關閉事件處理 (若有未儲存之變更則提示使用者儲存)"""
@@ -329,6 +363,7 @@ class App(tk.Tk):
                         return
 
         self.is_closing = True
+        self._unsubscribe_event_callbacks()
         self.app_state.set_running(False)
         self.app_state.stop_event.set()
         emergency_release_all(self.app_state)
@@ -1086,6 +1121,7 @@ class App(tk.Tk):
     # ======================= 動作執行調度器委派 =======================
     def dispatch_action(self, act, parent_desc, current_vars=None, current_combos=None, depth=0, visited_set=None, is_test=False, round_prefix=""):
         return engine.dispatch_action(
+            self.app_state,
             act,
             parent_desc,
             current_vars=current_vars,
@@ -1139,7 +1175,7 @@ class App(tk.Tk):
             threading.Thread(target=self.macro_worker_loop, daemon=True).start()
 
     def macro_worker_loop(self):
-        engine.macro_worker_loop()
+        engine.macro_worker_loop(self.app_state)
 
 
 if __name__ == "__main__":
