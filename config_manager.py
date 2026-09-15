@@ -79,6 +79,10 @@ def save_profile_file(name: str, target_state=None, ext=CONFIG_EXT, dir_path=_DE
             "periodic_tasks": [asdict(p) for p in target_state.periodic_tasks]
         }
 
+    if any(hasattr(v, "__dict__") and not isinstance(v, (dict, list, tuple, str, int, float, bool, type(None))) for v in [data]):
+        from dataclasses import asdict
+        data = asdict(target_state) if hasattr(target_state, "__dataclass_fields__") else data
+
     try:
         with open(temp_fn, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)

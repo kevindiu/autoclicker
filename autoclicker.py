@@ -252,7 +252,7 @@ class App(tk.Tk):
             else:
                 self.var_combo_to_call.set("")
 
-        all_combos = [c["name"] for c in self.app_state.combos]
+        all_combos = [getattr(c, "name", "") for c in self.app_state.combos]
         if hasattr(self, "cbo_step_call_combo"):
             self.cbo_step_call_combo["values"] = all_combos
             if all_combos:

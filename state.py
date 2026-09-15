@@ -175,12 +175,13 @@ class AppState:
             self.reload_requested = reload_requested
 
     def to_dict(self) -> dict:
-        """將編輯器草稿資料匯出為字典"""
+        """將編輯器草稿資料匯出為可序列化字典，避免 dataclass 直接落入 JSON 序列化時失敗。"""
+        from dataclasses import asdict
         return {
-            "variables": fast_deepcopy(self.variables),
-            "combos": fast_deepcopy(self.combos),
-            "steps": fast_deepcopy(self.steps),
-            "periodic_tasks": fast_deepcopy(self.periodic_tasks),
+            "variables": {k: asdict(v) for k, v in self.variables.items()},
+            "combos": [asdict(c) for c in self.combos],
+            "steps": [asdict(s) for s in self.steps],
+            "periodic_tasks": [asdict(p) for p in self.periodic_tasks],
         }
 
     def load_dict(self, data: dict):
