@@ -384,11 +384,12 @@ def check_and_run_due_periodic_tasks(
 
 def _apply_hot_reload(app_state: 'state.AppState', round_idx: int, periodic_tasks_runtime: List[PeriodicTask]) -> Tuple[List[Action], List[Combo], Dict[str, Variable]]:
     """套用熱更新，並回傳最新的 steps, combos, variables。保護空任務、舊定時器狀態與相容性。"""
-    app_state.reload_requested = False
-    current_steps = state.fast_deepcopy(app_state.active_steps)
-    current_combos = state.fast_deepcopy(app_state.active_combos)
-    current_variables = state.fast_deepcopy(app_state.active_variables)
-    latest_pts = state.fast_deepcopy(app_state.active_periodic_tasks)
+    with app_state.steps_lock:
+        app_state.reload_requested = False
+        current_steps = state.fast_deepcopy(app_state.active_steps)
+        current_combos = state.fast_deepcopy(app_state.active_combos)
+        current_variables = state.fast_deepcopy(app_state.active_variables)
+        latest_pts = state.fast_deepcopy(app_state.active_periodic_tasks)
 
     existing_timers = {}
     for pt in periodic_tasks_runtime:
@@ -577,6 +578,43 @@ def macro_worker_loop(app_state: 'state.AppState') -> None:
         completed = round_idx - 1 if round_idx > 1 else (1 if round_idx == 1 and not app_state.stop_event.is_set() else 0)
         EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"⏹ 巨集循環結束 (累計運行 {completed} 輪)")
         EventBus.emit(AppEvents.MACRO_STOPPED)
+
+def start_macro_run(app_state: 'state.AppState', current_steps=None, current_combos=None, current_variables=None, round_idx=1):
+    """將執行啟動邏輯抽離到 engine 層，讓 App 只負責調度 UI 事件與啟動線程。"""
+    if app_state is None:
+        raise ValueError("start_macro_run requires an AppState instance")
+
+    if current_steps is None:
+        with app_state.steps_lock:
+            current_steps = state.fast_deepcopy(app_state.active_steps)
+    if current_combos is None:
+        with app_state.steps_lock:
+            current_combos = state.fast_deepcopy(app_state.active_combos)
+    if current_variables is None:
+        with app_state.steps_lock:
+            current_variables = state.fast_deepcopy(app_state.active_variables)
+
+    app_state.stop_event.clear()
+    app_state.set_running(True)
+    return {
+        "steps": current_steps,
+        "combos": current_combos,
+        "variables": current_variables,
+        "round_idx": round_idx,
+    }
+
+
+def stop_macro_run(app_state: 'state.AppState', reason: str = "manual"):
+    """將停止邏輯抽離到 engine 層，統一處理 stop_event 與清理的執行序列。"""
+    if app_state is None:
+        raise ValueError("stop_macro_run requires an AppState instance")
+
+    app_state.set_running(False)
+    app_state.stop_event.set()
+    emergency_release_all(app_state)
+    EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"⏹ 巨集已{reason}")
+    return True
+
 
 def test_run_execution_flow_worker(app_state: 'state.AppState'):
     """一次性試跑整個掛機執行流程的背景工作函式"""

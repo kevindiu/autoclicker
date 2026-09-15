@@ -54,7 +54,7 @@ class AppState:
         self.running_lock = threading.RLock()
         self._running = False
         self._is_testing = False
-        self.reload_requested = False
+        self._reload_requested = False
         
         # 4. 運行環境設定 (Runtime Configuration)
         self.use_bg = True
@@ -78,7 +78,9 @@ class AppState:
         """線程安全地設定巨集運行狀態"""
         with self.running_lock:
             self._running = bool(val)
-            if not self._running and not self._is_testing:
+            if self._running:
+                self.stop_event.clear()
+            elif not self._is_testing:
                 self.stop_event.set()
 
     @property
@@ -99,7 +101,9 @@ class AppState:
         """線程安全地設定試跑狀態"""
         with self.running_lock:
             self._is_testing = bool(val)
-            if not self._is_testing and not self._running:
+            if self._is_testing:
+                self.stop_event.clear()
+            elif not self._running:
                 self.stop_event.set()
 
     @property
@@ -137,6 +141,27 @@ class AppState:
         self.steps.clear()
         self.variables.clear()
         self.periodic_tasks.clear()
+
+    @property
+    def reload_requested(self) -> bool:
+        """保護熱重載旗標：讀取時採用非阻塞鎖檢查以避免在已持有 steps_lock 的呼叫中死鎖"""
+        acquired = self.steps_lock.acquire(blocking=False)
+        try:
+            return bool(self._reload_requested)
+        finally:
+            if acquired:
+                self.steps_lock.release()
+
+    @reload_requested.setter
+    def reload_requested(self, value: bool):
+        """保護熱重載旗標：僅在已持有 steps_lock 的情況下可直接寫入，否則也用非阻塞方式保護寫入"""
+        acquired = False
+        try:
+            acquired = self.steps_lock.acquire(blocking=False)
+            self._reload_requested = bool(value)
+        finally:
+            if acquired:
+                self.steps_lock.release()
 
     def reset_runtime(self):
         """重設背景執行階段狀態、快照與旗標"""

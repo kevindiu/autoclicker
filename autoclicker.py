@@ -1153,7 +1153,7 @@ class App(tk.Tk):
         if is_active:
             self.app_state.stop_event.set()
             try:
-                emergency_release_all(self.app_state)
+                engine.stop_macro_run(self.app_state, reason="手動停止")
             except Exception as e:
                 self.append_log("系統", f"釋放按鍵例外: {e}")
             self.set_running_ui(False)
@@ -1165,8 +1165,7 @@ class App(tk.Tk):
             if not self.app_state.steps and not has_enabled_periodic:
                 return self.set_status("掛機流程清單與定時任務均為空，請先加入步驟或定時任務！")
             self.app_state.snapshot_active(reload_requested=False)
-            self.app_state.stop_event.clear()
-            self.app_state.set_running(True)
+            engine.start_macro_run(self.app_state)
             self.set_running_ui(True)
             self.set_status("循環運作中...")
             win_title = self.var_window.get() if hasattr(self, "var_window") else ""

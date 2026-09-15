@@ -115,15 +115,28 @@ def load_profile_file(name: str, target_state=None, ext=CONFIG_EXT, dir_path=_DE
     target_state.variables.update({k: Variable.from_dict(v) for k, v in (data.get("variables") or {}).items()})
 
     target_state.combos.clear()
-    target_state.combos.extend([Combo.from_dict(c) for c in (data.get("combos") or [])])
+    target_state.combos.extend([Combo.from_dict(c) for c in (data.get("combos") or []) if isinstance(c, dict)])
 
     target_state.steps.clear()
-    target_state.steps.extend([Action.from_dict(s) for s in (data.get("steps") or []) if s])
+    target_state.steps.extend([Action.from_dict(s) for s in (data.get("steps") or []) if isinstance(s, dict)])
 
     target_state.periodic_tasks.clear()
-    for p_idx, pt in enumerate(data.get("periodic_tasks") or []):
+    periodic_tasks_raw = data.get("periodic_tasks") or []
+    if not isinstance(periodic_tasks_raw, list):
+        periodic_tasks_raw = []
+
+    for p_idx, pt in enumerate(periodic_tasks_raw):
+        if not isinstance(pt, dict):
+            continue
+        pt = dict(pt)
         if not pt.get("id"):
             pt["id"] = f"pt_{int(time.time()*1000)}_{p_idx}_{uuid.uuid4().hex[:6]}"
+        if not pt.get("name"):
+            pt["name"] = f"定時任務_{p_idx + 1}"
+        if not isinstance(pt.get("interval", 1.0), (int, float)):
+            pt["interval"] = 1.0
+        if not isinstance(pt.get("round_interval", 1), int):
+            pt["round_interval"] = 1
         target_state.periodic_tasks.append(PeriodicTask.from_dict(pt))
 
     return data
