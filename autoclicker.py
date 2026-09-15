@@ -1148,5 +1148,13 @@ if __name__ == "__main__":
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("sh.autoclicker.app.1.0")
         except (AttributeError, OSError):
             pass
-    app = App()
-    app.mainloop()
+
+    try:
+        app = App()
+        app.mainloop()
+    except tk.TclError as e:
+        if "no display name" in str(e) or "DISPLAY" in str(e):
+            print("Autoclicker requires a graphical display. This environment has no DISPLAY available.", file=sys.stderr)
+            print("Run it on a desktop session (Windows/macOS/Linux with X11) or provide a virtual display.", file=sys.stderr)
+            sys.exit(1)
+        raise

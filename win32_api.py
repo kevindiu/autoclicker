@@ -88,65 +88,85 @@ HWND_NOTOPMOST   = ctypes.c_void_p(-2)
 
 POINT = wintypes.POINT
 
-for fn in (lambda: ctypes.windll.shcore.SetProcessDpiAwareness(2), lambda: ctypes.windll.user32.SetProcessDPIAware()):
-    try: fn(); break
-    except (AttributeError, OSError): pass
+user32 = None
+WNDENUMPROC = None
+windll = getattr(ctypes, "windll", None)
 
-    user32 = ctypes.windll.user32
-    user32.ScreenToClient.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
-    user32.ScreenToClient.restype = wintypes.BOOL
-    user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
-    user32.ClientToScreen.restype = wintypes.BOOL
-    user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-    user32.PostMessageW.restype = wintypes.BOOL
-    user32.FlashWindow.argtypes = [wintypes.HWND, wintypes.BOOL]
-    user32.FlashWindow.restype = wintypes.BOOL
-    user32.SetForegroundWindow.argtypes = [wintypes.HWND]
-    user32.SetForegroundWindow.restype = wintypes.BOOL
-    user32.GetForegroundWindow.argtypes = []
-    user32.GetForegroundWindow.restype = wintypes.HWND
-    user32.FindWindowW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
-    user32.FindWindowW.restype = wintypes.HWND
-    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
-    user32.ShowWindow.restype = wintypes.BOOL
-    user32.BringWindowToTop.argtypes = [wintypes.HWND]
-    user32.BringWindowToTop.restype = wintypes.BOOL
-    user32.SetWindowPos.argtypes = [wintypes.HWND, ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
-    user32.SetWindowPos.restype = wintypes.BOOL
-    user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ctypes.c_size_t]
-    user32.GetAsyncKeyState.argtypes = [ctypes.c_int]
-    user32.GetAsyncKeyState.restype = ctypes.c_short
-    user32.IsWindowVisible.argtypes = [wintypes.HWND]
-    user32.IsWindowVisible.restype = wintypes.BOOL
-    user32.IsWindow.argtypes = [wintypes.HWND]
-    user32.IsWindow.restype = wintypes.BOOL
-    user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
-    user32.GetWindowTextLengthW.restype = ctypes.c_int
-    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-    user32.GetWindowTextW.restype = ctypes.c_int
-    user32.MapVirtualKeyW.argtypes = [wintypes.UINT, wintypes.UINT]
-    user32.MapVirtualKeyW.restype = wintypes.UINT
-    user32.VkKeyScanW.argtypes = [wintypes.WCHAR]
-    user32.VkKeyScanW.restype = ctypes.c_short
-    WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-    user32.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
-    user32.EnumWindows.restype = wintypes.BOOL
-    user32.GetCursorPos.argtypes = [ctypes.POINTER(POINT)]
-    user32.GetCursorPos.restype = wintypes.BOOL
-
+if windll is not None:
     try:
-        ctypes.windll.winmm.timeBeginPeriod(1)
-        import atexit
-        def cleanup_win32():
-            try: ctypes.windll.winmm.timeEndPeriod(1)
-            except Exception as e:
-                EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"清理 Win32 API 失敗: {e}")
-        atexit.register(cleanup_win32)
+        shcore = getattr(windll, "shcore", None)
+        if shcore is not None:
+            shcore.SetProcessDpiAwareness(2)
     except (AttributeError, OSError):
         pass
-else:
-    user32 = None
-    WNDENUMPROC = None
+
+    try:
+        user32 = getattr(windll, "user32", None)
+        if user32 is not None:
+            user32.SetProcessDPIAware()
+    except (AttributeError, OSError):
+        pass
+
+    if user32 is not None:
+        try:
+            user32.ScreenToClient.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
+            user32.ScreenToClient.restype = wintypes.BOOL
+            user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(POINT)]
+            user32.ClientToScreen.restype = wintypes.BOOL
+            user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+            user32.PostMessageW.restype = wintypes.BOOL
+            user32.FlashWindow.argtypes = [wintypes.HWND, wintypes.BOOL]
+            user32.FlashWindow.restype = wintypes.BOOL
+            user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+            user32.SetForegroundWindow.restype = wintypes.BOOL
+            user32.GetForegroundWindow.argtypes = []
+            user32.GetForegroundWindow.restype = wintypes.HWND
+            user32.FindWindowW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
+            user32.FindWindowW.restype = wintypes.HWND
+            user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+            user32.ShowWindow.restype = wintypes.BOOL
+            user32.BringWindowToTop.argtypes = [wintypes.HWND]
+            user32.BringWindowToTop.restype = wintypes.BOOL
+            user32.SetWindowPos.argtypes = [wintypes.HWND, ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
+            user32.SetWindowPos.restype = wintypes.BOOL
+            user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ctypes.c_size_t]
+            user32.GetAsyncKeyState.argtypes = [ctypes.c_int]
+            user32.GetAsyncKeyState.restype = ctypes.c_short
+            user32.IsWindowVisible.argtypes = [wintypes.HWND]
+            user32.IsWindowVisible.restype = wintypes.BOOL
+            user32.IsWindow.argtypes = [wintypes.HWND]
+            user32.IsWindow.restype = wintypes.BOOL
+            user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+            user32.GetWindowTextLengthW.restype = ctypes.c_int
+            user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+            user32.GetWindowTextW.restype = ctypes.c_int
+            user32.MapVirtualKeyW.argtypes = [wintypes.UINT, wintypes.UINT]
+            user32.MapVirtualKeyW.restype = wintypes.UINT
+            user32.VkKeyScanW.argtypes = [wintypes.WCHAR]
+            user32.VkKeyScanW.restype = ctypes.c_short
+            WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+            user32.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
+            user32.EnumWindows.restype = wintypes.BOOL
+            user32.GetCursorPos.argtypes = [ctypes.POINTER(POINT)]
+            user32.GetCursorPos.restype = wintypes.BOOL
+        except (AttributeError, OSError):
+            user32 = None
+            WNDENUMPROC = None
+
+    if user32 is not None:
+        try:
+            winmm = getattr(windll, "winmm", None)
+            if winmm is not None:
+                winmm.timeBeginPeriod(1)
+                import atexit
+                def cleanup_win32():
+                    try:
+                        winmm.timeEndPeriod(1)
+                    except Exception as e:
+                        EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"清理 Win32 API 失敗: {e}")
+                atexit.register(cleanup_win32)
+        except (AttributeError, OSError):
+            pass
 
 def get_cursor_pos() -> Tuple[int, int]:
     if user32:
