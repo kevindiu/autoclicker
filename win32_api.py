@@ -328,26 +328,28 @@ def post_bg_key(app_state, hwnd: Any, key_str: str) -> None:
         if vk is None and key_str.isalnum():
             vk = ord(key_str.upper())
 
-    if vk is not None:
-        scan_code = 0
+    if vk is None:
+        raise ValueError(f"不支援的按鍵名稱: {key_str}")
+
+    scan_code = 0
+    try:
+        scan_code = user32.MapVirtualKeyW(vk, 0)
+    except OSError as e:
+        EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"Win32 API 例外 (MapVirtualKeyW): {e}")
+    lparam_down = to_lparam(1 | (scan_code << 16))
+    lparam_up = to_lparam(1 | (scan_code << 16) | KEY_RELEASE_LPARAM_MASK)
+    with app_state.currently_held_keys_lock:
+        app_state.currently_held_keys.add(("bg", hwnd, vk))
+    try:
+        user32.PostMessageW(hwnd, WM_KEYDOWN, vk, lparam_down)
+        safe_sleep(app_state, 0.06)
+    finally:
         try:
-            scan_code = user32.MapVirtualKeyW(vk, 0)
-        except OSError as e:
-            EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"Win32 API 例外 (MapVirtualKeyW): {e}")
-        lparam_down = to_lparam(1 | (scan_code << 16))
-        lparam_up = to_lparam(1 | (scan_code << 16) | KEY_RELEASE_LPARAM_MASK)
+            user32.PostMessageW(hwnd, WM_KEYUP, vk, lparam_up)
+        except (OSError, ctypes.ArgumentError) as e:
+            EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"Win32 API 例外 (KeyUp): {e}")
         with app_state.currently_held_keys_lock:
-            app_state.currently_held_keys.add(("bg", hwnd, vk))
-        try:
-            user32.PostMessageW(hwnd, WM_KEYDOWN, vk, lparam_down)
-            safe_sleep(app_state, 0.06)
-        finally:
-            try:
-                user32.PostMessageW(hwnd, WM_KEYUP, vk, lparam_up)
-            except (OSError, ctypes.ArgumentError) as e:
-                EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"Win32 API 例外 (KeyUp): {e}")
-            with app_state.currently_held_keys_lock:
-                app_state.currently_held_keys.discard(("bg", hwnd, vk))
+            app_state.currently_held_keys.discard(("bg", hwnd, vk))
 
 def execute_click(app_state, x: int, y: int, is_rel: bool, use_bg: bool, off_x: int, off_y: int, btn: str = "left", target_hwnd: Optional[Any] = None) -> str:
     """統一派發前台或背景點擊 (保證後台與前台模式均精準套用偏差校正)"""

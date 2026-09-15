@@ -2,6 +2,20 @@ from dataclasses import dataclass, field, asdict
 from typing import List, Dict, Any, Optional
 
 
+def _safe_int(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_float(value, default=0.0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 class MappingCompatMixin:
     """Compatibility shim so dataclass instances can be used like dicts in mixed code paths."""
 
@@ -101,8 +115,8 @@ class Variable(MappingCompatMixin):
         if v_type == "coord":
             if isinstance(raw_val, dict):
                 value = {
-                    "x": int(raw_val.get("x", 0)),
-                    "y": int(raw_val.get("y", 0)),
+                    "x": _safe_int(raw_val.get("x", 0)),
+                    "y": _safe_int(raw_val.get("y", 0)),
                     "btn": str(raw_val.get("btn", "left")),
                     "rel": bool(raw_val.get("rel", True))
                 }
@@ -135,8 +149,8 @@ class Action(MappingCompatMixin):
         handlers = {
             "click": lambda d: ClickAction(
                 var_name=var_name,
-                x=int(d.get("x", 0)),
-                y=int(d.get("y", 0)),
+                x=_safe_int(d.get("x", 0)),
+                y=_safe_int(d.get("y", 0)),
                 btn=d.get("btn", "left"),
                 rel=bool(d.get("rel", True))
             ),
@@ -146,7 +160,7 @@ class Action(MappingCompatMixin):
             ),
             "wait": lambda d: WaitAction(
                 var_name=var_name,
-                sec=float(d.get("sec", 0.0))
+                sec=_safe_float(d.get("sec", 0.0))
             ),
             "call_combo": lambda d: CallComboAction(
                 var_name=var_name,
@@ -222,8 +236,8 @@ class PeriodicTask(MappingCompatMixin):
             id=str(data.get("id", "")),
             name=str(data.get("name", "")),
             trigger_mode=str(data.get("trigger_mode", "interval")),
-            interval=float(data.get("interval", 1.0)),
-            round_interval=int(data.get("round_interval", 1)),
+            interval=_safe_float(data.get("interval", 1.0), default=1.0),
+            round_interval=_safe_int(data.get("round_interval", 1), default=1),
             enabled=bool(data.get("enabled", True)),
             run_on_start=bool(data.get("run_on_start", False)),
             action=Action.from_dict(data.get("action", {})) if data.get("action") else None

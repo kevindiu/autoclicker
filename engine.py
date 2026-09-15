@@ -516,12 +516,11 @@ class RuntimeManager:
     def reload_if_needed(self):
         if not self.app_state.reload_requested:
             return False
-        with self.app_state.steps_lock:
-            self.current_steps, self.current_combos, self.current_variables = _apply_hot_reload(
-                self.app_state,
-                self.round_idx,
-                self.periodic_tasks_runtime,
-            )
+        self.current_steps, self.current_combos, self.current_variables = _apply_hot_reload(
+            self.app_state,
+            self.round_idx,
+            self.periodic_tasks_runtime,
+        )
         return True
 
     def run_cycle(self):

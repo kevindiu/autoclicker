@@ -155,8 +155,8 @@ def prompt_variable_dialog(app, edit_name=None):
     f_val_box.pack(fill="x", pady=(0, 10))
 
     if orig_type == "coord" and isinstance(orig_val, dict):
-        init_x = str(orig_val.x)
-        init_y = str(orig_val.y)
+        init_x = str(orig_val.get("x", 0))
+        init_y = str(orig_val.get("y", 0))
         init_btn = "右鍵" if orig_val.get("btn") == "right" else "左鍵"
         init_rel = orig_val.get("rel", True)
     else:
@@ -506,8 +506,8 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
             if chosen in app.app_state.variables:
                 v_val = app.app_state.variables[chosen].get("value", {})
                 if isinstance(v_val, dict):
-                    var_x.set(str(v_val.x))
-                    var_y.set(str(v_val.y))
+                    var_x.set(str(v_val.get("x", 0)))
+                    var_y.set(str(v_val.get("y", 0)))
                     if "btn" in v_val:
                         var_btn.set("右鍵" if v_val.get("btn") == "right" else "左鍵")
                     if "rel" in v_val:
@@ -778,7 +778,7 @@ def prompt_edit_periodic_task(app, task=None):
 
     # 各類型對應變數
     combos_list = [c["name"] for c in app.app_state.combos]
-    var_combo = tk.StringVar(value=act.target_name or (combos_list[0] if combos_list else ""))
+    var_combo = tk.StringVar(value=getattr(act, "target_name", "") or (combos_list[0] if combos_list else ""))
 
     vars_list = list(app.app_state.variables.keys())
     var_var_name = tk.StringVar(value=act_var or (vars_list[0] if vars_list else ""))
@@ -900,9 +900,9 @@ def prompt_edit_periodic_task(app, task=None):
             v_type = v_info.get("type", "key")
             v_val = v_info.get("value", {})
             if v_type == "coord":
-                btn = v_val.btn if isinstance(v_val, dict) else "left"
-                x = v_val.x if isinstance(v_val, dict) else 0
-                y = v_val.y if isinstance(v_val, dict) else 0
+                btn = v_val.get("btn", "left") if isinstance(v_val, dict) else "left"
+                x = v_val.get("x", 0) if isinstance(v_val, dict) else 0
+                y = v_val.get("y", 0) if isinstance(v_val, dict) else 0
                 rel = v_val.get("rel", True) if isinstance(v_val, dict) else True
                 return ClickAction(x=x, y=y, btn=btn, rel=rel, var_name=v_name)
             elif v_type == "wait":

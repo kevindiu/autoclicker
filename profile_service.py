@@ -11,6 +11,9 @@ class ProfileService:
     def __init__(self, app):
         self.app = app
 
+    def _profile_path(self, name):
+        return os.path.join(config_manager._DEFAULT_DIR, f"{name}{CONFIG_EXT}")
+
     def get_profile_files(self):
         return config_manager.get_profile_files(CONFIG_EXT)
 
@@ -35,7 +38,7 @@ class ProfileService:
         if not name or not name.strip():
             return
         name = name.strip()
-        fn = f"{name}{CONFIG_EXT}"
+        fn = self._profile_path(name)
         if os.path.exists(fn):
             if not messagebox.askyesno("檔案覆蓋確認", f"設定檔「{name}」已存在！\n請問是否確認覆蓋原有設定？", parent=self.app):
                 return
@@ -52,7 +55,7 @@ class ProfileService:
         name = self.app.var_profile_name.get().strip()
         if not name:
             return self.app.set_status("請先選擇或新建設定檔")
-        fn = f"{name}{CONFIG_EXT}"
+        fn = self._profile_path(name)
         if os.path.exists(fn):
             if not messagebox.askyesno("檔案覆蓋確認", f"請問是否確認覆蓋「{name}」的原有設定？", parent=self.app):
                 return self.app.set_status("已取消儲存")
@@ -71,7 +74,7 @@ class ProfileService:
         name = self.app.var_profile_name.get().strip()
         if not name:
             return
-        fn = f"{name}{CONFIG_EXT}"
+        fn = self._profile_path(name)
         if not os.path.exists(fn):
             return self.app.set_status(f"找不到檔案：{fn}")
         try:

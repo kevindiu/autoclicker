@@ -19,6 +19,13 @@ if getattr(sys, "frozen", False):
 else:
     _DEFAULT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+
+    def _safe_int(value, default=0):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
 def sanitize_profile_name(name: str) -> str:
     """過濾 Windows 與常見作業系統之非法檔名字元"""
     s = name.strip()
@@ -130,8 +137,8 @@ def validate_profile_data(data: dict) -> dict:
             normalized["variables"][name] = {
                 "type": "coord",
                 "value": {
-                    "x": int(value.get("x", 0)),
-                    "y": int(value.get("y", 0)),
+                    "x": _safe_int(value.get("x", 0)),
+                    "y": _safe_int(value.get("y", 0)),
                     "btn": str(value.get("btn", "left")),
                     "rel": bool(value.get("rel", True)),
                 },

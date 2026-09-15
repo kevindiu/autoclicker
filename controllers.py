@@ -175,9 +175,9 @@ class VarController(BaseController):
         v_val = v_info.value
 
         if v_type == "coord":
-            px = v_val.x if isinstance(v_val, dict) else 0
-            py = v_val.y if isinstance(v_val, dict) else 0
-            btn = v_val.btn if isinstance(v_val, dict) else "left"
+            px = v_val.get("x", 0) if isinstance(v_val, dict) else 0
+            py = v_val.get("y", 0) if isinstance(v_val, dict) else 0
+            btn = v_val.get("btn", "left") if isinstance(v_val, dict) else "left"
             btn_cn = "右鍵" if btn == "right" else "左鍵"
             new_act = {
                 "type": "click",
@@ -719,6 +719,8 @@ class PeriodicTaskController(BaseController):
         pt = self.app.app_state.periodic_tasks[idx]
         t_name = pt.name
         act = pt.action
+        if act is None:
+            return EventBus.emit(AppEvents.STATUS_MESSAGE, f"定時任務【{t_name}】沒有可試跑的動作！")
 
         def _do_test_pt():
             try:
