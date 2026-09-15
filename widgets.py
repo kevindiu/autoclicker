@@ -241,14 +241,14 @@ class PeriodicTaskCardView(tk.Frame):
         self._create_card(idx, task)
 
     def _create_card(self, idx, task):
-        task_id = task.get("id") or f"pt_idx_{idx}"
+        task_id = task.id or f"pt_idx_{idx}"
         task["id"] = task_id
-        enabled = task.get("enabled", True)
-        trigger_mode = task.get("trigger_mode", "interval")
+        enabled = task.enabled
+        trigger_mode = task.trigger_mode
 
         if trigger_mode == "round":
             try:
-                r_int = int(task.get("round_interval", 1))
+                r_int = int(task.round_interval)
             except (ValueError, TypeError):
                 r_int = 1
             if r_int < 1:
@@ -257,7 +257,7 @@ class PeriodicTaskCardView(tk.Frame):
             badge_bg = UITheme.BADGE_PURPLE_BG
             badge_fg = UITheme.BADGE_PURPLE_FG
         else:
-            interval = task.get("interval", 1.0)
+            interval = task.interval
             try:
                 f_sec = float(interval)
                 sec_str = f"{int(f_sec)}s" if f_sec.is_integer() else f"{f_sec}s"
@@ -267,13 +267,13 @@ class PeriodicTaskCardView(tk.Frame):
             badge_bg = UITheme.BADGE_CYAN_BG
             badge_fg = UITheme.BADGE_CYAN_FG
 
-        name = task.get("name", "").strip()
-        run_on_start = task.get("run_on_start", False)
-        act = task.get("action", {})
+        name = task.name.strip()
+        run_on_start = task.run_on_start
+        act = task.action
 
         # 格式化動作描述
-        var_name = act.get("var_name")
-        atype = act.get("type", "")
+        var_name = act.var_name
+        atype = act.type
         if var_name:
             act_text = f"↳ 變數:【{var_name}】"
         elif atype == "call_combo":
@@ -282,7 +282,7 @@ class PeriodicTaskCardView(tk.Frame):
             act_text = f"↳ 按鍵: [ {str(act.get('key', '')).upper()} ]"
         elif atype == "click":
             btn_tag = "右鍵" if act.get("btn") == "right" else "左鍵"
-            prefix = "相對" if act.get("rel") else "絕對"
+            prefix = "相對" if act.rel else "絕對"
             act_text = f"↳ 點擊: {btn_tag}·{prefix}({act.get('x', 0)}, {act.get('y', 0)})"
         elif atype == "wait":
             act_text = f"↳ 停頓: {act.get('sec', 0)} 秒"
@@ -577,18 +577,18 @@ class PeriodicTaskCardView(tk.Frame):
 
         is_running = state.is_running()
         for idx, c in enumerate(self.card_widgets):
-            task_id = c.get("id") or f"pt_idx_{idx}"
+            task_id = c.id or f"pt_idx_{idx}"
             task = c.get("task", {})
-            trigger_mode = task.get("trigger_mode", "interval")
+            trigger_mode = task.trigger_mode
             lbl_int = c.get("lbl_int")
             if not lbl_int or not lbl_int.winfo_exists():
                 continue
 
-            enabled = c.get("enabled", True)
+            enabled = c.enabled
 
             if trigger_mode == "round":
                 try:
-                    r_int = int(task.get("round_interval", 1))
+                    r_int = int(task.round_interval)
                 except (ValueError, TypeError):
                     r_int = 1
                 if r_int < 1:
@@ -624,7 +624,7 @@ class PeriodicTaskCardView(tk.Frame):
                     lbl_int.config(text=target_text, bg=target_bg, fg=target_fg)
 
             else:
-                interval = task.get("interval", 1.0)
+                interval = task.interval
                 try:
                     f_sec = float(interval)
                     sec_str = f"{int(f_sec)}s" if f_sec.is_integer() else f"{f_sec}s"

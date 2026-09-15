@@ -1,18 +1,22 @@
 import copy
 import time
-from typing import Optional, Set, Dict, List, Tuple
+import traceback
+from typing import Dict, List, Any, Optional, Set, Tuple
+from contextlib import contextmanager
 
 import constants
+from models import Variable, Action, Combo, PeriodicTask, ClickAction, KeyAction, WaitAction, CallComboAction, ComboAction
 import state
 from events import EventBus, AppEvents
-from state import ActionDict, ComboDict, VariableDict
+
 from win32_api import (
     execute_click,
     post_bg_key,
     safe_sleep,
     emergency_release_all,
     force_bring_window_to_front,
-    is_window_alive
+    is_window_alive,
+    _get_pyautogui
 )
 
 # ==============================================================================
@@ -20,7 +24,10 @@ from win32_api import (
 # ==============================================================================
 
 class ExecutionContext:
-    def __init__(self, app_state, current_vars, current_combos, depth, visited_set, is_test, round_prefix, use_bg, off_x, off_y, log_tag):
+    """封裝動作執行期間的所有狀態與依賴，減少參數傳遞數量並方便單元測試 mock"""
+    def __init__(self, app_state: 'state.AppState', current_vars: Dict[str, Variable], current_combos: List[Combo],
+                 depth: int, visited_set: Set[str], is_test: bool, round_prefix: str,
+                 use_bg: bool, off_x: int, off_y: int, log_tag: str):
         self.app_state = app_state
         self.current_vars = current_vars
         self.current_combos = current_combos
@@ -34,20 +41,20 @@ class ExecutionContext:
         self.log_tag = log_tag
 
 class ActionStrategy:
-    def execute(self, act: ActionDict, ctx: ExecutionContext, parent_desc: str, var_name: str, v_data: Optional[Dict]) -> bool:
+    def execute(self, act: Action, ctx: ExecutionContext, parent_desc: str, var_name: str, v_data: Optional[Variable]) -> bool:
         raise NotImplementedError
 
 class ClickActionStrategy(ActionStrategy):
-    def execute(self, act, ctx, parent_desc, var_name, v_data):
+    def execute(self, act: Action, ctx: ExecutionContext, parent_desc: str, var_name: str, v_data: Optional[Variable]) -> bool:
         try:
-            x = int(act.get("x", 0))
-            y = int(act.get("y", 0))
+            x = int(act.x)
+            y = int(act.y)
         except (ValueError, TypeError):
             x, y = 0, 0
-        btn = act.get("btn", "left")
-        is_rel = act.get("rel")
-        if v_data and v_data.get("type") == "coord":
-            val = v_data.get("value", {})
+        btn = act.btn
+        is_rel = act.rel
+        if v_data and v_data.type == "coord":
+            val = v_data.value
             if isinstance(val, dict):
                 try:
                     x = int(val.get("x", x))
@@ -59,33 +66,31 @@ class ClickActionStrategy(ActionStrategy):
                     is_rel = val.get("rel")
         if is_rel is None:
             is_rel = True if ctx.app_state.target_hwnd else False
-        msg = execute_click(app_state, x, y, is_rel, ctx.use_bg, ctx.off_x, ctx.off_y, btn=btn)
+        msg = execute_click(ctx.app_state, x, y, is_rel, ctx.use_bg, ctx.off_x, ctx.off_y, btn=btn)
         var_info = f"【{var_name}】" if var_name else ""
         log_txt = f"{ctx.round_prefix}{parent_desc} {var_info}{msg}"
         EventBus.emit(AppEvents.LOG_MESSAGE, ctx.log_tag, log_txt)
-        if not safe_sleep(app_state, constants.SLEEP_CLICK, ctx.app_state.stop_event):
+        if not safe_sleep(ctx.app_state, constants.SLEEP_CLICK, ctx.app_state.stop_event):
             return False
         return True
 
 class KeyActionStrategy(ActionStrategy):
-    def execute(self, act, ctx, parent_desc, var_name, v_data):
-        key = str(act.get("key", "f1"))
-        if v_data and v_data.get("type") == "key":
-            key = str(v_data.get("value", key))
+    def execute(self, act: Action, ctx: ExecutionContext, parent_desc: str, var_name: str, v_data: Optional[Variable]) -> bool:
+        key = str(act.key)
+        if v_data and v_data.type == "key":
+            key = str(v_data.value)
         if ctx.use_bg:
-            post_bg_key(app_state, ctx.app_state.target_hwnd, key)
+            post_bg_key(ctx.app_state, ctx.app_state.target_hwnd, key)
         else:
             with ctx.app_state.currently_held_keys_lock:
                 ctx.app_state.currently_held_keys.add(("fg", key))
             try:
-                import pyautogui
-                pyautogui.keyDown(key)
-                if not safe_sleep(app_state, constants.SLEEP_KEY_FG, ctx.app_state.stop_event):
+                _get_pyautogui().keyDown(key)
+                if not safe_sleep(ctx.app_state, constants.SLEEP_KEY_FG, ctx.app_state.stop_event):
                     return False
             finally:
                 try:
-                    import pyautogui
-                    pyautogui.keyUp(key)
+                    _get_pyautogui().keyUp(key)
                 except Exception as e:
                     EventBus.emit(AppEvents.LOG_MESSAGE, "警示", f"釋放前台按鍵 [{key}] 失敗: {e}")
                 with ctx.app_state.currently_held_keys_lock:
@@ -93,31 +98,31 @@ class KeyActionStrategy(ActionStrategy):
         var_info = f"【{var_name}】" if var_name else ""
         mode_tag = " (後台)" if ctx.use_bg else " (前台)"
         EventBus.emit(AppEvents.LOG_MESSAGE, ctx.log_tag, f"{ctx.round_prefix}{parent_desc} {var_info}按鍵 [{key.upper()}]{mode_tag}")
-        if not safe_sleep(app_state, constants.SLEEP_KEY_AFTER, ctx.app_state.stop_event):
+        if not safe_sleep(ctx.app_state, constants.SLEEP_KEY_AFTER, ctx.app_state.stop_event):
             return False
         return True
 
 class WaitActionStrategy(ActionStrategy):
-    def execute(self, act, ctx, parent_desc, var_name, v_data):
+    def execute(self, act: Action, ctx: ExecutionContext, parent_desc: str, var_name: str, v_data: Optional[Variable]) -> bool:
         try:
-            sec = float(act.get("sec", 0.5))
+            sec = float(act.sec)
         except (ValueError, TypeError):
             sec = 0.5
-        if v_data and v_data.get("type") == "wait":
+        if v_data and v_data.type == "wait":
             try:
-                sec = float(v_data.get("value", sec))
+                sec = float(v_data.value)
             except (ValueError, TypeError):
                 EventBus.emit(AppEvents.LOG_MESSAGE, "警示", f"變數【{var_name}】等待秒數數值格式無效，使用預設值 {sec}s")
         var_info = f"【{var_name}】" if var_name else ""
         log_txt = f"{ctx.round_prefix}{parent_desc} {var_info}等待 {sec}s"
         EventBus.emit(AppEvents.LOG_MESSAGE, ctx.log_tag, log_txt)
-        if not safe_sleep(app_state, sec, ctx.app_state.stop_event):
+        if not safe_sleep(ctx.app_state, sec, ctx.app_state.stop_event):
             return False
         return True
 
 class CallComboActionStrategy(ActionStrategy):
-    def execute(self, act, ctx, parent_desc, var_name, v_data):
-        tgt_name = act.get("target_name")
+    def execute(self, act: Action, ctx: ExecutionContext, parent_desc: str, var_name: str, v_data: Optional[Variable]) -> bool:
+        tgt_name = act.target_name
         if not tgt_name:
             return True
         if ctx.depth >= constants.MAX_COMBO_DEPTH:
@@ -129,13 +134,13 @@ class CallComboActionStrategy(ActionStrategy):
             EventBus.emit(AppEvents.LOG_MESSAGE, "警示", warn_msg)
             return True
 
-        tgt_combo = next((c for c in ctx.current_combos if c["name"] == tgt_name), None)
+        tgt_combo = next((c for c in ctx.current_combos if c.name == tgt_name), None)
         if tgt_combo:
             new_visited = ctx.visited_set | {tgt_name}
-            sub_actions = tgt_combo.get("actions", [])
+            sub_actions = tgt_combo.actions
             sub_total = len(sub_actions)
             for sub_idx, sub_act in enumerate(sub_actions):
-                if not ctx.is_test and (not app_state.is_running() or ctx.app_state.stop_event.is_set()):
+                if not ctx.is_test and (not ctx.app_state.is_running() or ctx.app_state.stop_event.is_set()):
                     return False
                 if ctx.is_test and ctx.app_state.stop_event.is_set():
                     return False
@@ -167,10 +172,10 @@ ACTION_HANDLERS = {
 
 def dispatch_action(
     app_state: 'state.AppState',
-    act: ActionDict,
+    act: Action,
     parent_desc: str,
-    current_vars: Optional[Dict[str, VariableDict]] = None,
-    current_combos: Optional[List[ComboDict]] = None,
+    current_vars: Optional[Dict[str, Variable]] = None,
+    current_combos: Optional[List[Combo]] = None,
     depth: int = 0,
     visited_set: Optional[Set[str]] = None,
     is_test: bool = False,
@@ -214,7 +219,7 @@ def dispatch_action(
     else:
         log_tag = "流程"
 
-    var_name = act.get("var_name")
+    var_name = act.var_name
     v_data = None
     if var_name:
         with app_state.steps_lock:
@@ -222,7 +227,7 @@ def dispatch_action(
         if not v_data and current_vars:
             v_data = current_vars.get(var_name)
 
-    atype = act.get("type")
+    atype = act.type
     strategy = ACTION_HANDLERS.get(atype)
     if strategy:
         ctx = ExecutionContext(app_state, current_vars, current_combos, depth, visited_set, is_test, round_prefix, use_bg, off_x, off_y, log_tag)
@@ -234,27 +239,23 @@ def execute_single_action(app_state: 'state.AppState', act, desc):
     """執行單一動作（試跑用途）"""
     dispatch_action(app_state, act, desc, is_test=True)
 
-def sync_periodic_timers(app_state: 'state.AppState', periodic_tasks_runtime, active_task_id=None, current_round=0):
+def sync_periodic_timers(app_state: 'state.AppState', periodic_tasks_runtime: List[PeriodicTask], active_task_id=None, current_round=0):
     """線程安全地同步背景定時任務當前計時器快照至 app_state.periodic_timers 供 UI 即時倒數與設定值展示"""
     timers = {}
     for idx, pt in enumerate(periodic_tasks_runtime):
-        pt_id = pt.get("id") or f"pt_idx_{idx}"
-        try:
-            interval = float(pt.get("interval", 1.0))
-        except (ValueError, TypeError):
-            interval = 1.0
-        try:
-            round_interval = int(pt.get("round_interval", 1))
-        except (ValueError, TypeError):
-            round_interval = 1
+        pt_id = pt.id or f"pt_idx_{idx}"
+        interval = pt.interval
+        round_interval = pt.round_interval
+        # We need to maintain last_run state in the dataclass itself, but since dataclass instance is passed around, we can inject these runtime states or store them in a runtime dict.
+        # Let's assume the pt object receives these fields during runtime via setattr
         timers[pt_id] = {
-            "trigger_mode": pt.get("trigger_mode", "interval"),
-            "last_run": pt.get("last_run", 0.0),
+            "trigger_mode": pt.trigger_mode,
+            "last_run": getattr(pt, "last_run", 0.0),
             "interval": interval,
             "round_interval": round_interval,
-            "last_run_round": pt.get("last_run_round", 0),
+            "last_run_round": getattr(pt, "last_run_round", 0),
             "current_round": current_round,
-            "enabled": pt.get("enabled", True),
+            "enabled": pt.enabled,
             "is_active": (pt_id == active_task_id)
         }
     with app_state.periodic_timers_lock:
@@ -273,39 +274,33 @@ class TriggerStrategy:
         return ""
 
 class IntervalTriggerStrategy(TriggerStrategy):
-    def is_due(self, task, context):
+    def is_due(self, task: PeriodicTask, context):
         if context.is_startup:
-            return task.get("run_on_start", False)
-        try:
-            interval = float(task.get("interval", 1.0))
-        except (ValueError, TypeError):
-            interval = 1.0
+            return task.run_on_start
+        interval = task.interval
         if interval <= 0: interval = 1.0
-        return time.time() - task.get("last_run", 0.0) >= interval
+        return time.time() - getattr(task, "last_run", 0.0) >= interval
 
-    def get_log_message(self, task, context, round_prefix=""):
-        task_name = task.get("name", "").strip() or "定時任務"
-        interval = task.get("interval", 1.0)
+    def get_log_message(self, task: PeriodicTask, context, round_prefix=""):
+        task_name = task.name.strip() or "定時任務"
+        interval = task.interval
         return f"{round_prefix}任務【{task_name}】到期觸發 (每 {interval}s)"
 
 class RoundTriggerStrategy(TriggerStrategy):
-    def is_due(self, task, context):
+    def is_due(self, task: PeriodicTask, context):
         if context.is_startup:
-            return task.get("run_on_start", False)
+            return task.run_on_start
         if not context.is_round_end:
             return False
-        try:
-            round_interval = int(task.get("round_interval", 1))
-        except (ValueError, TypeError):
-            round_interval = 1
+        round_interval = task.round_interval
         if round_interval < 1: round_interval = 1
-        return context.current_round - task.get("last_run_round", 0) >= round_interval
+        return context.current_round - getattr(task, "last_run_round", 0) >= round_interval
 
-    def get_log_message(self, task, context, round_prefix=""):
-        task_name = task.get("name", "").strip() or "定時任務"
+    def get_log_message(self, task: PeriodicTask, context, round_prefix=""):
+        task_name = task.name.strip() or "定時任務"
         if context.is_startup:
             return f"{round_prefix}任務【{task_name}】啟動首發"
-        round_interval = task.get("round_interval", 1)
+        round_interval = task.round_interval
         return f"{round_prefix}任務【{task_name}】達到第 {context.current_round} 輪觸發 (每 {round_interval} 輪)"
 
 def get_trigger_strategy(trigger_mode):
@@ -315,9 +310,9 @@ def get_trigger_strategy(trigger_mode):
 
 def check_and_run_due_periodic_tasks(
     app_state: 'state.AppState',
-    periodic_tasks_runtime: List[Dict],
-    current_vars: Optional[Dict[str, VariableDict]],
-    current_combos: Optional[List[ComboDict]],
+    periodic_tasks_runtime: List[PeriodicTask],
+    current_vars: Optional[Dict[str, Variable]],
+    current_combos: Optional[List[Combo]],
     round_prefix: str = "",
     next_step_idx: Optional[int] = None,
     current_round: int = 0,
@@ -331,19 +326,19 @@ def check_and_run_due_periodic_tasks(
     ctx = TriggerContext(current_round, is_round_end, is_startup)
 
     for idx, pt in enumerate(periodic_tasks_runtime):
-        if not pt.get("enabled", True):
+        if not pt.enabled:
             continue
 
-        strategy = get_trigger_strategy(pt.get("trigger_mode", "interval"))
+        strategy = get_trigger_strategy(pt.trigger_mode)
         
         if strategy.is_due(pt, ctx):
             if not app_state.is_running() or app_state.stop_event.is_set():
                 return False
             if app_state.target_hwnd and not is_window_alive(app_state.target_hwnd):
                 return False
-            task_name = pt.get("name", "").strip() or "定時任務"
-            pt_id = pt.get("id") or f"pt_idx_{idx}"
-            act = pt.get("action", {})
+            task_name = getattr(pt, "name", "定時任務").strip() or "定時任務"
+            pt_id = getattr(pt, "id", f"pt_idx_{idx}")
+            act = getattr(pt, "action", {})
             log_msg = strategy.get_log_message(pt, ctx, round_prefix)
             EventBus.emit(AppEvents.LOG_MESSAGE, "定時", log_msg)
             # 定時任務執行期間：
@@ -383,7 +378,7 @@ def check_and_run_due_periodic_tasks(
                 return False
     return True
 
-def _apply_hot_reload(app_state: 'state.AppState', round_idx: int, periodic_tasks_runtime: List[Dict]) -> Tuple[List[Dict], List[ComboDict], Dict[str, VariableDict]]:
+def _apply_hot_reload(app_state: 'state.AppState', round_idx: int, periodic_tasks_runtime: List[PeriodicTask]) -> Tuple[List[Action], List[Combo], Dict[str, Variable]]:
     """套用熱更新，並回傳最新的 steps, combos, variables"""
     app_state.reload_requested = False
     current_steps = state.fast_deepcopy(app_state.active_steps)
@@ -393,19 +388,20 @@ def _apply_hot_reload(app_state: 'state.AppState', round_idx: int, periodic_task
 
     # 平滑套用熱更新，保留進行中定時任務的上次執行計時與輪次
     existing_timers = {
-        pt.get("id"): (pt.get("last_run"), pt.get("last_run_round", 0))
-        for pt in periodic_tasks_runtime if pt.get("id")
+        getattr(pt, "id", None): (getattr(pt, "last_run", 0.0), getattr(pt, "last_run_round", 0))
+        for pt in periodic_tasks_runtime if getattr(pt, "id", None)
     }
     new_runtime = []
     now = time.time()
     for pt in latest_pts:
         pt_copy = copy.deepcopy(pt)
-        pt_id = pt_copy.get("id")
+        pt_id = getattr(pt_copy, "id", None)
         if pt_id in existing_timers:
-            pt_copy["last_run"], pt_copy["last_run_round"] = existing_timers[pt_id]
+            setattr(pt_copy, "last_run", existing_timers[pt_id][0])
+            setattr(pt_copy, "last_run_round", existing_timers[pt_id][1])
         else:
-            pt_copy["last_run"] = 0.0 if pt.get("run_on_start", False) else now
-            pt_copy["last_run_round"] = round_idx
+            setattr(pt_copy, "last_run", 0.0 if getattr(pt, "run_on_start", False) else now)
+            setattr(pt_copy, "last_run_round", round_idx)
         new_runtime.append(pt_copy)
     periodic_tasks_runtime[:] = new_runtime
     sync_periodic_timers(app_state, periodic_tasks_runtime, current_round=round_idx)
@@ -416,10 +412,10 @@ def _apply_hot_reload(app_state: 'state.AppState', round_idx: int, periodic_task
 
 def _execute_round_steps(
     app_state: 'state.AppState',
-    current_steps: List[Dict],
-    current_variables: Dict[str, VariableDict],
-    current_combos: List[ComboDict],
-    periodic_tasks_runtime: List[Dict],
+    current_steps: List[Action],
+    current_variables: Dict[str, Variable],
+    current_combos: List[Combo],
+    periodic_tasks_runtime: List[PeriodicTask],
     round_idx: int
 ) -> bool:
     """執行一輪的所有步驟，回傳是否應繼續執行"""
@@ -439,11 +435,11 @@ def _execute_round_steps(
         EventBus.emit(AppEvents.HIGHLIGHT_STEP, idx)
         pfx = f"第 {round_idx} 輪: "
 
-        stype = step.get("type")
+        stype = getattr(step, "type", None)
         step_ok = True
         if stype == "combo":
-            c_name = step.get("name", "組合")
-            sub_actions = step.get("actions", [])
+            c_name = getattr(step, "name", "組合")
+            sub_actions = getattr(step, "actions", [])
             sub_total = len(sub_actions)
             for a_idx, act in enumerate(sub_actions):
                 if not app_state.is_running() or app_state.stop_event.is_set():
@@ -590,10 +586,10 @@ def test_run_execution_flow_worker(app_state: 'state.AppState'):
                 break
             EventBus.emit(AppEvents.HIGHLIGHT_STEP, idx)
             pfx = "[試跑流程] "
-            stype = step.get("type")
+            stype = getattr(step, "type", None)
             if stype == "combo":
-                c_name = step.get("name", "組合")
-                sub_actions = step.get("actions", [])
+                c_name = getattr(step, "name", "組合")
+                sub_actions = getattr(step, "actions", [])
                 if not sub_actions:
                     EventBus.emit(AppEvents.LOG_MESSAGE, "試跑", f"[試跑流程] 步驟 #{idx+1} 組合 [{c_name}] 內無動作，跳過")
                     continue

@@ -139,7 +139,8 @@ for fn in (lambda: ctypes.windll.shcore.SetProcessDpiAwareness(2), lambda: ctype
         import atexit
         def cleanup_win32():
             try: ctypes.windll.winmm.timeEndPeriod(1)
-            except: pass
+            except Exception as e:
+                EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"清理 Win32 API 失敗: {e}")
         atexit.register(cleanup_win32)
     except (AttributeError, OSError):
         pass
@@ -272,7 +273,8 @@ def post_bg_key(app_state, hwnd: Any, key_str: str) -> None:
             safe_sleep(app_state, 0.06)
         finally:
             try: _get_pyautogui().keyUp(key_str)
-            except Exception: pass
+            except Exception as e: 
+                EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"釋放前台按鍵失敗: {e}")
             with app_state.currently_held_keys_lock:
                 app_state.currently_held_keys.discard(("fg", key_str))
         return

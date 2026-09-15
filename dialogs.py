@@ -1,3 +1,4 @@
+from models import Variable, Action, ClickAction, KeyAction, WaitAction, CallComboAction, ComboAction, Combo, PeriodicTask
 import copy
 import time
 import uuid
@@ -118,9 +119,9 @@ def prompt_variable_dialog(app, edit_name=None):
     is_edit = edit_name is not None
     title = f"修改變數: {edit_name}" if is_edit else "新增變數"
 
-    orig_data = app.app_state.variables.get(edit_name, {}) if is_edit else {}
-    orig_type = orig_data.get("type", "coord")
-    orig_val = orig_data.get("value", {})
+    orig_data = app.app_state.variables.get(edit_name, Variable(type="coord", value={})) if is_edit else Variable(type="coord", value={})
+    orig_type = getattr(orig_data, "type", "coord")
+    orig_val = getattr(orig_data, "value", {})
 
     type_display_map = {"coord": "[坐標]", "key": "[按鍵]", "wait": "[停頓]"}
     type_key_map = {"[坐標]": "coord", "[按鍵]": "key", "[停頓]": "wait", "坐標": "coord", "按鍵": "key", "停頓": "wait"}
@@ -154,8 +155,8 @@ def prompt_variable_dialog(app, edit_name=None):
     f_val_box.pack(fill="x", pady=(0, 10))
 
     if orig_type == "coord" and isinstance(orig_val, dict):
-        init_x = str(orig_val.get("x", 0))
-        init_y = str(orig_val.get("y", 0))
+        init_x = str(orig_val.x)
+        init_y = str(orig_val.y)
         init_btn = "右鍵" if orig_val.get("btn") == "right" else "左鍵"
         init_rel = orig_val.get("rel", True)
     else:
@@ -277,7 +278,7 @@ def prompt_variable_dialog(app, edit_name=None):
         else:
             return
 
-        app.app_state.variables[name] = {"type": type_key, "value": val}
+        app.app_state.variables[name] = Variable(type=type_key, value=val)
         app.trigger_hot_reload()
         app.refresh_variables_table()
         app.refresh_combo_actions_list()
@@ -293,10 +294,10 @@ def prompt_variable_dialog(app, edit_name=None):
 
 def prompt_edit_combo_dialog(app, combo_step, step_idx=None):
     """彈出完整的組合子動作管理視窗 (支援在組合內移位、刪除、複製、修改、試跑與展開)"""
-    combo_name = combo_step.get("name", "組合")
+    combo_name = combo_step.name
     dialog = _create_dialog(app, f"管理組合步驟: 【{combo_name}】", 660, 520, resizable=True, minsize=(560, 420))
 
-    working_actions = copy.deepcopy(combo_step.get("actions", []))
+    working_actions = copy.deepcopy(combo_step.actions)
     modified = [False]
 
     # 頂部控制欄 (標題、切換範本、展開按鈕)
@@ -354,7 +355,7 @@ def prompt_edit_combo_dialog(app, combo_step, step_idx=None):
             combo_step["name"] = combo_name
             lbl_title.config(text=f"◆ 組合名稱: 【{combo_name}】")
             working_actions.clear()
-            working_actions.extend(copy.deepcopy(matched.get("actions", [])))
+            working_actions.extend(copy.deepcopy(matched.actions))
             refresh_sub_list(select_idx=0 if working_actions else None)
             app.set_status(f"已載入範本 [{combo_name}] 的子動作清單")
 
@@ -471,7 +472,7 @@ def prompt_edit_combo_dialog(app, combo_step, step_idx=None):
 
 def prompt_edit_action(app, action, available_combos=None, step_idx=None):
     """彈出針對各動作型別的編輯對話框"""
-    atype = action.get("type")
+    atype = action.type
     if not atype: return False
 
     if atype == "combo":
@@ -485,13 +486,13 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
 
     if atype == "click":
         dialog.title("修改點擊動作")
-        var_x = tk.StringVar(value=str(action.get("x", 0)))
-        var_y = tk.StringVar(value=str(action.get("y", 0)))
+        var_x = tk.StringVar(value=str(action.x))
+        var_y = tk.StringVar(value=str(action.y))
         curr_btn = "右鍵" if action.get("btn") == "right" else "左鍵"
         var_btn = tk.StringVar(value=curr_btn)
         var_rel = [action.get("rel", True)]
 
-        coord_vars = [k for k, v in app.app_state.variables.items() if v.get("type") == "coord"]
+        coord_vars = [k for k, v in app.app_state.variables.items() if v.type == "coord"]
         opt_vars = ["(不引用 / 固定坐標)"] + coord_vars
         curr_var = action.get("var_name", "")
         var_ref = tk.StringVar(value=curr_var if curr_var in coord_vars else "(不引用 / 固定坐標)")
@@ -505,8 +506,8 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
             if chosen in app.app_state.variables:
                 v_val = app.app_state.variables[chosen].get("value", {})
                 if isinstance(v_val, dict):
-                    var_x.set(str(v_val.get("x", 0)))
-                    var_y.set(str(v_val.get("y", 0)))
+                    var_x.set(str(v_val.x))
+                    var_y.set(str(v_val.y))
                     if "btn" in v_val:
                         var_btn.set("右鍵" if v_val.get("btn") == "right" else "左鍵")
                     if "rel" in v_val:
@@ -558,8 +559,8 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
 
     elif atype == "key":
         dialog.title("修改按鍵")
-        var_k = tk.StringVar(value=str(action.get("key", "f1")))
-        key_vars = [k for k, v in app.app_state.variables.items() if v.get("type") == "key"]
+        var_k = tk.StringVar(value=str(action.key))
+        key_vars = [k for k, v in app.app_state.variables.items() if v.type == "key"]
         opt_vars = ["(不引用 / 固定按鍵)"] + key_vars
         curr_var = action.get("var_name", "")
         var_ref = tk.StringVar(value=curr_var if curr_var in key_vars else "(不引用 / 固定按鍵)")
@@ -595,8 +596,8 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
 
     elif atype == "wait":
         dialog.title("修改停頓時間")
-        var_w = tk.StringVar(value=str(action.get("sec", 1.0)))
-        wait_vars = [k for k, v in app.app_state.variables.items() if v.get("type") == "wait"]
+        var_w = tk.StringVar(value=str(action.sec))
+        wait_vars = [k for k, v in app.app_state.variables.items() if v.type == "wait"]
         opt_vars = ["(不引用 / 固定秒數)"] + wait_vars
         curr_var = action.get("var_name", "")
         var_ref = tk.StringVar(value=curr_var if curr_var in wait_vars else "(不引用 / 固定秒數)")
@@ -633,7 +634,7 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
 
     elif atype == "call_combo":
         dialog.title("修改呼叫目標組合")
-        curr_tgt = action.get("target_name", "")
+        curr_tgt = action.target_name
         var_c = tk.StringVar(value=curr_tgt)
         combos_list = available_combos or [c["name"] for c in app.app_state.combos]
         tk.Label(f, text="目標組合:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL).grid(row=0, column=0, padx=6, pady=10, sticky="e")
@@ -661,18 +662,18 @@ def prompt_edit_periodic_task(app, task=None):
     is_edit = task is not None
     title = "修改定時週期任務" if is_edit else "新增定時週期任務"
 
-    orig_task = copy.deepcopy(task) if is_edit else {}
-    task_id = orig_task.get("id") or f"pt_{int(time.time()*1000)}_{uuid.uuid4().hex[:6]}"
-    init_name = orig_task.get("name", "")
-    init_trigger_mode = orig_task.get("trigger_mode", "interval")
-    init_interval = str(orig_task.get("interval", 30.0))
-    init_round_interval = str(orig_task.get("round_interval", 5))
-    init_enabled = orig_task.get("enabled", True)
-    init_run_on_start = orig_task.get("run_on_start", False)
+    orig_task = copy.deepcopy(task) if is_edit else PeriodicTask(id=f"pt_{int(time.time()*1000)}_{uuid.uuid4().hex[:6]}", name="", trigger_mode="interval", interval=1.0, round_interval=1, enabled=True, run_on_start=False, action=Action(type="call_combo" if app.app_state.combos else "key"))
+    task_id = getattr(orig_task, "id", "") or f"pt_{int(time.time()*1000)}_{uuid.uuid4().hex[:6]}"
+    init_name = getattr(orig_task, "name", "")
+    init_trigger_mode = getattr(orig_task, "trigger_mode", "interval")
+    init_interval = str(getattr(orig_task, "interval", 1.0))
+    init_round_interval = str(getattr(orig_task, "round_interval", 1))
+    init_enabled = getattr(orig_task, "enabled", True)
+    init_run_on_start = getattr(orig_task, "run_on_start", False)
 
-    act = orig_task.get("action", {})
-    act_type = act.get("type", "call_combo" if app.app_state.combos else "key")
-    act_var = act.get("var_name")
+    act = getattr(orig_task, "action", None)
+    act_type = getattr(act, "type", "call_combo" if app.app_state.combos else "key") if act else ("call_combo" if app.app_state.combos else "key")
+    act_var = getattr(act, "var_name", None) if act else None
 
     dialog = _create_dialog(app, title, 430, 495)
 
@@ -777,19 +778,19 @@ def prompt_edit_periodic_task(app, task=None):
 
     # 各類型對應變數
     combos_list = [c["name"] for c in app.app_state.combos]
-    var_combo = tk.StringVar(value=act.get("target_name") or (combos_list[0] if combos_list else ""))
+    var_combo = tk.StringVar(value=act.target_name or (combos_list[0] if combos_list else ""))
 
     vars_list = list(app.app_state.variables.keys())
     var_var_name = tk.StringVar(value=act_var or (vars_list[0] if vars_list else ""))
 
-    var_key = tk.StringVar(value=str(act.get("key", "f1")))
+    var_key = tk.StringVar(value=str(getattr(act, "key", "")))
 
-    var_x = tk.StringVar(value=str(act.get("x", 0)))
-    var_y = tk.StringVar(value=str(act.get("y", 0)))
-    var_btn = tk.StringVar(value="右鍵" if act.get("btn") == "right" else "左鍵")
-    var_rel = [act.get("rel", True)]
+    var_x = tk.StringVar(value=str(getattr(act, "x", 0)))
+    var_y = tk.StringVar(value=str(getattr(act, "y", 0)))
+    var_btn = tk.StringVar(value="右鍵" if getattr(act, "btn", "left") == "right" else "左鍵")
+    var_rel = [getattr(act, "rel", True)]
 
-    var_wait = tk.StringVar(value=str(act.get("sec", 1.0)))
+    var_wait = tk.StringVar(value=str(getattr(act, "sec", 0.0)))
 
     def update_dynamic_panel(event=None):
         for widget in f_dynamic.winfo_children():
@@ -829,7 +830,7 @@ def prompt_edit_periodic_task(app, task=None):
                     v_name = var_var_name.get()
                     if v_name in app.app_state.variables:
                         v_info = app.app_state.variables[v_name]
-                        v_type = v_info.get("type", "")
+                        v_type = v_info.type
                         v_val = v_info.get("value", "")
                         lbl_preview.config(text=f"變數型態: [{v_type}]  數值: {v_val}")
                 cbo.bind("<<ComboboxSelected>>", _update_var_preview)
@@ -889,7 +890,7 @@ def prompt_edit_periodic_task(app, task=None):
             if not tgt:
                 messagebox.showerror("錯誤", "請先選擇有效的技能組合！", parent=dialog)
                 return None
-            return {"type": "call_combo", "target_name": tgt}
+            return CallComboAction(target_name=tgt)
         elif cat == "[引用全域變數]":
             v_name = var_var_name.get().strip()
             if not v_name or v_name not in app.app_state.variables:
@@ -899,32 +900,32 @@ def prompt_edit_periodic_task(app, task=None):
             v_type = v_info.get("type", "key")
             v_val = v_info.get("value", {})
             if v_type == "coord":
-                btn = v_val.get("btn", "left") if isinstance(v_val, dict) else "left"
-                x = v_val.get("x", 0) if isinstance(v_val, dict) else 0
-                y = v_val.get("y", 0) if isinstance(v_val, dict) else 0
+                btn = v_val.btn if isinstance(v_val, dict) else "left"
+                x = v_val.x if isinstance(v_val, dict) else 0
+                y = v_val.y if isinstance(v_val, dict) else 0
                 rel = v_val.get("rel", True) if isinstance(v_val, dict) else True
-                return {"type": "click", "x": x, "y": y, "btn": btn, "rel": rel, "var_name": v_name}
+                return ClickAction(x=x, y=y, btn=btn, rel=rel, var_name=v_name)
             elif v_type == "wait":
                 try:
                     sec = float(v_val)
                 except (ValueError, TypeError):
                     sec = 1.0
-                return {"type": "wait", "sec": sec, "var_name": v_name}
+                return WaitAction(sec=sec, var_name=v_name)
             else:
                 key_str = str(v_val) if v_val else "f1"
-                return {"type": "key", "key": key_str, "var_name": v_name}
+                return KeyAction(key=key_str, var_name=v_name)
         elif cat == "[單一按鍵]":
             k = var_key.get().strip().lower()
             if not k:
                 messagebox.showerror("錯誤", "按鍵名稱不可為空！", parent=dialog)
                 return None
-            return {"type": "key", "key": k}
+            return KeyAction(key=k)
         elif cat == "[單一點擊]":
             try:
                 x = int(var_x.get().strip())
                 y = int(var_y.get().strip())
                 btn = "right" if var_btn.get() == "右鍵" else "left"
-                return {"type": "click", "x": x, "y": y, "btn": btn, "rel": var_rel[0]}
+                return ClickAction(x=x, y=y, btn=btn, rel=var_rel[0])
             except ValueError:
                 messagebox.showerror("錯誤", "坐標 X 與 Y 必須輸入整數！", parent=dialog)
                 return None
@@ -933,7 +934,7 @@ def prompt_edit_periodic_task(app, task=None):
                 s = float(var_wait.get().strip())
                 if s <= 0:
                     raise ValueError
-                return {"type": "wait", "sec": s}
+                return WaitAction(sec=s)
             except ValueError:
                 messagebox.showerror("錯誤", "停頓時間必須大於 0 秒！", parent=dialog)
                 return None
@@ -974,28 +975,19 @@ def prompt_edit_periodic_task(app, task=None):
         name_val = var_name.get().strip()
         if not name_val:
             prefix = f"每{round_val}輪" if trigger_mode == "round" else "定時"
-            if built_act.get("type") == "call_combo":
-                name_val = f"{prefix}_{built_act.get('target_name', '組合')}"
-            elif built_act.get("var_name"):
-                name_val = f"{prefix}_{built_act.get('var_name')}"
-            elif built_act.get("type") == "key":
-                name_val = f"{prefix}按鍵_{built_act.get('key', '').upper()}"
-            elif built_act.get("type") == "click":
-                btn_str = "右鍵" if built_act.get("btn") == "right" else "左鍵"
+            if built_act.type == "call_combo":
+                name_val = f"{prefix}_{getattr(built_act, 'target_name', '組合')}"
+            elif built_act.var_name:
+                name_val = f"{prefix}_{getattr(built_act, 'var_name', '')}"
+            elif built_act.type == "key":
+                name_val = f"{prefix}按鍵_{getattr(built_act, 'key', '').upper()}"
+            elif built_act.type == "click":
+                btn_str = "右鍵" if getattr(built_act, "btn", "left") == "right" else "左鍵"
                 name_val = f"{prefix}點擊_{btn_str}"
             else:
                 name_val = f"{prefix}任務"
 
-        result[0] = {
-            "id": task_id,
-            "name": name_val,
-            "trigger_mode": trigger_mode,
-            "interval": interval_val,
-            "round_interval": round_val,
-            "enabled": var_enabled.get(),
-            "run_on_start": var_start.get(),
-            "action": built_act
-        }
+        result[0] = PeriodicTask(id=task_id, name=name_val, trigger_mode=trigger_mode, interval=interval_val, round_interval=round_val, enabled=var_enabled.get(), run_on_start=var_start.get(), action=built_act)
         dialog.destroy()
 
     _add_dialog_buttons(dialog, on_ok, extra_left_buttons=[

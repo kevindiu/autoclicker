@@ -1,3 +1,4 @@
+from models import Variable, Action, ClickAction, KeyAction, WaitAction, CallComboAction, ComboAction, Combo, PeriodicTask
 import tkinter as tk
 from tkinter import ttk
 from theme import UITheme

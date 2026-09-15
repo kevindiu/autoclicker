@@ -1,56 +1,30 @@
 import sys
 import copy
 import json
+import dataclasses
 
 def fast_deepcopy(obj):
     """
-    使用 json 序列化進行快速深拷貝。
-    比 copy.deepcopy() 快約 3 倍，能顯著降低巨集啟動與熱更新時的瞬間 CPU 峰值開銷。
+    自定義高速深拷貝：原生支援 dataclass、list、dict 的遞迴複製。
+    比原生 copy.deepcopy() 避免了 memoization 字典開銷，能大幅降低 CPU 峰值。
     """
-    try:
-        if obj is None:
-            return None
-        # 對於單純的 dict/list，json.dumps 遠快於深拷貝
-        return json.loads(json.dumps(obj))
-    except Exception:
-        return copy.deepcopy(obj)
+    if obj is None:
+        return None
+    if isinstance(obj, list):
+        return [fast_deepcopy(item) for item in obj]
+    if isinstance(obj, dict):
+        return {k: fast_deepcopy(v) for k, v in obj.items()}
+    if dataclasses.is_dataclass(obj):
+        kwargs = {f.name: fast_deepcopy(getattr(obj, f.name)) for f in dataclasses.fields(obj)}
+        return obj.__class__(**kwargs)
+    if isinstance(obj, (int, float, str, bool, tuple)):
+        return obj
+    return copy.deepcopy(obj)
 
 import json
 import threading
-from typing import Dict, List, Any, Optional, TypedDict
-from contextlib import contextmanager
-
-# ==============================================================================
-# Type Hints (型別提示)
-# ==============================================================================
-class VariableDict(TypedDict, total=False):
-    type: str   # 'coord', 'key', 'wait'
-    value: Any
-
-class ActionDict(TypedDict, total=False):
-    type: str   # 'click', 'key', 'wait', 'call_combo', 'combo'
-    var_name: str
-    x: int
-    y: int
-    btn: str
-    rel: bool
-    key: str
-    sec: float
-    target_name: str
-    name: str
-    actions: List['ActionDict']
-
-class ComboDict(TypedDict):
-    name: str
-    actions: List[ActionDict]
-
-class PeriodicTaskDict(TypedDict):
-    id: str
-    name: str
-    interval: float
-    enabled: bool
-    run_on_start: bool
-    action: ActionDict
+from typing import Dict, List, Any, Optional
+from models import Variable, Action, Combo, PeriodicTask, ClickAction, KeyAction, WaitAction, CallComboAction, ComboAction
 
 
 class AppState:
@@ -61,20 +35,20 @@ class AppState:
     """
     def __init__(self):
         # 1. 編輯器草稿資料 (Draft Data)
-        self.combos: List[ComboDict] = []
-        self.steps: List[ActionDict] = []
-        self.variables: Dict[str, VariableDict] = {}
-        self.periodic_tasks: List[PeriodicTaskDict] = []
+        self.combos: List[Combo] = []
+        self.steps: List[Action] = []
+        self.variables: Dict[str, Variable] = {}
+        self.periodic_tasks: List[PeriodicTask] = []
 
         # 2. 背景運行實例快照 (Active Runtime Snapshots)
-        self.active_steps: List[ActionDict] = []
-        self.active_combos: List[ComboDict] = []
-        self.active_variables: Dict[str, VariableDict] = {}
-        self.active_periodic_tasks: List[PeriodicTaskDict] = []
+        self.active_steps: List[Action] = []
+        self.active_combos: List[Combo] = []
+        self.active_variables: Dict[str, Variable] = {}
+        self.active_periodic_tasks: List[PeriodicTask] = []
         # 3. 試跑專屬唯讀快照 (Test Run Read-Only Snapshots)
-        self.test_steps: List[ActionDict] = []
-        self.test_combos: List[ComboDict] = []
-        self.test_variables: Dict[str, VariableDict] = {}
+        self.test_steps: List[Action] = []
+        self.test_combos: List[Combo] = []
+        self.test_variables: Dict[str, Variable] = {}
 
         # 4. 執行期旗標與執行緒同步物件 (Flags & Thread Synchronization)
         self.running_lock = threading.RLock()
@@ -211,23 +185,19 @@ class AppState:
 
     def load_dict(self, data: dict):
         """從字典載入設定資料至編輯器草稿"""
-        self.variables.clear()
-        self.variables.update(fast_deepcopy(data.get("variables") or {}))
-        self.combos.clear()
-        self.combos.extend(fast_deepcopy(data.get("combos") or []))
-        self.steps.clear()
-        self.steps.extend(fast_deepcopy(data.get("steps") or []))
-        self.periodic_tasks.clear()
-        self.periodic_tasks.extend(fast_deepcopy(data.get("periodic_tasks") or []))
+        # load_dict 在 config_manager.py 中已經以 asdict/from_dict 獨立處理
+        # 此處僅作為介面保留，實作由外部負責。
+        pass
 
     def get_data_snapshot(self) -> str:
         """獲取當前編輯器資料的序列化字串，用於精確比對未儲存變更"""
+        from dataclasses import asdict
         try:
             return json.dumps({
-                "variables": self.variables,
-                "combos": self.combos,
-                "steps": self.steps,
-                "periodic_tasks": self.periodic_tasks,
+                "variables": {k: asdict(v) for k, v in self.variables.items()},
+                "combos": [asdict(c) for c in self.combos],
+                "steps": [asdict(s) for s in self.steps],
+                "periodic_tasks": [asdict(p) for p in self.periodic_tasks],
             }, sort_keys=True)
         except (TypeError, ValueError):
             return ""
@@ -247,95 +217,95 @@ class AppState:
 # ==============================================================================
 # 文字格式化輔助函數
 # ==============================================================================
-def format_action_summary(app_state: 'AppState', act, index=None, current_variables=None):
+def format_action_summary(app_state: 'AppState', act: Action, index=None, current_variables=None):
     """統一格式化動作或步驟的文字描述，採用 100% 跨平台相容的通用標籤與符號"""
     var_dict = current_variables if current_variables is not None else app_state.variables
-    atype = act.get("type", "")
+    atype = act.type
 
-    var_name = act.get("var_name")
+    var_name = act.var_name
 
     if atype == "click":
         if var_name:
-            v_info = var_dict.get(var_name, {})
-            val = v_info.get("value") if isinstance(v_info.get("value"), dict) else v_info
-            btn_key = val.get("btn", act.get("btn", "left")) if isinstance(val, dict) else act.get("btn", "left")
+            v_info = var_dict.get(var_name)
+            val = v_info.value if v_info else None
+            btn_key = val.get("btn", act.btn) if isinstance(val, dict) else act.btn
             btn_tag = "右鍵" if btn_key == "right" else "左鍵"
-            cx = val.get("x", act.get("x", 0)) if isinstance(val, dict) else act.get("x", 0)
-            cy = val.get("y", act.get("y", 0)) if isinstance(val, dict) else act.get("y", 0)
+            cx = val.get("x", act.x) if isinstance(val, dict) else act.x
+            cy = val.get("y", act.y) if isinstance(val, dict) else act.y
             body = f"[點擊·{btn_tag}] -> 變數:【{var_name}】({cx},{cy})"
         else:
-            btn_tag = "右鍵" if act.get("btn") == "right" else "左鍵"
-            prefix = "相對:" if act.get("rel") else "絕對:"
-            body = f"[點擊·{btn_tag}] -> {prefix}({act.get('x', 0)},{act.get('y', 0)})"
+            btn_tag = "右鍵" if act.btn == "right" else "左鍵"
+            prefix = "相對:" if act.rel else "絕對:"
+            body = f"[點擊·{btn_tag}] -> {prefix}({act.x},{act.y})"
     elif atype == "key":
         if var_name:
-            v_info = var_dict.get(var_name, {})
-            val = v_info.get("value") if "value" in v_info else v_info.get("key", act.get("key", ""))
+            v_info = var_dict.get(var_name)
+            val = v_info.value if v_info else act.key
             k_str = str(val).upper()
             body = f"[按鍵] -> 變數:【{var_name}】[ {k_str} ]"
         else:
-            key_str = str(act.get("key", "")).upper()
+            key_str = str(act.key).upper()
             body = f"[按鍵] -> [ {key_str} ]"
     elif atype == "wait":
         if var_name:
-            v_info = var_dict.get(var_name, {})
-            val = v_info.get("value") if "value" in v_info else v_info.get("sec", act.get("sec", 0))
+            v_info = var_dict.get(var_name)
+            val = v_info.value if v_info else act.sec
             body = f"[停頓] -> 變數:【{var_name}】{val} 秒"
         else:
-            body = f"[停頓] -> {act.get('sec', 0)} 秒"
+            body = f"[停頓] -> {act.sec} 秒"
     elif atype == "call_combo":
-        body = f"↻ [呼叫] -> 組合:【{act.get('target_name', '')}】"
+        body = f"↻ [呼叫] -> 組合:【{act.target_name}】"
     elif atype == "combo":
-        c_name = act.get("name", "組合")
-        act_cnt = len(act.get("actions", []))
+        c_name = act.name if act.name else "組合"
+        act_cnt = len(act.actions)
         body = f"◆ [組合: {c_name}] ({act_cnt}個動作)"
     else:
         body = f"[{atype}]"
 
     return body
 
-def format_periodic_task_summary(task, current_variables=None, max_name_len=18):
+def format_periodic_task_summary(task: PeriodicTask, current_variables=None, max_name_len=18):
     """格式化定時週期任務的顯示字串 (簡短俐落，支援長名稱智能縮略，避免溢出抖動)"""
-    enabled = task.get("enabled", True)
+    enabled = task.enabled
     st_icon = "[✓]" if enabled else "[✕]"
     
-    t_mode = task.get("trigger_mode", "interval")
+    t_mode = getattr(task, "trigger_mode", "interval")
     if t_mode == "round":
-        try:
-            r_val = int(task.get("round_interval", 1))
-        except (ValueError, TypeError):
-            r_val = 1
+        r_val = task.round_interval
         trigger_str = f"每{r_val}輪"
     else:
-        sec = task.get("interval", 1.0)
+        sec = task.interval
         try:
             f_sec = float(sec)
             trigger_str = f"{int(f_sec)}s" if f_sec.is_integer() else f"{f_sec}s"
         except (ValueError, TypeError):
             trigger_str = f"{sec}s"
 
-    name = task.get("name", "").strip()
-    start_str = " (首)" if task.get("run_on_start", False) else ""
+    name = task.name.strip()
+    start_str = " (首)" if getattr(task, "run_on_start", False) else ""
 
     if name:
         disp_name = name if len(name) <= max_name_len else name[:max_name_len - 1] + "…"
         return f"{st_icon} {trigger_str} · {disp_name}{start_str}"
 
-    act = task.get("action", {})
-    var_name = act.get("var_name")
-    atype = act.get("type", "")
+    act = task.action
+    if not act:
+        return f"{st_icon} {trigger_str} · 空任務{start_str}"
+
+    var_name = act.var_name
+    atype = act.type
 
     if var_name:
         desc = f"變數:【{var_name}】"
     elif atype == "call_combo":
-        desc = f"組合:【{act.get('target_name', '')}】"
+        desc = f"組合:【{act.target_name}】"
     elif atype == "key":
-        desc = f"按鍵 [{str(act.get('key', '')).upper()}]"
+        desc = f"按鍵 [{str(act.key).upper()}]"
     elif atype == "click":
-        btn_tag = "右鍵" if act.get("btn") == "right" else "左鍵"
+        btn_tag = "右鍵" if act.btn == "right" else "左鍵"
         desc = f"點擊·{btn_tag}"
     elif atype == "wait":
-        desc = f"停頓 {act.get('sec', 0)}s"
+        desc = f"停頓 {act.sec}s"
     else:
         desc = f"[{atype}]"
 

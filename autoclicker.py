@@ -188,9 +188,9 @@ class App(tk.Tk):
 
         type_display = {"coord": "[坐標]", "key": "[按鍵]", "wait": "[停頓]"}
         for name, data in self.app_state.variables.items():
-            t_key = data.get("type", "coord")
+            t_key = getattr(data, "type", "coord")
             t_disp = type_display.get(t_key, t_key)
-            val = data.get("value")
+            val = getattr(data, "value", None)
 
             if t_key == "coord":
                 if isinstance(val, dict):
@@ -232,8 +232,8 @@ class App(tk.Tk):
             return
         self.combo_listbox.delete(0, tk.END)
         for i, c in enumerate(self.app_state.combos):
-            act_count = len(c.get("actions", []))
-            self.combo_listbox.insert(tk.END, f"{c['name']} ({act_count}動作)")
+            act_count = len(getattr(c, "actions", []))
+            self.combo_listbox.insert(tk.END, f"{getattr(c, 'name', '')} ({act_count}動作)")
         if select_idx is not None and 0 <= select_idx < len(self.app_state.combos):
             self.combo_listbox.selection_set(select_idx)
             self.combo_ctrl.on_combo_select()
@@ -242,8 +242,8 @@ class App(tk.Tk):
 
     def _refresh_call_combo_dropdown(self):
         idx = self.combo_ctrl.get_selected_combo_idx()
-        curr_name = self.app_state.combos[idx]["name"] if idx is not None else None
-        avail = [c["name"] for c in self.app_state.combos if c["name"] != curr_name]
+        curr_name = getattr(self.app_state.combos[idx], "name", None) if idx is not None else None
+        avail = [getattr(c, "name", "") for c in self.app_state.combos if getattr(c, "name", "") != curr_name]
         if hasattr(self, "cbo_call_combo"):
             self.cbo_call_combo["values"] = avail
             if avail:
@@ -268,7 +268,7 @@ class App(tk.Tk):
         idx = self.combo_ctrl.get_selected_combo_idx()
         if idx is None:
             return
-        actions = self.app_state.combos[idx].get("actions", [])
+        actions = getattr(self.app_state.combos[idx], "actions", [])
         for i, act in enumerate(actions):
             self.combo_act_listbox.insert(tk.END, format_action_summary(act, index=i))
         if select_idx is not None and 0 <= select_idx < len(actions):
@@ -1097,7 +1097,7 @@ class App(tk.Tk):
         )
 
     def execute_single_action(self, act, desc):
-        engine.execute_single_action(act, desc)
+        engine.execute_single_action(self.app_state, act, desc)
 
     # ======================= 主執行引擎 =======================
     def toggle_run(self):
@@ -1125,7 +1125,7 @@ class App(tk.Tk):
             self.set_status(msg)
             self.append_log("系統", f"⏹ 巨集{msg}")
         else:
-            has_enabled_periodic = any(pt.get("enabled", True) for pt in self.app_state.periodic_tasks)
+            has_enabled_periodic = any(getattr(pt, "enabled", True) for pt in self.app_state.periodic_tasks)
             if not self.app_state.steps and not has_enabled_periodic:
                 return self.set_status("掛機流程清單與定時任務均為空，請先加入步驟或定時任務！")
             self.app_state.snapshot_active(reload_requested=False)

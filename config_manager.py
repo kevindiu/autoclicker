@@ -5,6 +5,7 @@ import time
 import copy
 import uuid
 import state
+from models import Variable, Action, Combo, PeriodicTask
 from theme import CONFIG_EXT
 
 # ==============================================================================
@@ -49,11 +50,11 @@ def ensure_default_profile(ext=CONFIG_EXT, dir_path=_DEFAULT_DIR):
                     pass
 
 def _resolve_target_state(target_state=None, **kwargs):
-    """解析並返回正確的 AppState 實例，相容傳入 None、模組 state、或自定義 AppState"""
+    """解析並返回正確的 AppState 實例，強制要求傳入有效實例以貫徹依賴注入"""
     if target_state is None and "app_state" in kwargs:
         target_state = kwargs["app_state"]
     if target_state is None:
-        return state.app_state
+        raise ValueError("必須明確提供目標的 AppState 實例！")
     if hasattr(target_state, "app_state"):
         return target_state.app_state
     return target_state
@@ -70,11 +71,12 @@ def save_profile_file(name: str, target_state=None, ext=CONFIG_EXT, dir_path=_DE
     if hasattr(target_state, "to_dict"):
         data = target_state.to_dict()
     else:
+        from dataclasses import asdict
         data = {
-            "variables": state.fast_deepcopy(target_state.variables),
-            "combos": state.fast_deepcopy(target_state.combos),
-            "steps": state.fast_deepcopy(target_state.steps),
-            "periodic_tasks": state.fast_deepcopy(target_state.periodic_tasks)
+            "variables": {k: asdict(v) for k, v in target_state.variables.items()},
+            "combos": [asdict(c) for c in target_state.combos],
+            "steps": [asdict(s) for s in target_state.steps],
+            "periodic_tasks": [asdict(p) for p in target_state.periodic_tasks]
         }
 
     try:
@@ -106,18 +108,18 @@ def load_profile_file(name: str, target_state=None, ext=CONFIG_EXT, dir_path=_DE
         raise ValueError(f"設定檔格式錯誤 (非 JSON 物件)：{fn}")
 
     target_state.variables.clear()
-    target_state.variables.update(data.get("variables") or {})
+    target_state.variables.update({k: Variable.from_dict(v) for k, v in (data.get("variables") or {}).items()})
 
     target_state.combos.clear()
-    target_state.combos.extend(data.get("combos") or [])
+    target_state.combos.extend([Combo.from_dict(c) for c in (data.get("combos") or [])])
 
     target_state.steps.clear()
-    target_state.steps.extend(data.get("steps") or [])
+    target_state.steps.extend([Action.from_dict(s) for s in (data.get("steps") or []) if s])
 
     target_state.periodic_tasks.clear()
     for p_idx, pt in enumerate(data.get("periodic_tasks") or []):
         if not pt.get("id"):
             pt["id"] = f"pt_{int(time.time()*1000)}_{p_idx}_{uuid.uuid4().hex[:6]}"
-        target_state.periodic_tasks.append(pt)
+        target_state.periodic_tasks.append(PeriodicTask.from_dict(pt))
 
     return data
