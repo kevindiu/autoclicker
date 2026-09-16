@@ -177,6 +177,12 @@ def validate_profile_data(data: dict) -> dict:
             normalized_task["id"] = f"pt_{int(time.time()*1000)}_{len(normalized['periodic_tasks'])}"
         if not normalized_task.get("name"):
             normalized_task["name"] = f"定時任務_{len(normalized['periodic_tasks']) + 1}"
+
+        trigger_mode = str(normalized_task.get("trigger_mode", "interval") or "interval").strip().lower()
+        if trigger_mode not in {"interval", "round"}:
+            trigger_mode = "interval"
+        normalized_task["trigger_mode"] = trigger_mode
+
         try:
             normalized_task["interval"] = float(normalized_task.get("interval", 1.0))
         except (TypeError, ValueError):

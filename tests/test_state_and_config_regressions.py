@@ -112,6 +112,46 @@ class StateAndConfigRegressionTests(unittest.TestCase):
             app_state.reload_requested = False
             self.assertFalse(app_state.reload_requested)
 
+    def test_reload_requested_guard_handles_custom_lock_without_acquire(self):
+        class _NoAcquireLock:
+            def __init__(self):
+                self.depth = 0
+
+            def __enter__(self):
+                self.depth += 1
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                self.depth -= 1
+                return False
+
+        app_state = state.AppState()
+        app_state.steps_lock = _NoAcquireLock()
+
+        with app_state.steps_lock:
+            app_state.reload_requested = True
+            self.assertTrue(app_state.reload_requested)
+
+        with app_state.steps_lock:
+            app_state.reload_requested = False
+            self.assertFalse(app_state.reload_requested)
+
+    def test_validate_profile_data_normalizes_invalid_trigger_mode(self):
+        invalid = {
+            "periodic_tasks": [{
+                "id": "pt1",
+                "name": "heal",
+                "trigger_mode": "bogus",
+                "interval": "bad",
+                "action": {"type": "wait", "sec": "1.5"},
+            }],
+        }
+
+        valid = config_manager.validate_profile_data(invalid)
+
+        self.assertEqual(valid["periodic_tasks"][0]["trigger_mode"], "interval")
+        self.assertEqual(valid["periodic_tasks"][0]["interval"], 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

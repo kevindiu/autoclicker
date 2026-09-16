@@ -31,6 +31,12 @@ class ProfileService:
         else:
             self.app.cbo_profile.current(0)
 
+    def set_active_profile(self, name):
+        if name:
+            self.app.var_profile_name.set(name)
+            self.app.cbo_profile.set(name)
+        return name
+
     def create_new_profile(self):
         if self.app.app_state.is_running() or self.app.app_state.is_testing:
             return self.app.set_status("巨集正在執行或試跑中，請先停止再新建設定檔！")

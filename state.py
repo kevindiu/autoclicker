@@ -144,24 +144,40 @@ class AppState:
 
     @property
     def reload_requested(self) -> bool:
-        """保護熱重載旗標：讀取時採用非阻塞鎖檢查以避免在已持有 steps_lock 的呼叫中死鎖"""
-        acquired = self.steps_lock.acquire(blocking=False)
+        """保護熱重載旗標：僅在鎖可用時嘗試非阻塞讀取，避免在特定自訂鎖實作下因 acquire 缺失造成例外。"""
         try:
+            acquire = getattr(self.steps_lock, "acquire", None)
+            if callable(acquire):
+                acquired = acquire(blocking=False)
+                try:
+                    return bool(self._reload_requested)
+                finally:
+                    if acquired:
+                        self.steps_lock.release()
             return bool(self._reload_requested)
-        finally:
-            if acquired:
-                self.steps_lock.release()
+        except Exception:
+            return bool(self._reload_requested)
 
     @reload_requested.setter
     def reload_requested(self, value: bool):
-        """保護熱重載旗標：僅在已持有 steps_lock 的情況下可直接寫入，否則也用非阻塞方式保護寫入"""
-        acquired = False
+        """保護熱重載旗標：若 steps_lock 可用，優先要求在持有鎖的前提下寫入；否則退化成安全寫入。"""
         try:
-            acquired = self.steps_lock.acquire(blocking=False)
-            self._reload_requested = bool(value)
-        finally:
-            if acquired:
-                self.steps_lock.release()
+            acquire = getattr(self.steps_lock, "acquire", None)
+            if callable(acquire):
+                try:
+                    acquired = acquire(blocking=False)
+                except Exception:
+                    acquired = False
+                try:
+                    if acquired or getattr(self.steps_lock, "locked", lambda: False)():
+                        self._reload_requested = bool(value)
+                        return
+                finally:
+                    if acquired:
+                        self.steps_lock.release()
+        except Exception:
+            pass
+        self._reload_requested = bool(value)
 
     def reset_runtime(self):
         """重設背景執行階段狀態、快照與旗標"""

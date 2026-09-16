@@ -134,6 +134,7 @@ class App(tk.Tk):
         self.step_ctrl = StepController(self)
         self.periodic_ctrl = PeriodicTaskController(self)
         self.runtime_service = RuntimeService(self)
+        self.runtime_coordinator = self.runtime_service.coordinator
         self.window_service = WindowService(self)
         self.profile_service = ProfileService(self)
         self.input_service = InputService(self)
@@ -513,40 +514,7 @@ class App(tk.Tk):
         self.run_on_ui_thread(_u)
 
     def run_in_test_thread(self, task_name, task_fn):
-        """統一的非同步試跑安全守衛與執行緒啟動器 (原子化狀態校驗與切換，杜絕 check-then-act 競態)"""
-        ok, reason = self.app_state.try_start_testing()
-        if not ok:
-            if reason == "running":
-                return self.set_status("巨集正在循環執行中，請先停止再試跑！")
-            else:
-                return self.set_status("已有試跑任務正在執行中，請稍候！")
-
-        self.app_state.stop_event.clear()
-        self.set_running_ui(True, is_test=True)
-
-        self.app_state.test_steps = state.fast_deepcopy(self.app_state.steps)
-        self.app_state.test_combos = state.fast_deepcopy(self.app_state.combos)
-        self.app_state.test_variables = state.fast_deepcopy(self.app_state.variables)
-
-        def _worker():
-            try:
-                self.append_log("試跑", f"▶ 正在試跑: {task_name}")
-                task_fn()
-                if self.app_state.stop_event.is_set():
-                    self.append_log("試跑", f"⏹ {task_name} 試跑已手動中止！")
-                else:
-                    self.append_log("試跑", f"✓ {task_name} 試跑完成！")
-            except Exception as e:
-                self.append_log("警示", f"✕ {task_name} 試跑異常: {e}")
-            finally:
-                self.app_state.test_steps.clear()
-                self.app_state.test_combos.clear()
-                self.app_state.test_variables.clear()
-                self.app_state.is_testing = False
-                emergency_release_all(self.app_state)
-                self.set_running_ui(False)
-
-        threading.Thread(target=_worker, daemon=True).start()
+        return self.runtime_coordinator.run_in_test_thread(task_name, task_fn)
 
     def track_mouse_live(self):
         """實時監控游標坐標並更新 HUD (具備坐標變更感知與動態休眠，降低系統調用消耗)"""
@@ -593,41 +561,13 @@ class App(tk.Tk):
             self.after(next_interval, self.track_mouse_live)
 
     def force_bring_window_to_front(self, hwnd):
-        """強制喚醒並將目標視窗置頂最前"""
-        force_bring_window_to_front(hwnd)
+        return self.window_service.force_bring_window_to_front(hwnd)
 
     def force_bring_self_to_front(self):
-        """將連點器主視窗置頂彈回最前"""
-        if self.is_closing: return
-        self.deiconify()
-        self.lift()
-        self.focus_force()
-        if user32:
-            hwnd_self = user32.FindWindowW(None, WINDOW_TITLE)
-            if hwnd_self:
-                force_bring_window_to_front(hwnd_self)
+        return self.window_service.force_bring_self_to_front()
 
     def locate_target_window(self):
-        """定位並閃爍目標遊戲視窗 (非同步背景閃爍，杜絕 UI 主執行緒凍結)"""
-        if not self.app_state.target_hwnd or not user32:
-            return self.set_status("未綁定有效視窗，無法定位！")
-
-        hwnd = self.app_state.target_hwnd
-        try:
-            force_bring_window_to_front(hwnd)
-            def _flash_worker():
-                for _ in range(4):
-                    if not is_window_alive(hwnd):
-                        break
-                    try:
-                        user32.FlashWindow(hwnd, True)
-                    except (OSError, ctypes.ArgumentError):
-                        break
-                    time.sleep(0.08)
-            threading.Thread(target=_flash_worker, daemon=True).start()
-            self.set_status(f"已定位並閃爍視窗 HWND: {hwnd}")
-        except Exception as e:
-            self.append_log("警示", f"視窗定位失敗: {e}")
+        return self.window_service.locate_target_window()
 
     # ======================= 取點防重入機制 + 頂部提示 =======================
     def capture_pos_space(self, on_finish, on_cancel=None, btn="left"):
@@ -683,6 +623,9 @@ class App(tk.Tk):
 
     def refresh_profiles(self, select_name=None):
         return self.profile_service.refresh_profiles(select_name)
+
+    def set_active_profile(self, name):
+        return self.profile_service.set_active_profile(name)
 
     def create_new_profile(self):
         return self.profile_service.create_new_profile()
@@ -902,16 +845,22 @@ class App(tk.Tk):
 
     # ======================= 主執行引擎 =======================
     def _stop_macro_run_ui(self, was_test=False):
-        return self.runtime_service._stop_macro_run_ui(was_test)
+        return self.runtime_coordinator.stop_run(was_test)
 
     def _start_macro_run_ui(self):
-        return self.runtime_service._start_macro_run_ui()
+        return self.runtime_coordinator.start_run()
 
     def toggle_run(self):
-        return self.runtime_service.toggle_run()
+        return self.runtime_coordinator.toggle_run()
 
     def macro_worker_loop(self):
-        return self.runtime_service.macro_worker_loop()
+        return self.runtime_coordinator.macro_worker_loop()
+
+    def start_runtime(self):
+        return self.runtime_coordinator.start_run()
+
+    def stop_runtime(self, was_test=False):
+        return self.runtime_coordinator.stop_run(was_test)
 
 
 if __name__ == "__main__":

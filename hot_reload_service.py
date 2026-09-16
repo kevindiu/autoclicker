@@ -5,6 +5,13 @@ class HotReloadService:
         self.app = app
 
     def trigger_hot_reload(self):
-        app_state = self.app.app_state
+        app_state = getattr(self.app, "app_state", None)
+        if app_state is None:
+            return False
         if app_state.is_running():
-            app_state.snapshot_active(reload_requested=True)
+            try:
+                app_state.snapshot_active(reload_requested=True)
+                return True
+            except Exception:
+                return False
+        return False
