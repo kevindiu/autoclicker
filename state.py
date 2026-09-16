@@ -260,6 +260,35 @@ class AppState:
         return self.get_data_snapshot() != last_saved_snapshot
 
 
+# -----------------------------------------------------------------------------
+# Backward-compatible module-level runtime API
+# -----------------------------------------------------------------------------
+# Some older UI code still calls module helpers like state.is_running() and
+# state.set_running(). Keep those as thin wrappers around a default AppState
+# instance so legacy callers keep working while newer code uses instance methods.
+_DEFAULT_APP_STATE = AppState()
+
+
+def is_running() -> bool:
+    return _DEFAULT_APP_STATE.is_running()
+
+
+def set_running(val: bool):
+    _DEFAULT_APP_STATE.set_running(val)
+
+
+def is_in_testing() -> bool:
+    return _DEFAULT_APP_STATE.is_in_testing()
+
+
+def set_testing(val: bool):
+    _DEFAULT_APP_STATE.set_testing(val)
+
+
+def get_default_app_state() -> AppState:
+    return _DEFAULT_APP_STATE
+
+
 # ==============================================================================
 # 全域狀態解耦：請透過 Dependency Injection 將 AppState 實例傳遞給需要的元件
 # ==============================================================================

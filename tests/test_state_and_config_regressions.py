@@ -42,6 +42,20 @@ class _HotReloadState(state.AppState):
 
 
 class StateAndConfigRegressionTests(unittest.TestCase):
+    def test_module_level_runtime_compatibility_helpers_work(self):
+        state.set_running(True)
+        self.assertTrue(state.is_running())
+        self.assertFalse(state.is_in_testing())
+
+        state.set_testing(True)
+        self.assertFalse(state.is_running())
+        self.assertTrue(state.is_in_testing())
+
+        state.set_running(False)
+        self.assertFalse(state.is_running())
+        self.assertFalse(state.is_in_testing())
+        self.assertTrue(state.get_default_app_state().stop_event.is_set())
+
     def test_set_running_clears_stop_event_when_starting(self):
         app_state = state.AppState()
         app_state.stop_event.set()

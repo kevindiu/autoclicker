@@ -440,7 +440,9 @@ def check_and_run_due_periodic_tasks(
 def _apply_hot_reload(app_state: 'state.AppState', round_idx: int, periodic_tasks_runtime: List[PeriodicTask]) -> Tuple[List[Action], List[Combo], Dict[str, Variable]]:
     """套用熱更新，並回傳最新的 steps, combos, variables。保護空任務、舊定時器狀態與相容性。"""
     with app_state.steps_lock:
-        app_state.reload_requested = False
+        # 這裡已持有 steps_lock，不能再走 property setter，否則會重新進入同一把 lock
+        # 並在 threading.Lock 下造成直接 deadlock。
+        app_state._reload_requested = False
         current_steps = state.fast_deepcopy(app_state.active_steps)
         current_combos = state.fast_deepcopy(app_state.active_combos)
         current_variables = state.fast_deepcopy(app_state.active_variables)
