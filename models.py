@@ -16,91 +16,8 @@ def _safe_float(value, default=0.0):
         return default
 
 
-class MappingCompatMixin:
-    """Compatibility shim so dataclass instances can be used like dicts in mixed code paths."""
-
-    def __getitem__(self, key):
-        if hasattr(self, key):
-            return getattr(self, key)
-        if key in self.__dict__:
-            return self.__dict__[key]
-        raise KeyError(key)
-
-    def __setitem__(self, key, value):
-        if hasattr(self, key) or key in getattr(type(self), "__dataclass_fields__", {}):
-            setattr(self, key, value)
-        else:
-            self.__dict__[key] = value
-
-    def __delitem__(self, key):
-        if hasattr(self, key):
-            delattr(self, key)
-        elif key in self.__dict__:
-            del self.__dict__[key]
-        else:
-            raise KeyError(key)
-
-    def __contains__(self, key):
-        return key in self.keys()
-
-    def __iter__(self):
-        return iter(self.keys())
-
-    def __len__(self):
-        return len(self.keys())
-
-    def __getattr__(self, key):
-        if key in self.__dict__:
-            return self.__dict__[key]
-        raise AttributeError(key)
-
-    def keys(self):
-        dataclass_fields = getattr(type(self), "__dataclass_fields__", {})
-        keys = list(dataclass_fields.keys())
-        return keys + [k for k in self.__dict__.keys() if k not in keys]
-
-    def items(self):
-        return [(k, self[k]) for k in self.keys()]
-
-    def values(self):
-        return [self[k] for k in self.keys()]
-
-    def get(self, key, default=None):
-        try:
-            return self[key]
-        except KeyError:
-            return default
-
-    def setdefault(self, key, default=None):
-        if key in self:
-            return self[key]
-        self[key] = default
-        return self[key]
-
-    def update(self, other=None, **kwargs):
-        if other is None:
-            other = {}
-        if hasattr(other, "items"):
-            for k, v in other.items():
-                self[k] = v
-        else:
-            for k, v in dict(other).items():
-                self[k] = v
-        for k, v in kwargs.items():
-            self[k] = v
-
-    def pop(self, key, default=None):
-        if key in self:
-            value = self[key]
-            del self[key]
-            return value
-        if default is not None:
-            return default
-        raise KeyError(key)
-
-
 @dataclass
-class Variable(MappingCompatMixin):
+class Variable:
     type: str  # 'coord', 'key', 'wait'
     value: Any
 
@@ -138,7 +55,7 @@ class Variable(MappingCompatMixin):
         return Variable(type=v_type, value=value)
 
 @dataclass
-class Action(MappingCompatMixin):
+class Action:
     type: str
     var_name: Optional[str] = None
 
@@ -218,7 +135,7 @@ class ComboAction(Action):
     actions: List[Action] = field(default_factory=list)
 
 @dataclass
-class Combo(MappingCompatMixin):
+class Combo:
     name: str
     actions: List[Action] = field(default_factory=list)
 
@@ -236,7 +153,7 @@ class Combo(MappingCompatMixin):
         )
 
 @dataclass
-class PeriodicTask(MappingCompatMixin):
+class PeriodicTask:
     id: str
     name: str
     trigger_mode: str = "interval"

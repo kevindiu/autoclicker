@@ -656,8 +656,8 @@ class PeriodicTaskController(BaseController):
         if new_pt:
             self.app.app_state.periodic_tasks.append(new_pt)
             new_idx = len(self.app.app_state.periodic_tasks) - 1
-            pt_name = getattr(new_pt, "name", new_pt.get("name") if hasattr(new_pt, "get") else "")
-            pt_interval = getattr(new_pt, "interval", new_pt.get("interval") if hasattr(new_pt, "get") else 0)
+            pt_name = new_pt.name
+            pt_interval = new_pt.interval
             EventBus.emit(AppEvents.PERIODIC_TASKS_CHANGED, new_idx)
             EventBus.emit(AppEvents.STATUS_MESSAGE, f"已新增定時任務：【{pt_name}】(每 {pt_interval} 秒)")
             self.trigger_hot_reload()
@@ -670,7 +670,7 @@ class PeriodicTaskController(BaseController):
         updated_pt = dialogs.prompt_edit_periodic_task(self.app, task=self.app.app_state.periodic_tasks[idx])
         if updated_pt:
             self.app.app_state.periodic_tasks[idx] = updated_pt
-            pt_name = getattr(updated_pt, "name", updated_pt.get("name") if hasattr(updated_pt, "get") else "")
+            pt_name = updated_pt.name
             EventBus.emit(AppEvents.PERIODIC_TASKS_CHANGED, idx)
             EventBus.emit(AppEvents.STATUS_MESSAGE, f"已更新定時任務 #{idx+1}：【{pt_name}】")
             self.trigger_hot_reload()
@@ -683,7 +683,7 @@ class PeriodicTaskController(BaseController):
         pt = self.app.app_state.periodic_tasks[idx]
         pt.enabled = not pt.enabled
         st_text = "啟用" if pt.enabled else "停用"
-        pt_name = getattr(pt, "name", pt.get("name") if hasattr(pt, "get") else "")
+        pt_name = pt.name
         EventBus.emit(AppEvents.PERIODIC_TASKS_CHANGED, idx)
         EventBus.emit(AppEvents.STATUS_MESSAGE, f"已將定時任務【{pt_name}】切換為 [{st_text}]")
         self.trigger_hot_reload()
