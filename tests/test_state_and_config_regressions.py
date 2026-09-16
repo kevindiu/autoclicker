@@ -3,6 +3,7 @@ import tempfile
 import unittest
 
 import config_manager
+import models
 import state
 
 
@@ -151,6 +152,29 @@ class StateAndConfigRegressionTests(unittest.TestCase):
 
         self.assertEqual(valid["periodic_tasks"][0]["trigger_mode"], "interval")
         self.assertEqual(valid["periodic_tasks"][0]["interval"], 1.0)
+
+    def test_coordinate_bool_strings_are_normalized_from_profile_input(self):
+        coord = models.Variable.from_dict({
+            "type": "coord",
+            "value": {"x": 10, "y": 20, "btn": "right", "rel": "false"},
+        })
+
+        self.assertFalse(coord.value["rel"])
+        self.assertEqual(coord.value["btn"], "right")
+
+    def test_frozen_runtime_keeps_safe_int_helper_available(self):
+        import importlib
+        import sys
+
+        original_frozen = getattr(sys, "frozen", False)
+        try:
+            sys.frozen = True
+            importlib.reload(config_manager)
+            self.assertTrue(callable(config_manager._safe_int))
+            self.assertEqual(config_manager._safe_int("42", 0), 42)
+        finally:
+            sys.frozen = original_frozen
+            importlib.reload(config_manager)
 
 
 if __name__ == "__main__":

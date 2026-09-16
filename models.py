@@ -16,6 +16,16 @@ def _safe_float(value, default=0.0):
         return default
 
 
+def _safe_bool(value, default=False):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return bool(default)
+
+
 @dataclass
 class Variable:
     type: str  # 'coord', 'key', 'wait'
@@ -38,7 +48,7 @@ class Variable:
                     "x": _safe_int(raw_val.get("x", 0)),
                     "y": _safe_int(raw_val.get("y", 0)),
                     "btn": str(raw_val.get("btn", "left")),
-                    "rel": bool(raw_val.get("rel", True))
+                    "rel": _safe_bool(raw_val.get("rel", True), True)
                 }
             else:
                 value = {"x": 0, "y": 0, "btn": "left", "rel": True}
@@ -79,7 +89,7 @@ class Action:
                 x=_safe_int(d.get("x", 0)),
                 y=_safe_int(d.get("y", 0)),
                 btn=d.get("btn", "left"),
-                rel=bool(d.get("rel", True))
+                rel=_safe_bool(d.get("rel", True), True)
             ),
             "key": lambda d: KeyAction(
                 var_name=var_name,

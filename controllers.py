@@ -170,9 +170,14 @@ class VarController(BaseController):
         """根據變數名稱與類型，組裝對應的動作字典與提示描述，若無效則回傳 (None, None)"""
         if not var_name or var_name not in self.app.app_state.variables:
             return None, None
+
         v_info = self.app.app_state.variables[var_name]
-        v_type = v_info.get("type", "coord")
-        v_val = v_info.value
+        if isinstance(v_info, dict):
+            v_type = v_info.get("type", "coord")
+            v_val = v_info.get("value")
+        else:
+            v_type = getattr(v_info, "type", "coord")
+            v_val = getattr(v_info, "value", None)
 
         if v_type == "coord":
             px = v_val.get("x", 0) if isinstance(v_val, dict) else 0

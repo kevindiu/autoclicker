@@ -8,10 +8,35 @@ import state
 from models import Variable, Action, Combo, PeriodicTask
 from theme import CONFIG_EXT
 
+
+def _safe_int(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_float(value, default=0.0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_bool(value, default=False):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return bool(default)
+
+
 # ==============================================================================
 # 設定檔管理 (Config Manager)
 # 負責 .shm 設定檔之檔案列表讀取、資料序列化儲存、載入與 Schema 向後相容補齊
-# ==============================================================================
+# ============================================================================== 
 
 # 確保設定檔存放在與執行檔 (.exe) 或主腳本同一目錄下 (相容 PyInstaller 打包與源碼執行)
 if getattr(sys, "frozen", False):
@@ -20,18 +45,13 @@ else:
     _DEFAULT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-    def _safe_int(value, default=0):
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return default
-
 def sanitize_profile_name(name: str) -> str:
     """過濾 Windows 與常見作業系統之非法檔名字元"""
     s = name.strip()
-    for ch in r'<>:"/\|?*':
+    for ch in r'<>:"/\\|?*':
         s = s.replace(ch, "")
     return s.strip()
+
 
 def get_profile_files(ext=CONFIG_EXT, dir_path=_DEFAULT_DIR) -> list:
     """獲取指定目錄下所有設定檔名稱列表 (已去除副檔名並排序)"""
@@ -39,6 +59,7 @@ def get_profile_files(ext=CONFIG_EXT, dir_path=_DEFAULT_DIR) -> list:
         return sorted([f[:-len(ext)] for f in os.listdir(dir_path) if f.endswith(ext)])
     except OSError:
         return []
+
 
 def ensure_default_profile(ext=CONFIG_EXT, dir_path=_DEFAULT_DIR):
     """若無任何設定檔則建立預設 default 設定檔 (原子寫入)"""
@@ -135,7 +156,7 @@ def validate_profile_data(data: dict) -> dict:
                     "x": _safe_int(value.get("x", 0)),
                     "y": _safe_int(value.get("y", 0)),
                     "btn": str(value.get("btn", "left")),
-                    "rel": bool(value.get("rel", True)),
+                    "rel": _safe_bool(value.get("rel", True), True),
                 },
             }
         elif v_type == "key":
