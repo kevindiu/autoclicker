@@ -241,14 +241,22 @@ class PeriodicTaskCardView(tk.Frame):
         self._create_card(idx, task)
 
     def _create_card(self, idx, task):
-        task_id = task.id or f"pt_idx_{idx}"
-        task["id"] = task_id
-        enabled = task.enabled
-        trigger_mode = task.trigger_mode
+        def field_of(obj, key, default=None):
+            if obj is None:
+                return default
+            if isinstance(obj, dict):
+                return obj.get(key, default)
+            return getattr(obj, key, default)
+
+        task_id = field_of(task, "id", f"pt_idx_{idx}")
+        if isinstance(task, dict):
+            task["id"] = task_id
+        enabled = field_of(task, "enabled", True)
+        trigger_mode = field_of(task, "trigger_mode", "interval")
 
         if trigger_mode == "round":
             try:
-                r_int = int(task.round_interval)
+                r_int = int(field_of(task, "round_interval", 1))
             except (ValueError, TypeError):
                 r_int = 1
             if r_int < 1:
@@ -257,7 +265,7 @@ class PeriodicTaskCardView(tk.Frame):
             badge_bg = UITheme.BADGE_PURPLE_BG
             badge_fg = UITheme.BADGE_PURPLE_FG
         else:
-            interval = task.interval
+            interval = field_of(task, "interval", 1.0)
             try:
                 f_sec = float(interval)
                 sec_str = f"{int(f_sec)}s" if f_sec.is_integer() else f"{f_sec}s"
@@ -267,25 +275,25 @@ class PeriodicTaskCardView(tk.Frame):
             badge_bg = UITheme.BADGE_CYAN_BG
             badge_fg = UITheme.BADGE_CYAN_FG
 
-        name = task.name.strip()
-        run_on_start = task.run_on_start
-        act = task.action
+        name = str(field_of(task, "name", "")).strip()
+        run_on_start = field_of(task, "run_on_start", False)
+        act = field_of(task, "action", None)
 
         # 格式化動作描述
-        var_name = act.var_name
-        atype = act.type
+        var_name = field_of(act, "var_name", None)
+        atype = field_of(act, "type", None)
         if var_name:
             act_text = f"↳ 變數:【{var_name}】"
         elif atype == "call_combo":
-            act_text = f"↳ 組合:【{act.get('target_name', '')}】"
+            act_text = f"↳ 組合:【{field_of(act, 'target_name', '')}】"
         elif atype == "key":
-            act_text = f"↳ 按鍵: [ {str(act.get('key', '')).upper()} ]"
+            act_text = f"↳ 按鍵: [ {str(field_of(act, 'key', '')).upper()} ]"
         elif atype == "click":
-            btn_tag = "右鍵" if act.get("btn") == "right" else "左鍵"
-            prefix = "相對" if act.rel else "絕對"
-            act_text = f"↳ 點擊: {btn_tag}·{prefix}({act.get('x', 0)}, {act.get('y', 0)})"
+            btn_tag = "右鍵" if field_of(act, "btn", "left") == "right" else "左鍵"
+            prefix = "相對" if field_of(act, "rel", True) else "絕對"
+            act_text = f"↳ 點擊: {btn_tag}·{prefix}({field_of(act, 'x', 0)}, {field_of(act, 'y', 0)})"
         elif atype == "wait":
-            act_text = f"↳ 停頓: {act.get('sec', 0)} 秒"
+            act_text = f"↳ 停頓: {field_of(act, 'sec', 0)} 秒"
         elif atype:
             act_text = f"↳ 動作: [{atype}]"
         else:
