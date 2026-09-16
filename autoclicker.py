@@ -437,7 +437,7 @@ class App(tk.Tk):
             self._last_timer_ui_update = now_ts
             if hasattr(self, "periodic_listbox") and hasattr(self.periodic_listbox, "update_countdowns"):
                 try:
-                    self.periodic_listbox.update_countdowns()
+                    self.periodic_listbox.update_countdowns(self.app_state)
                 except tk.TclError:
                     pass
                 except Exception as e:
@@ -506,7 +506,7 @@ class App(tk.Tk):
                 self.btn_toggle.config(text="▶ 開始循環執行", bg=UITheme.ACCENT_GREEN, activebackground=UITheme.ACCENT_GREEN_HOVER)
                 if hasattr(self, "periodic_listbox") and hasattr(self.periodic_listbox, "update_countdowns"):
                     try:
-                        self.periodic_listbox.update_countdowns()
+                        self.periodic_listbox.update_countdowns(self.app_state)
                     except (tk.TclError, AttributeError):
                         pass
                 self.clear_active_step_highlight()
