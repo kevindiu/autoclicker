@@ -373,8 +373,8 @@ def check_and_run_due_periodic_tasks(
                 )
             finally:
                 EventBus.emit(AppEvents.CLEAR_HIGHLIGHT_PERIODIC_TASK)
-            pt["last_run"] = time.time()
-            pt["last_run_round"] = current_round
+            pt.last_run = time.time()
+            pt.last_run_round = current_round
             sync_periodic_timers(app_state, periodic_tasks_runtime, active_task_id=None, current_round=current_round)
             if not ok:
                 return False
@@ -678,8 +678,8 @@ def bootstrap_macro_runtime(app_state: 'state.AppState'):
     periodic_tasks_runtime = []
     for pt in active_pts:
         pt_copy = copy.deepcopy(pt)
-        pt_copy["last_run"] = 0.0 if pt.get("run_on_start", False) else start_time
-        pt_copy["last_run_round"] = 0
+        pt_copy.last_run = 0.0 if getattr(pt, "run_on_start", False) else start_time
+        pt_copy.last_run_round = 0
         periodic_tasks_runtime.append(pt_copy)
     sync_periodic_timers(app_state, periodic_tasks_runtime, current_round=0)
 

@@ -341,18 +341,18 @@ def prompt_edit_combo_dialog(app, combo_step, step_idx=None):
     r2 = tk.Frame(f_top, bg=UITheme.BG_PANEL)
     r2.pack(fill="x", pady=(4, 0))
     tk.Label(r2, text="載入組合庫範本:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL, font=UITheme.FONT_NORMAL).pack(side="left", padx=(0, 4))
-    tpl_names = [c["name"] for c in app.app_state.combos]
+    tpl_names = [c.name for c in app.app_state.combos]
     var_tpl = tk.StringVar(value=combo_name if combo_name in tpl_names else (tpl_names[0] if tpl_names else ""))
     cbo_tpl = ttk.Combobox(r2, textvariable=var_tpl, values=tpl_names, width=16, state="readonly")
     cbo_tpl.pack(side="left", padx=2)
 
     def do_load_tpl():
         chosen = var_tpl.get().strip()
-        matched = next((c for c in app.app_state.combos if c["name"] == chosen), None)
+        matched = next((c for c in app.app_state.combos if c.name == chosen), None)
         if matched:
             nonlocal combo_name
-            combo_name = matched["name"]
-            combo_step["name"] = combo_name
+            combo_name = matched.name
+            combo_step.name = combo_name
             lbl_title.config(text=f"◆ 組合名稱: 【{combo_name}】")
             working_actions.clear()
             working_actions.extend(copy.deepcopy(matched.actions))
@@ -459,8 +459,8 @@ def prompt_edit_combo_dialog(app, combo_step, step_idx=None):
     tk.Button(f_btns, text="✕ 刪除", width=12, bg=UITheme.ACCENT_RED, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_del_sub).pack(fill="x", pady=(2, 6))
 
     def on_save():
-        combo_step["name"] = combo_name
-        combo_step["actions"] = working_actions
+        combo_step.name = combo_name
+        combo_step.actions = working_actions
         modified[0] = True
         dialog.destroy()
 
@@ -504,7 +504,7 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
         def on_ref_change(event=None):
             chosen = var_ref.get()
             if chosen in app.app_state.variables:
-                v_val = app.app_state.variables[chosen].get("value", {})
+                v_val = app.app_state.variables[chosen].value
                 if isinstance(v_val, dict):
                     var_x.set(str(v_val.get("x", 0)))
                     var_y.set(str(v_val.get("y", 0)))
@@ -543,15 +543,15 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
 
         def on_ok():
             try:
-                action["x"] = int(var_x.get().strip())
-                action["y"] = int(var_y.get().strip())
-                action["btn"] = "right" if var_btn.get() == "右鍵" else "left"
-                action["rel"] = var_rel[0]
+                action.x = int(var_x.get().strip())
+                action.y = int(var_y.get().strip())
+                action.btn = "right" if var_btn.get() == "右鍵" else "left"
+                action.rel = var_rel[0]
                 chosen = var_ref.get()
                 if chosen in coord_vars:
-                    action["var_name"] = chosen
+                    action.var_name = chosen
                 else:
-                    action.pop("var_name", None)
+                    action.var_name = None
                 modified[0] = True
                 dialog.destroy()
             except ValueError:
@@ -572,7 +572,7 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
         def on_ref_change(event=None):
             chosen = var_ref.get()
             if chosen in app.app_state.variables:
-                var_k.set(str(app.app_state.variables[chosen].get("value", "")))
+                var_k.set(str(app.app_state.variables[chosen].value))
         cbo_ref.bind("<<ComboboxSelected>>", on_ref_change)
 
         tk.Label(f, text="按鍵名稱:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL).grid(row=1, column=0, padx=6, pady=6, sticky="e")
@@ -585,12 +585,12 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
             if not k:
                 messagebox.showerror("錯誤", "按鍵名稱不可為空！", parent=dialog)
                 return
-            action["key"] = k
+            action.key = k
             chosen = var_ref.get()
             if chosen in key_vars:
-                action["var_name"] = chosen
+                action.var_name = chosen
             else:
-                action.pop("var_name", None)
+                action.var_name = None
             modified[0] = True
             dialog.destroy()
 
@@ -609,7 +609,7 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
         def on_ref_change(event=None):
             chosen = var_ref.get()
             if chosen in app.app_state.variables:
-                var_w.set(str(app.app_state.variables[chosen].get("value", "")))
+                var_w.set(str(app.app_state.variables[chosen].value))
         cbo_ref.bind("<<ComboboxSelected>>", on_ref_change)
 
         tk.Label(f, text="等待秒數:", bg=UITheme.BG_PANEL, fg=UITheme.TEXT_LABEL).grid(row=1, column=0, padx=6, pady=6, sticky="e")
@@ -621,12 +621,12 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
             try:
                 sec = float(var_w.get().strip())
                 if sec <= 0: raise ValueError
-                action["sec"] = sec
+                action.sec = sec
                 chosen = var_ref.get()
                 if chosen in wait_vars:
-                    action["var_name"] = chosen
+                    action.var_name = chosen
                 else:
-                    action.pop("var_name", None)
+                    action.var_name = None
                 modified[0] = True
                 dialog.destroy()
             except ValueError:
@@ -648,7 +648,7 @@ def prompt_edit_action(app, action, available_combos=None, step_idx=None):
             if not tgt:
                 messagebox.showerror("錯誤", "請先選擇有效的組合名稱！", parent=dialog)
                 return
-            action["target_name"] = tgt
+            action.target_name = tgt
             modified[0] = True
             dialog.destroy()
 

@@ -2,6 +2,8 @@ import sys
 import copy
 import json
 import dataclasses
+from dataclasses import dataclass, field
+
 
 def fast_deepcopy(obj):
     """
@@ -27,47 +29,55 @@ from typing import Dict, List, Any, Optional
 from models import Variable, Action, Combo, PeriodicTask, ClickAction, KeyAction, WaitAction, CallComboAction, ComboAction
 
 
+@dataclass
 class AppState:
     """全域巨集運作與資料狀態封裝類別
     
     將所有原本散落在模組級的全域變數（編輯器草稿、背景執行期快照、執行緒鎖、事件旗標）
     統一封裝於單一物件實例中，提供乾淨的狀態重設、單元測試隔離以及明確的屬性存取。
     """
-    def __init__(self):
-        # 1. 編輯器草稿資料 (Draft Data)
-        self.combos: List[Combo] = []
-        self.steps: List[Action] = []
-        self.variables: Dict[str, Variable] = {}
-        self.periodic_tasks: List[PeriodicTask] = []
+    # 1. 編輯器草稿資料 (Draft Data)
+    combos: List[Combo] = field(default_factory=list)
+    steps: List[Action] = field(default_factory=list)
+    variables: Dict[str, Variable] = field(default_factory=dict)
+    periodic_tasks: List[PeriodicTask] = field(default_factory=list)
 
-        # 2. 背景運行實例快照 (Active Runtime Snapshots)
-        self.active_steps: List[Action] = []
-        self.active_combos: List[Combo] = []
-        self.active_variables: Dict[str, Variable] = {}
-        self.active_periodic_tasks: List[PeriodicTask] = []
-        # 3. 試跑專屬唯讀快照 (Test Run Read-Only Snapshots)
-        self.test_steps: List[Action] = []
-        self.test_combos: List[Combo] = []
-        self.test_variables: Dict[str, Variable] = {}
+    # 2. 背景運行實例快照 (Active Runtime Snapshots)
+    active_steps: List[Action] = field(default_factory=list)
+    active_combos: List[Combo] = field(default_factory=list)
+    active_variables: Dict[str, Variable] = field(default_factory=dict)
+    active_periodic_tasks: List[PeriodicTask] = field(default_factory=list)
 
-        # 4. 執行期旗標與執行緒同步物件 (Flags & Thread Synchronization)
-        self.running_lock = threading.RLock()
-        self._running = False
-        self._is_testing = False
-        self._reload_requested = False
-        
-        # 4. 運行環境設定 (Runtime Configuration)
-        self.use_bg = True
-        self.offset_x = 0
-        self.offset_y = 0
+    # 3. 試跑專屬唯讀快照 (Test Run Read-Only Snapshots)
+    test_steps: List[Action] = field(default_factory=list)
+    test_combos: List[Combo] = field(default_factory=list)
+    test_variables: Dict[str, Variable] = field(default_factory=dict)
 
-        self.steps_lock = threading.Lock() # 保護 active_steps, active_combos, active_variables 與 active_periodic_tasks
-        self.stop_event = threading.Event()
-        self.target_hwnd = None
-        self.currently_held_keys = set()   # 追蹤當前被按下的按鍵，格式: ("bg", hwnd, vk) 或 ("fg", key_str)
-        self.currently_held_keys_lock = threading.Lock()
-        self.periodic_timers = {}          # 背景定時任務即時倒數計時器快照: {task_id: {"last_run": float, "interval": float, "enabled": bool, "is_active": bool}}
-        self.periodic_timers_lock = threading.Lock()
+    # 4. 執行期旗標與執行緒同步物件 (Flags & Thread Synchronization)
+    running_lock: threading.RLock = field(default_factory=threading.RLock)
+    _running: bool = False
+    _is_testing: bool = False
+    _reload_requested: bool = False
+
+    # 4. 運行環境設定 (Runtime Configuration)
+    use_bg: bool = True
+    offset_x: int = 0
+    offset_y: int = 0
+
+    steps_lock: threading.Lock = field(default_factory=threading.Lock)
+    stop_event: threading.Event = field(default_factory=threading.Event)
+    target_hwnd: Any = None
+    currently_held_keys: set = field(default_factory=set)
+    currently_held_keys_lock: threading.Lock = field(default_factory=threading.Lock)
+    periodic_timers: dict = field(default_factory=dict)
+    periodic_timers_lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def __post_init__(self):
+        """確保 dataclass 版仍保留舊有初始化語義。"""
+        self.stop_event = getattr(self, "stop_event", threading.Event())
+        self.steps_lock = getattr(self, "steps_lock", threading.Lock())
+        self.currently_held_keys_lock = getattr(self, "currently_held_keys_lock", threading.Lock())
+        self.periodic_timers_lock = getattr(self, "periodic_timers_lock", threading.Lock())
 
     def is_running(self) -> bool:
         """線程安全地檢查巨集是否處於運行狀態"""
@@ -216,13 +226,12 @@ class AppState:
             self.reload_requested = reload_requested
 
     def to_dict(self) -> dict:
-        """將編輯器草稿資料匯出為可序列化字典，避免 dataclass 直接落入 JSON 序列化時失敗。"""
-        from dataclasses import asdict
+        """將編輯器草稿資料匯出為可序列化字典，並統一透過 dataclass 轉換層保留資料契約。"""
         return {
-            "variables": {k: asdict(v) for k, v in self.variables.items()},
-            "combos": [asdict(c) for c in self.combos],
-            "steps": [asdict(s) for s in self.steps],
-            "periodic_tasks": [asdict(p) for p in self.periodic_tasks],
+            "variables": {k: v.to_dict() if hasattr(v, "to_dict") else v for k, v in self.variables.items()},
+            "combos": [c.to_dict() if hasattr(c, "to_dict") else c for c in self.combos],
+            "steps": [s.to_dict() if hasattr(s, "to_dict") else s for s in self.steps],
+            "periodic_tasks": [p.to_dict() if hasattr(p, "to_dict") else p for p in self.periodic_tasks],
         }
 
     def load_dict(self, data: dict):
@@ -233,14 +242,8 @@ class AppState:
 
     def get_data_snapshot(self) -> str:
         """獲取當前編輯器資料的序列化字串，用於精確比對未儲存變更"""
-        from dataclasses import asdict
         try:
-            return json.dumps({
-                "variables": {k: asdict(v) for k, v in self.variables.items()},
-                "combos": [asdict(c) for c in self.combos],
-                "steps": [asdict(s) for s in self.steps],
-                "periodic_tasks": [asdict(p) for p in self.periodic_tasks],
-            }, sort_keys=True)
+            return json.dumps(self.to_dict(), sort_keys=True)
         except (TypeError, ValueError):
             return ""
 

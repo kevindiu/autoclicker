@@ -78,17 +78,12 @@ def save_profile_file(name: str, target_state=None, ext=CONFIG_EXT, dir_path=_DE
     if hasattr(target_state, "to_dict"):
         data = target_state.to_dict()
     else:
-        from dataclasses import asdict
         data = {
-            "variables": {k: asdict(v) for k, v in target_state.variables.items()},
-            "combos": [asdict(c) for c in target_state.combos],
-            "steps": [asdict(s) for s in target_state.steps],
-            "periodic_tasks": [asdict(p) for p in target_state.periodic_tasks]
+            "variables": {k: v.to_dict() if hasattr(v, "to_dict") else v for k, v in getattr(target_state, "variables", {}).items()},
+            "combos": [c.to_dict() if hasattr(c, "to_dict") else c for c in getattr(target_state, "combos", [])],
+            "steps": [s.to_dict() if hasattr(s, "to_dict") else s for s in getattr(target_state, "steps", [])],
+            "periodic_tasks": [p.to_dict() if hasattr(p, "to_dict") else p for p in getattr(target_state, "periodic_tasks", [])],
         }
-
-    if any(hasattr(v, "__dict__") and not isinstance(v, (dict, list, tuple, str, int, float, bool, type(None))) for v in [data]):
-        from dataclasses import asdict
-        data = asdict(target_state) if hasattr(target_state, "__dataclass_fields__") else data
 
     try:
         with open(temp_fn, "w", encoding="utf-8") as f:

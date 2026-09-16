@@ -319,11 +319,11 @@ class ComboController(BaseController):
         sync_cnt = 0
         for s in self.app.app_state.steps:
             if s.type == "call_combo" and s.target_name == old_name:
-                s["target_name"] = new_name
+                s.target_name = new_name
                 sync_cnt += 1
             elif s.type == "combo":
                 if s.name == old_name:
-                    s["name"] = new_name
+                    s.name = new_name
                     sync_cnt += 1
                 for act in s.actions:
                     if act.type == "call_combo" and act.target_name == old_name:

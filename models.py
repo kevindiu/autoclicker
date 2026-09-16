@@ -103,15 +103,18 @@ class MappingCompatMixin:
 class Variable(MappingCompatMixin):
     type: str  # 'coord', 'key', 'wait'
     value: Any
-    
+
+    def to_dict(self) -> dict:
+        return {"type": self.type, "value": self.value}
+
     @staticmethod
     def from_dict(data: dict) -> 'Variable':
         if not data:
             return Variable(type="coord", value={"x": 0, "y": 0, "btn": "left", "rel": True})
-            
+
         v_type = data.get("type", "coord")
         raw_val = data.get("value")
-        
+
         if v_type == "coord":
             if isinstance(raw_val, dict):
                 value = {
@@ -131,7 +134,7 @@ class Variable(MappingCompatMixin):
                 value = 1.0
         else:
             value = raw_val
-            
+
         return Variable(type=v_type, value=value)
 
 @dataclass
@@ -139,13 +142,20 @@ class Action(MappingCompatMixin):
     type: str
     var_name: Optional[str] = None
 
+    def to_dict(self) -> dict:
+        data = {"type": self.type, "var_name": self.var_name}
+        for key, value in self.__dict__.items():
+            if key not in {"type", "var_name"} and value is not None:
+                data[key] = value
+        return data
+
     @staticmethod
     def from_dict(data: dict) -> Optional['Action']:
         if not data:
             return None
         act_type = data.get("type")
         var_name = data.get("var_name")
-        
+
         handlers = {
             "click": lambda d: ClickAction(
                 var_name=var_name,
@@ -172,7 +182,7 @@ class Action(MappingCompatMixin):
                 actions=[Action.from_dict(a) for a in d.get("actions", []) if a]
             )
         }
-        
+
         handler = handlers.get(act_type)
         if handler:
             return handler(data)
@@ -212,6 +222,12 @@ class Combo(MappingCompatMixin):
     name: str
     actions: List[Action] = field(default_factory=list)
 
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "actions": [a.to_dict() if hasattr(a, "to_dict") else a for a in self.actions],
+        }
+
     @staticmethod
     def from_dict(data: dict) -> 'Combo':
         return Combo(
@@ -229,6 +245,24 @@ class PeriodicTask(MappingCompatMixin):
     enabled: bool = True
     run_on_start: bool = False
     action: Optional[Action] = None
+    last_run: float = 0.0
+    last_run_round: int = 0
+
+    def to_dict(self) -> dict:
+        payload = {
+            "id": self.id,
+            "name": self.name,
+            "trigger_mode": self.trigger_mode,
+            "interval": self.interval,
+            "round_interval": self.round_interval,
+            "enabled": self.enabled,
+            "run_on_start": self.run_on_start,
+            "last_run": self.last_run,
+            "last_run_round": self.last_run_round,
+        }
+        if self.action is not None:
+            payload["action"] = self.action.to_dict() if hasattr(self.action, "to_dict") else self.action
+        return payload
 
     @staticmethod
     def from_dict(data: dict) -> 'PeriodicTask':
@@ -240,5 +274,7 @@ class PeriodicTask(MappingCompatMixin):
             round_interval=_safe_int(data.get("round_interval", 1), default=1),
             enabled=bool(data.get("enabled", True)),
             run_on_start=bool(data.get("run_on_start", False)),
-            action=Action.from_dict(data.get("action", {})) if data.get("action") else None
+            action=Action.from_dict(data.get("action", {})) if data.get("action") else None,
+            last_run=_safe_float(data.get("last_run", 0.0), default=0.0),
+            last_run_round=_safe_int(data.get("last_run_round", 0), default=0),
         )
