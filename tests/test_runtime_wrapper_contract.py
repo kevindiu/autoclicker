@@ -1,9 +1,13 @@
+import threading
+import time
 import unittest
 import sys
 from types import SimpleNamespace
 
 from autoclicker import App
 import engine
+from models import PeriodicTask, WaitAction
+import state
 
 
 class RuntimeWrapperContractTests(unittest.TestCase):
@@ -64,6 +68,19 @@ class RuntimeWrapperContractTests(unittest.TestCase):
             calls,
             ["clear_step", ("active_step", 2, 1), ("pending_step", 3), ("active_periodic", 4), "clear_periodic"],
         )
+
+    def test_runtime_manager_handles_periodic_task_objects(self):
+        app_state = state.AppState()
+        app_state.active_periodic_tasks = [
+            PeriodicTask(id="pt1", name="tick", interval=0.01, enabled=True, action=WaitAction(sec=0.0), run_on_start=True)
+        ]
+        runtime = engine.RuntimeManager(app_state)
+
+        boot = runtime.bootstrap()
+
+        self.assertIsInstance(boot["periodic_tasks_runtime"], list)
+        self.assertEqual(len(boot["periodic_tasks_runtime"]), 1)
+        self.assertEqual(boot["periodic_tasks_runtime"][0].name, "tick")
 
 
 if __name__ == "__main__":

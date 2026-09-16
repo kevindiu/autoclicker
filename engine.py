@@ -1,6 +1,7 @@
 import copy
 import time
 import traceback
+from dataclasses import dataclass
 from typing import Dict, List, Any, Optional, Set, Tuple
 from contextlib import contextmanager
 
@@ -243,19 +244,16 @@ def sync_periodic_timers(app_state: 'state.AppState', periodic_tasks_runtime: Li
     """線程安全地同步背景定時任務當前計時器快照至 app_state.periodic_timers 供 UI 即時倒數與設定值展示"""
     timers = {}
     for idx, pt in enumerate(periodic_tasks_runtime):
-        pt_id = pt.id or f"pt_idx_{idx}"
-        interval = pt.interval
-        round_interval = pt.round_interval
-        # We need to maintain last_run state in the dataclass itself, but since dataclass instance is passed around, we can inject these runtime states or store them in a runtime dict.
-        # Let's assume the pt object receives these fields during runtime via setattr
+        runtime_pt = RuntimeTaskSnapshot.from_task(pt, fallback_id=f"pt_idx_{idx}", current_round=current_round)
+        pt_id = runtime_pt.task_id
         timers[pt_id] = {
-            "trigger_mode": pt.trigger_mode,
-            "last_run": getattr(pt, "last_run", 0.0),
-            "interval": interval,
-            "round_interval": round_interval,
-            "last_run_round": getattr(pt, "last_run_round", 0),
+            "trigger_mode": runtime_pt.trigger_mode,
+            "last_run": runtime_pt.last_run,
+            "interval": runtime_pt.interval,
+            "round_interval": runtime_pt.round_interval,
+            "last_run_round": runtime_pt.last_run_round,
             "current_round": current_round,
-            "enabled": pt.enabled,
+            "enabled": runtime_pt.enabled,
             "is_active": (pt_id == active_task_id)
         }
     with app_state.periodic_timers_lock:
@@ -308,6 +306,59 @@ def get_trigger_strategy(trigger_mode):
         return RoundTriggerStrategy()
     return IntervalTriggerStrategy()
 
+
+def _periodic_task_value(task: Any, field: str, default: Any = None) -> Any:
+    """Normalize access for both dataclass-based PeriodicTask objects and legacy dict snapshots."""
+    if task is None:
+        return default
+    if isinstance(task, dict):
+        return task.get(field, default)
+    return getattr(task, field, default)
+
+
+def _periodic_task_enabled(task: Any) -> bool:
+    """Back-compat helper for both PeriodicTask objects and legacy dict-based runtime snapshots."""
+    return bool(_periodic_task_value(task, "enabled", True))
+
+
+def _periodic_task_action(task: Any) -> Any:
+    return _periodic_task_value(task, "action", None)
+
+
+def _periodic_task_name(task: Any) -> str:
+    value = _periodic_task_value(task, "name", "定時任務")
+    return str(value).strip() if value is not None else "定時任務"
+
+
+@dataclass
+class RuntimeTaskSnapshot:
+    """Runtime-only view of a periodic task. Keeps timer state separate from persisted config objects."""
+    task_id: str
+    name: str
+    trigger_mode: str
+    enabled: bool
+    action: Any
+    interval: float
+    round_interval: int
+    last_run: float
+    last_run_round: int
+
+    @classmethod
+    def from_task(cls, task: Any, fallback_id: str = "", current_round: int = 0) -> "RuntimeTaskSnapshot":
+        task_id = str(_periodic_task_value(task, "id", fallback_id) or fallback_id or "pt_runtime")
+        return cls(
+            task_id=task_id,
+            name=_periodic_task_name(task),
+            trigger_mode=str(_periodic_task_value(task, "trigger_mode", "interval") or "interval").lower(),
+            enabled=bool(_periodic_task_enabled(task)),
+            action=_periodic_task_action(task),
+            interval=float(_periodic_task_value(task, "interval", 1.0) or 1.0),
+            round_interval=int(_periodic_task_value(task, "round_interval", 1) or 1),
+            last_run=float(_periodic_task_value(task, "last_run", 0.0) or 0.0),
+            last_run_round=int(_periodic_task_value(task, "last_run_round", current_round) or current_round),
+        )
+
+
 def check_and_run_due_periodic_tasks(
     app_state: 'state.AppState',
     periodic_tasks_runtime: List[PeriodicTask],
@@ -326,23 +377,24 @@ def check_and_run_due_periodic_tasks(
     ctx = TriggerContext(current_round, is_round_end, is_startup)
 
     for idx, pt in enumerate(periodic_tasks_runtime):
-        if not pt.enabled:
+        if not _periodic_task_enabled(pt):
             continue
 
-        if getattr(pt, "action", None) is None:
-            EventBus.emit(AppEvents.LOG_MESSAGE, "警示", f"定時任務【{getattr(pt, 'name', '未命名任務').strip() or '未命名任務'}】沒有動作，已跳過")
+        if _periodic_task_action(pt) is None:
+            task_name = _periodic_task_name(pt) or "未命名任務"
+            EventBus.emit(AppEvents.LOG_MESSAGE, "警示", f"定時任務【{task_name}】沒有動作，已跳過")
             continue
 
-        strategy = get_trigger_strategy(pt.trigger_mode)
+        strategy = get_trigger_strategy(_periodic_task_value(pt, "trigger_mode", "interval"))
 
         if strategy.is_due(pt, ctx):
             if not app_state.is_running() or app_state.stop_event.is_set():
                 return False
             if app_state.target_hwnd and not is_window_alive(app_state.target_hwnd):
                 return False
-            task_name = getattr(pt, "name", "定時任務").strip() or "定時任務"
-            pt_id = getattr(pt, "id", f"pt_idx_{idx}")
-            act = getattr(pt, "action", {})
+            task_name = _periodic_task_name(pt) or "定時任務"
+            pt_id = _periodic_task_value(pt, "id", f"pt_idx_{idx}")
+            act = _periodic_task_action(pt) or {}
             log_msg = strategy.get_log_message(pt, ctx, round_prefix)
             EventBus.emit(AppEvents.LOG_MESSAGE, "定時", log_msg)
             # 定時任務執行期間：
@@ -393,18 +445,22 @@ def _apply_hot_reload(app_state: 'state.AppState', round_idx: int, periodic_task
 
     existing_timers = {}
     for pt in periodic_tasks_runtime:
-        pt_id = getattr(pt, "id", None)
+        pt_id = _periodic_task_value(pt, "id", None)
         if pt_id:
-            existing_timers[pt_id] = (getattr(pt, "last_run", 0.0), getattr(pt, "last_run_round", 0))
+            existing_timers[str(pt_id)] = (
+                float(_periodic_task_value(pt, "last_run", 0.0) or 0.0),
+                int(_periodic_task_value(pt, "last_run_round", 0) or 0),
+            )
 
     new_runtime = []
     now = time.time()
     for pt in latest_pts:
         pt_copy = copy.deepcopy(pt)
-        pt_id = getattr(pt_copy, "id", None)
-        if pt_id in existing_timers:
-            setattr(pt_copy, "last_run", existing_timers[pt_id][0])
-            setattr(pt_copy, "last_run_round", existing_timers[pt_id][1])
+        pt_id = _periodic_task_value(pt_copy, "id", None)
+        pt_key = str(pt_id) if pt_id is not None else ""
+        if pt_key in existing_timers:
+            setattr(pt_copy, "last_run", existing_timers[pt_key][0])
+            setattr(pt_copy, "last_run_round", existing_timers[pt_key][1])
         else:
             setattr(pt_copy, "last_run", 0.0 if getattr(pt_copy, "run_on_start", False) else now)
             setattr(pt_copy, "last_run_round", round_idx)
@@ -567,7 +623,7 @@ class RuntimeManager:
                 if was_reloaded:
                     self.reload_if_needed()
 
-                has_enabled_periodic = any(pt.get("enabled", True) for pt in self.periodic_tasks_runtime)
+                has_enabled_periodic = any(_periodic_task_enabled(pt) for pt in self.periodic_tasks_runtime)
                 if not self.current_steps and not has_enabled_periodic:
                     msg = "掛機流程清單與定時任務均為空，巨集已自動停止！"
                     EventBus.emit(AppEvents.LOG_MESSAGE, "警示", msg)

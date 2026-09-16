@@ -51,6 +51,40 @@ class StateAndConfigRegressionTests(unittest.TestCase):
         self.assertFalse(app_state.is_running())
         self.assertTrue(app_state.stop_event.is_set())
 
+    def test_set_running_clears_testing_mode_and_set_testing_clears_running_mode(self):
+        app_state = state.AppState()
+
+        app_state.set_testing(True)
+        self.assertTrue(app_state.is_in_testing())
+
+        app_state.set_running(True)
+        self.assertTrue(app_state.is_running())
+        self.assertFalse(app_state.is_in_testing())
+
+        app_state.set_running(False)
+        app_state.set_testing(True)
+        self.assertTrue(app_state.is_in_testing())
+        self.assertFalse(app_state.is_running())
+
+    def test_start_reload_and_stop_sequence_remains_consistent(self):
+        app_state = state.AppState()
+
+        app_state.set_running(True)
+        app_state.request_reload()
+        self.assertTrue(app_state.is_running())
+        self.assertTrue(app_state.reload_requested)
+
+        app_state.reload_requested = False
+        self.assertFalse(app_state.reload_requested)
+
+        app_state.set_running(False)
+        self.assertFalse(app_state.is_running())
+        self.assertTrue(app_state.stop_event.is_set())
+
+        app_state.set_testing(True)
+        self.assertTrue(app_state.is_in_testing())
+        self.assertFalse(app_state.is_running())
+
     def test_load_profile_file_handles_invalid_periodic_tasks(self):
         app_state = state.AppState()
         with tempfile.TemporaryDirectory() as tmpdir:

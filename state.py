@@ -85,13 +85,16 @@ class AppState:
             return self._running
 
     def set_running(self, val: bool):
-        """線程安全地設定巨集運行狀態"""
+        """線程安全地設定巨集運行狀態，並保證 `running` 與 `testing` 互斥。"""
         with self.running_lock:
-            self._running = bool(val)
-            if self._running:
+            should_run = bool(val)
+            self._running = should_run
+            if should_run:
+                self._is_testing = False
                 self.stop_event.clear()
-            elif not self._is_testing:
-                self.stop_event.set()
+            else:
+                if not self._is_testing:
+                    self.stop_event.set()
 
     @property
     def running(self) -> bool:
@@ -108,10 +111,12 @@ class AppState:
             return self._is_testing
 
     def set_testing(self, val: bool):
-        """線程安全地設定試跑狀態"""
+        """線程安全地設定試跑狀態，並保證 `testing` 與 `running` 互斥。"""
         with self.running_lock:
-            self._is_testing = bool(val)
-            if self._is_testing:
+            should_test = bool(val)
+            self._is_testing = should_test
+            if should_test:
+                self._running = False
                 self.stop_event.clear()
             elif not self._running:
                 self.stop_event.set()
@@ -154,40 +159,52 @@ class AppState:
 
     @property
     def reload_requested(self) -> bool:
-        """保護熱重載旗標：僅在鎖可用時嘗試非阻塞讀取，避免在特定自訂鎖實作下因 acquire 缺失造成例外。"""
+        """保護熱重載旗標。使用最小必要保護，避免在沒有 acquire 能力的自訂鎖上出現例外。"""
         try:
-            acquire = getattr(self.steps_lock, "acquire", None)
-            if callable(acquire):
-                acquired = acquire(blocking=False)
-                try:
-                    return bool(self._reload_requested)
-                finally:
-                    if acquired:
-                        self.steps_lock.release()
-            return bool(self._reload_requested)
-        except Exception:
-            return bool(self._reload_requested)
-
-    @reload_requested.setter
-    def reload_requested(self, value: bool):
-        """保護熱重載旗標：若 steps_lock 可用，優先要求在持有鎖的前提下寫入；否則退化成安全寫入。"""
-        try:
-            acquire = getattr(self.steps_lock, "acquire", None)
+            lock = getattr(self, "steps_lock", None)
+            acquire = getattr(lock, "acquire", None) if lock is not None else None
             if callable(acquire):
                 try:
                     acquired = acquire(blocking=False)
                 except Exception:
                     acquired = False
                 try:
-                    if acquired or getattr(self.steps_lock, "locked", lambda: False)():
-                        self._reload_requested = bool(value)
-                        return
+                    return bool(self._reload_requested)
                 finally:
                     if acquired:
-                        self.steps_lock.release()
+                        lock.release()
+            return bool(self._reload_requested)
+        except Exception:
+            return bool(self._reload_requested)
+
+    @reload_requested.setter
+    def reload_requested(self, value: bool):
+        """保護熱重載旗標：寫入前先確認鎖可用；若無法確保鎖語義，優先保留安全的布林寫入。"""
+        try:
+            lock = getattr(self, "steps_lock", None)
+            if lock is not None:
+                acquire = getattr(lock, "acquire", None)
+                if callable(acquire):
+                    try:
+                        acquired = acquire(blocking=False)
+                    except Exception:
+                        acquired = False
+                    if acquired or getattr(lock, "locked", lambda: False)():
+                        self._reload_requested = bool(value)
+                        if acquired:
+                            lock.release()
+                        return
         except Exception:
             pass
         self._reload_requested = bool(value)
+
+    def request_reload(self):
+        """要求在下一輪執行前套用熱重載快照。"""
+        try:
+            with self.steps_lock:
+                self._reload_requested = True
+        except Exception:
+            self._reload_requested = True
 
     def reset_runtime(self):
         """重設背景執行階段狀態、快照與旗標"""
