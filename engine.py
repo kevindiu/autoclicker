@@ -392,6 +392,9 @@ def check_and_run_due_periodic_tasks(
                 return False
             if app_state.target_hwnd and not is_window_alive(app_state.target_hwnd):
                 return False
+            if app_state.reload_requested:
+                EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"⚡ {round_prefix or '定時任務'}已中止：偵測到待處理熱重載，跳過本次到期任務")
+                return False
             task_name = _periodic_task_name(pt) or "定時任務"
             pt_id = _periodic_task_value(pt, "id", f"pt_idx_{idx}")
             act = _periodic_task_action(pt) or {}
@@ -753,25 +756,35 @@ def shutdown_macro_runtime(app_state: 'state.AppState', round_idx: int = 1):
     if app_state is None:
         raise ValueError("shutdown_macro_runtime requires an AppState instance")
 
+    if app_state.stop_event.is_set() and not app_state.is_running() and not app_state.is_in_testing():
+        return round_idx - 1 if round_idx > 1 else 0
+
     app_state.set_running(False)
+    EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"⏹ 巨集循環結束 (累計運行 {round_idx - 1 if round_idx > 1 else (1 if round_idx == 1 and not app_state.stop_event.is_set() else 0)} 輪)")
+    EventBus.emit(AppEvents.MACRO_STOPPED)
     with app_state.periodic_timers_lock:
         app_state.periodic_timers.clear()
     emergency_release_all(app_state)
-    completed = round_idx - 1 if round_idx > 1 else (1 if round_idx == 1 and not app_state.stop_event.is_set() else 0)
-    EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"⏹ 巨集循環結束 (累計運行 {completed} 輪)")
-    EventBus.emit(AppEvents.MACRO_STOPPED)
-    return completed
+    return round_idx - 1 if round_idx > 1 else (1 if round_idx == 1 and not app_state.stop_event.is_set() else 0)
 
 
 def stop_macro_run(app_state: 'state.AppState', reason: str = "manual"):
-    """將停止邏輯抽離到 engine 層，統一處理 stop_event 與清理的執行序列。"""
+    """將停止邏輯抽離到 engine 層，統一處理 stop_event 與清理的執行序列。
+
+    事件順序固定為：先設定 stop flag，接著向 UI/其他層發出停止訊號與 log，最後再做
+    低階鍵盤/滑鼠清理。這讓 UI 端能先停止高亮與狀態顯示，再處理清理副作用。
+    """
     if app_state is None:
         raise ValueError("stop_macro_run requires an AppState instance")
 
+    if app_state.stop_event.is_set() and not app_state.is_running() and not app_state.is_in_testing():
+        return True
+
     app_state.set_running(False)
     app_state.stop_event.set()
-    emergency_release_all(app_state)
     EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"⏹ 巨集已{reason}")
+    EventBus.emit(AppEvents.MACRO_STOPPED)
+    emergency_release_all(app_state)
     return True
 
 

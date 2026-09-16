@@ -84,17 +84,32 @@ class AppState:
         with self.running_lock:
             return self._running
 
-    def set_running(self, val: bool):
-        """線程安全地設定巨集運行狀態，並保證 `running` 與 `testing` 互斥。"""
+    def _apply_runtime_mode(self, *, running: Optional[bool] = None, testing: Optional[bool] = None):
+        """單一狀態轉移入口：`running` 與 `testing` 永遠互斥，且 `stop_event` 由最終狀態推導。"""
         with self.running_lock:
-            should_run = bool(val)
-            self._running = should_run
-            if should_run:
+            if running is not None:
+                self._running = bool(running)
+            if testing is not None:
+                self._is_testing = bool(testing)
+
+            if self._running and self._is_testing:
+                self._is_testing = False
+            if self._is_testing and self._running:
+                self._running = False
+
+            if self._running:
                 self._is_testing = False
                 self.stop_event.clear()
-            else:
-                if not self._is_testing:
-                    self.stop_event.set()
+                return
+            if self._is_testing:
+                self._running = False
+                self.stop_event.clear()
+                return
+            self.stop_event.set()
+
+    def set_running(self, val: bool):
+        """線程安全地設定巨集運行狀態，並保證 `running` 與 `testing` 互斥。"""
+        self._apply_runtime_mode(running=bool(val), testing=False)
 
     @property
     def running(self) -> bool:
@@ -112,14 +127,7 @@ class AppState:
 
     def set_testing(self, val: bool):
         """線程安全地設定試跑狀態，並保證 `testing` 與 `running` 互斥。"""
-        with self.running_lock:
-            should_test = bool(val)
-            self._is_testing = should_test
-            if should_test:
-                self._running = False
-                self.stop_event.clear()
-            elif not self._running:
-                self.stop_event.set()
+        self._apply_runtime_mode(running=False, testing=bool(val))
 
     @property
     def is_testing(self) -> bool:
@@ -159,44 +167,21 @@ class AppState:
 
     @property
     def reload_requested(self) -> bool:
-        """保護熱重載旗標。使用最小必要保護，避免在沒有 acquire 能力的自訂鎖上出現例外。"""
+        """以同一把 steps_lock 保護讀寫，避免在鎖語義不一致時造成競態與死鎖。"""
         try:
-            lock = getattr(self, "steps_lock", None)
-            acquire = getattr(lock, "acquire", None) if lock is not None else None
-            if callable(acquire):
-                try:
-                    acquired = acquire(blocking=False)
-                except Exception:
-                    acquired = False
-                try:
-                    return bool(self._reload_requested)
-                finally:
-                    if acquired:
-                        lock.release()
-            return bool(self._reload_requested)
+            with self.steps_lock:
+                return bool(self._reload_requested)
         except Exception:
             return bool(self._reload_requested)
 
     @reload_requested.setter
     def reload_requested(self, value: bool):
-        """保護熱重載旗標：寫入前先確認鎖可用；若無法確保鎖語義，優先保留安全的布林寫入。"""
+        """寫入前統一經由 steps_lock，讓讀取與寫入共享同一條保護規則。"""
         try:
-            lock = getattr(self, "steps_lock", None)
-            if lock is not None:
-                acquire = getattr(lock, "acquire", None)
-                if callable(acquire):
-                    try:
-                        acquired = acquire(blocking=False)
-                    except Exception:
-                        acquired = False
-                    if acquired or getattr(lock, "locked", lambda: False)():
-                        self._reload_requested = bool(value)
-                        if acquired:
-                            lock.release()
-                        return
+            with self.steps_lock:
+                self._reload_requested = bool(value)
         except Exception:
-            pass
-        self._reload_requested = bool(value)
+            self._reload_requested = bool(value)
 
     def request_reload(self):
         """要求在下一輪執行前套用熱重載快照。"""
@@ -234,13 +219,17 @@ class AppState:
         self.reset_runtime()
 
     def snapshot_active(self, reload_requested: bool = False):
-        """將當前編輯器草稿同步至背景執行快照 (執行緒安全)"""
+        """將當前編輯器草稿同步至背景執行快照 (執行緒安全)。
+
+        這裡必須直接寫入底層旗標，避免在同一個 lock 作用域內再次透過 property setter
+        進入第二次 lock acquire，因為標準 Lock/Threading.Lock 不能重入。
+        """
         with self.steps_lock:
             self.active_steps = fast_deepcopy(self.steps)
             self.active_combos = fast_deepcopy(self.combos)
             self.active_variables = fast_deepcopy(self.variables)
             self.active_periodic_tasks = fast_deepcopy(self.periodic_tasks)
-            self.reload_requested = reload_requested
+            self._reload_requested = bool(reload_requested)
 
     def to_dict(self) -> dict:
         """將編輯器草稿資料匯出為可序列化字典，並統一透過 dataclass 轉換層保留資料契約。"""

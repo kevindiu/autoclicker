@@ -1,10 +1,14 @@
 import os
 import tempfile
+import threading
 import unittest
+from unittest.mock import patch
 
 import config_manager
+import engine
 import models
 import state
+from events import EventBus, AppEvents
 
 
 class _TrackingLock:
@@ -66,6 +70,25 @@ class StateAndConfigRegressionTests(unittest.TestCase):
         self.assertTrue(app_state.is_in_testing())
         self.assertFalse(app_state.is_running())
 
+    def test_runtime_mode_transition_uses_single_state_source_of_truth(self):
+        app_state = state.AppState()
+
+        app_state.set_running(True)
+        self.assertTrue(app_state.is_running())
+        self.assertFalse(app_state.is_in_testing())
+        self.assertFalse(app_state.stop_event.is_set())
+
+        app_state.set_testing(True)
+        self.assertFalse(app_state.is_running())
+        self.assertTrue(app_state.is_in_testing())
+        self.assertFalse(app_state.stop_event.is_set())
+
+        app_state.set_running(False)
+        app_state.set_testing(False)
+        self.assertFalse(app_state.is_running())
+        self.assertFalse(app_state.is_in_testing())
+        self.assertTrue(app_state.stop_event.is_set())
+
     def test_start_reload_and_stop_sequence_remains_consistent(self):
         app_state = state.AppState()
 
@@ -84,6 +107,52 @@ class StateAndConfigRegressionTests(unittest.TestCase):
         app_state.set_testing(True)
         self.assertTrue(app_state.is_in_testing())
         self.assertFalse(app_state.is_running())
+
+    def test_snapshot_active_does_not_deadlock_when_updating_reload_flag(self):
+        app_state = state.AppState()
+        done = {}
+
+        def worker():
+            try:
+                app_state.snapshot_active(reload_requested=True)
+                done["ok"] = True
+            except Exception as exc:  # pragma: no cover - assertion path for debugging
+                done["err"] = exc
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        thread.join(timeout=1)
+
+        self.assertTrue(done.get("ok"), "snapshot_active should not deadlock while updating reload_requested")
+        self.assertTrue(app_state.reload_requested)
+
+    def test_stop_macro_run_is_idempotent(self):
+        app_state = state.AppState()
+        calls = []
+
+        def listener():
+            calls.append("stop")
+
+        EventBus.subscribe(AppEvents.MACRO_STOPPED, listener)
+        try:
+            engine.stop_macro_run(app_state, "manual")
+            engine.stop_macro_run(app_state, "manual")
+            self.assertEqual(len(calls), 1)
+        finally:
+            EventBus.unsubscribe(AppEvents.MACRO_STOPPED, listener)
+
+    def test_stop_emits_log_before_macro_stopped_event(self):
+        app_state = state.AppState()
+        calls = []
+
+        def fake_emit(event_type, *args, **kwargs):
+            calls.append((event_type, args, kwargs.get("scope", "default")))
+
+        with patch.object(engine, "emergency_release_all"), patch.object(engine.EventBus, "emit", side_effect=fake_emit):
+            engine.stop_macro_run(app_state, "manual")
+
+        self.assertEqual(calls[0][0], AppEvents.LOG_MESSAGE)
+        self.assertEqual(calls[1][0], AppEvents.MACRO_STOPPED)
 
     def test_load_profile_file_handles_invalid_periodic_tasks(self):
         app_state = state.AppState()
