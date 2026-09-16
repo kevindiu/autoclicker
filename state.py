@@ -1,4 +1,3 @@
-import sys
 import copy
 import json
 
@@ -15,10 +14,8 @@ def fast_deepcopy(obj):
     except Exception:
         return copy.deepcopy(obj)
 
-import json
 import threading
-from typing import Dict, List, Any, Optional, TypedDict
-from contextlib import contextmanager
+from typing import Dict, List, Any, TypedDict
 
 # ==============================================================================
 # Type Hints (型別提示)
@@ -248,23 +245,6 @@ def get_state() -> AppState:
     """取得當前作用中的 AppState 實例"""
     return app_state
 
-def set_state(new_state: AppState):
-    """設定當前作用中的 AppState 實例"""
-    global app_state
-    if not isinstance(new_state, AppState):
-        raise TypeError("new_state 必須是 AppState 的實例")
-    app_state = new_state
-
-@contextmanager
-def use_state(temp_state: AppState):
-    """上下文管理器：在區塊內臨時切換為指定的 AppState 實例 (單元測試極為便利)"""
-    prev_state = app_state
-    set_state(temp_state)
-    try:
-        yield temp_state
-    finally:
-        set_state(prev_state)
-
 def is_running() -> bool:
     """線程安全地檢查巨集是否處於運行狀態 (向後相容捷徑)"""
     return app_state.is_running()
@@ -277,21 +257,9 @@ def is_in_testing() -> bool:
     """線程安全地檢查是否處於試跑狀態 (向後相容捷徑)"""
     return app_state.is_in_testing()
 
-def set_testing(val: bool):
-    """線程安全地設定試跑狀態 (向後相容捷徑)"""
-    app_state.set_testing(val)
-
 def try_start_testing() -> tuple:
     """原子操作：嘗試啟動試跑狀態 (向後相容捷徑)"""
     return app_state.try_start_testing()
-
-def stop_testing():
-    """線程安全地停止試跑狀態 (向後相容捷徑)"""
-    app_state.stop_testing()
-
-def reset():
-    """完全重設當前全域狀態 (保證只進行原地修改，絕不重新賦值新物件)"""
-    app_state.reset()
 
 def get_data_snapshot(target_state=None) -> str:
     """獲取資料快照字串 (向後相容捷徑，唯一委派至 AppState)"""

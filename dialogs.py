@@ -76,8 +76,8 @@ def dialog_hidden(dialog):
 
 def start_dialog_capture(dialog, app, on_finish_coord, btn="left"):
     """輔助函式：隱藏對話框進行太空鍵取點，取點完成或取消時自動恢復對話框顯示與焦點"""
-    if state.is_running():
-        app.set_status("巨集正在循環執行中，為免干擾滑鼠瞄準，請先停止運行再取點！")
+    if state.is_running() or state.is_in_testing():
+        app.set_status("巨集正在循環執行中或試跑中，為免干擾滑鼠瞄準，請先停止後再取點！")
         return
     try:
         dialog.grab_release()

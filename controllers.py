@@ -493,8 +493,8 @@ class StepController(BaseController):
         return sel[0] + 1 if sel else len(state.app_state.steps)
 
     def add_click_action(self, is_combo=False):
-        if state.is_running():
-            return EventBus.emit(AppEvents.STATUS_MESSAGE, "巨集正在循環執行中，為免干擾滑鼠瞄準，請先停止運行再取點！")
+        if state.is_running() or state.is_in_testing():
+            return EventBus.emit(AppEvents.STATUS_MESSAGE, "巨集正在循環執行中或試跑中，為免干擾滑鼠瞄準，請先停止後再取點！")
         if is_combo and self.app.get_selected_combo_idx() is None:
             return EventBus.emit(AppEvents.STATUS_MESSAGE, "請先選取一個組合！")
         btn_var = self.app.var_combo_btn if is_combo else self.app.var_step_btn

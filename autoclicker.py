@@ -1,13 +1,11 @@
 import os
 import sys
 import time
-import uuid
-import copy
 import ctypes
 import threading
 import queue
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import messagebox, simpledialog
 
 from theme import UITheme, LogTag, resource_path, WINDOW_TITLE, BASE_WINDOW_TITLE, CONFIG_EXT
 from events import EventBus, AppEvents
@@ -31,7 +29,6 @@ import config_manager
 import dialogs
 import engine
 from controllers import (
-    BaseController,
     VarController,
     ComboController,
     StepController,

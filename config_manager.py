@@ -2,7 +2,6 @@ import os
 import sys
 import json
 import time
-import copy
 import uuid
 import state
 from theme import CONFIG_EXT
