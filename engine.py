@@ -13,7 +13,8 @@ from win32_api import (
     safe_sleep,
     emergency_release_all,
     force_bring_window_to_front,
-    is_window_alive
+    is_window_alive,
+    _get_pyautogui
 )
 
 # ==============================================================================
@@ -59,14 +60,13 @@ def _handle_key(act, parent_desc, current_vars, current_combos, depth, visited_s
         with state.app_state.currently_held_keys_lock:
             state.app_state.currently_held_keys.add(("fg", key))
         try:
-            import pyautogui
-            pyautogui.keyDown(key)
+            # 統一透過 _get_pyautogui() 取得實例，確保 FAILSAFE/PAUSE 設定必定已套用
+            _get_pyautogui().keyDown(key)
             if not safe_sleep(constants.SLEEP_KEY_FG):
                 return False
         finally:
             try:
-                import pyautogui
-                pyautogui.keyUp(key)
+                _get_pyautogui().keyUp(key)
             except Exception as e:
                 EventBus.emit(AppEvents.LOG_MESSAGE, "警示", f"釋放前台按鍵 [{key}] 失敗: {e}")
             with state.app_state.currently_held_keys_lock:

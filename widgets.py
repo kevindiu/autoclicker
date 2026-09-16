@@ -5,6 +5,18 @@ from tkinter import ttk
 import state
 from theme import UITheme
 
+# 自動建立 底色 -> 對應 _HOVER 底色 的查找表 (例如 UITheme.ACCENT_BLUE -> UITheme.ACCENT_BLUE_HOVER)
+_HOVER_MAP = {
+    getattr(UITheme, _name[: -len("_HOVER")]): getattr(UITheme, _name)
+    for _name in dir(UITheme)
+    if _name.endswith("_HOVER") and hasattr(UITheme, _name[: -len("_HOVER")])
+}
+
+def make_button(parent, text, bg, command=None, fg=UITheme.TEXT_WHITE, font=UITheme.FONT_SMALL_BOLD, hover=None, **kwargs):
+    """建立統一風格的扁平按鈕，並依 bg 自動套用對應的 hover 懸停色 (可用 hover= 覆寫)"""
+    active_bg = hover if hover is not None else _HOVER_MAP.get(bg, bg)
+    return tk.Button(parent, text=text, bg=bg, fg=fg, activebackground=active_bg, relief="flat", font=font, command=command, **kwargs)
+
 # ==============================================================================
 # 自訂組件：全深色模式滾動條 (DarkScrollbar)
 # ==============================================================================

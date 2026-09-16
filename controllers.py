@@ -132,8 +132,8 @@ class VarController(BaseController):
         state.app_state.variables.pop(var_name, None)
         self.trigger_hot_reload()
         EventBus.emit(AppEvents.VARS_CHANGED)
-        EventBus.emit(AppEvents.COMBO_ACTIONS_CHANGED, )
-        EventBus.emit(AppEvents.STEPS_CHANGED, )
+        EventBus.emit(AppEvents.COMBO_ACTIONS_CHANGED)
+        EventBus.emit(AppEvents.STEPS_CHANGED)
         EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"🗑 已刪除變數：【{var_name}】")
 
     def move_variable(self, delta):
@@ -325,7 +325,7 @@ class ComboController(BaseController):
                         act["target_name"] = new_name
 
         if sync_cnt > 0:
-            EventBus.emit(AppEvents.STEPS_CHANGED, )
+            EventBus.emit(AppEvents.STEPS_CHANGED)
         EventBus.emit(AppEvents.COMBOS_CHANGED, select_idx=idx)
         EventBus.emit(AppEvents.STATUS_MESSAGE, f"已將組合改名為 [{new_name}]，同步刷新了關聯步驟")
         self.trigger_hot_reload()
@@ -342,7 +342,7 @@ class ComboController(BaseController):
         new_sel = min(idx, len(state.app_state.combos) - 1) if state.app_state.combos else None
         EventBus.emit(AppEvents.COMBOS_CHANGED, select_idx=new_sel)
         self.on_combo_select()
-        EventBus.emit(AppEvents.STEPS_CHANGED, )
+        EventBus.emit(AppEvents.STEPS_CHANGED)
         EventBus.emit(AppEvents.LOG_MESSAGE, "系統", f"🗑 已刪除技能組合【{name}】（內含 {act_cnt} 個動作）")
         self.trigger_hot_reload()
 
@@ -382,7 +382,7 @@ class ComboController(BaseController):
                 s["actions"] = copy.deepcopy(new_actions)
                 sync_cnt += 1
         if sync_cnt > 0:
-            EventBus.emit(AppEvents.STEPS_CHANGED, )
+            EventBus.emit(AppEvents.STEPS_CHANGED)
 
     def test_run_selected_combo_action(self):
         c_idx = self.get_selected_combo_idx()

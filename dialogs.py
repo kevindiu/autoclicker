@@ -7,7 +7,7 @@ from tkinter import ttk, messagebox
 
 import state
 from theme import UITheme
-from widgets import DarkScrollbar
+from widgets import DarkScrollbar, make_button
 
 # ==============================================================================
 # 次層級對話框模組
@@ -101,14 +101,8 @@ def _add_dialog_buttons(dialog, on_ok, padx=16, pady=10, extra_left_buttons=None
     if extra_left_buttons:
         for btn_cfg in extra_left_buttons:
             tk.Button(bf, **btn_cfg).pack(side="left", padx=(0, 4))
-    tk.Button(bf, text="✓ 確定儲存", width=10, bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE,
-             activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat",
-             font=UITheme.FONT_NORMAL_BOLD, padx=8, pady=4,
-             command=on_ok).pack(side="right", padx=(4, 0))
-    tk.Button(bf, text="✕ 取消", width=8, bg=UITheme.BTN_GRAY, fg=UITheme.TEXT_WHITE,
-             activebackground=UITheme.BTN_GRAY_HOVER, relief="flat",
-             font=UITheme.FONT_NORMAL, padx=8, pady=4,
-             command=dialog.destroy).pack(side="right")
+    make_button(bf, text="✓ 確定儲存", width=10, bg=UITheme.ACCENT_BLUE, font=UITheme.FONT_NORMAL_BOLD, padx=8, pady=4, command=on_ok).pack(side="right", padx=(4, 0))
+    make_button(bf, text="✕ 取消", width=8, bg=UITheme.BTN_GRAY, font=UITheme.FONT_NORMAL, padx=8, pady=4, command=dialog.destroy).pack(side="right")
     dialog.bind("<Return>", lambda e: on_ok())
     dialog.bind("<Escape>", lambda e: dialog.destroy())
     return bf
@@ -206,16 +200,7 @@ def prompt_variable_dialog(app, edit_name=None):
             e_y = tk.Entry(r_coords, textvariable=var_y, width=7, bg=UITheme.BG_INPUT, fg=UITheme.TEXT_WHITE, relief="flat", font=UITheme.FONT_NORMAL)
             e_y.pack(side="left", padx=(0, 4))
 
-            btn_rec = tk.Button(
-                f_val_box,
-                text="◎ 瞄準取點 (Space)",
-                bg=UITheme.ACCENT_GREEN,
-                fg=UITheme.TEXT_WHITE,
-                activebackground=UITheme.ACCENT_GREEN_HOVER,
-                font=UITheme.FONT_NORMAL_BOLD,
-                relief="flat",
-                command=start_space_capture
-            )
+            btn_rec = make_button(f_val_box, text="◎ 瞄準取點 (Space)", bg=UITheme.ACCENT_GREEN, font=UITheme.FONT_NORMAL_BOLD, command=start_space_capture)
             btn_rec.pack(fill="x", pady=(2, 2))
 
         elif selected_type == "key":
@@ -323,18 +308,7 @@ def prompt_edit_combo_dialog(app, combo_step, step_idx=None):
             modified[0] = True
             dialog.destroy()
 
-    btn_unpack = tk.Button(
-        r1,
-        text="[ ➔ 展開為獨立步驟到掛機流程 ]",
-        bg=UITheme.ACCENT_CYAN,
-        fg=UITheme.TEXT_WHITE,
-        activebackground=UITheme.ACCENT_CYAN_HOVER,
-        font=UITheme.FONT_SMALL_BOLD,
-        relief="flat",
-        padx=8,
-        pady=2,
-        command=do_unpack
-    )
+    btn_unpack = make_button(r1, text="[ ➔ 展開為獨立步驟到掛機流程 ]", bg=UITheme.ACCENT_CYAN, font=UITheme.FONT_SMALL_BOLD, padx=8, pady=2, command=do_unpack)
     btn_unpack.pack(side="right")
 
     r2 = tk.Frame(f_top, bg=UITheme.BG_PANEL)
@@ -358,7 +332,7 @@ def prompt_edit_combo_dialog(app, combo_step, step_idx=None):
             refresh_sub_list(select_idx=0 if working_actions else None)
             app.set_status(f"已載入範本 [{combo_name}] 的子動作清單")
 
-    tk.Button(r2, text="套用範本動作", bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, font=UITheme.FONT_SMALL_BOLD, relief="flat", padx=6, command=do_load_tpl).pack(side="left", padx=4)
+    make_button(r2, text="套用範本動作", bg=UITheme.ACCENT_BLUE, font=UITheme.FONT_SMALL_BOLD, padx=6, command=do_load_tpl).pack(side="left", padx=4)
 
     # 中間主工作區 (左邊子步驟清單，右邊垂直操作按鈕列)
     f_mid = tk.Frame(dialog, bg=UITheme.BG_PANEL, padx=12, pady=4)
@@ -450,12 +424,12 @@ def prompt_edit_combo_dialog(app, combo_step, step_idx=None):
         act = working_actions[idx]
         app.run_in_test_thread(f"組合動作 #{idx+1}", lambda: app.execute_single_action(act, f"[{combo_name}#{idx+1}]"))
 
-    tk.Button(f_btns, text="▲ 上移", width=12, bg=UITheme.BTN_GRAY, fg=UITheme.TEXT_WHITE, activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=lambda: do_move_sub(-1)).pack(fill="x", pady=2)
-    tk.Button(f_btns, text="▼ 下移", width=12, bg=UITheme.BTN_GRAY, fg=UITheme.TEXT_WHITE, activebackground=UITheme.BTN_GRAY_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=lambda: do_move_sub(1)).pack(fill="x", pady=2)
-    tk.Button(f_btns, text="▶ 試跑動作", width=12, bg=UITheme.ACCENT_INDIGO, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_INDIGO_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_test_sub).pack(fill="x", pady=2)
-    tk.Button(f_btns, text="✎ 修改", width=12, bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_edit_sub).pack(fill="x", pady=2)
-    tk.Button(f_btns, text="⎘ 複製", width=12, bg=UITheme.ACCENT_BLUE, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_BLUE_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_dup_sub).pack(fill="x", pady=2)
-    tk.Button(f_btns, text="✕ 刪除", width=12, bg=UITheme.ACCENT_RED, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_RED_HOVER, relief="flat", font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_del_sub).pack(fill="x", pady=(2, 6))
+    make_button(f_btns, text="▲ 上移", width=12, bg=UITheme.BTN_GRAY, font=UITheme.FONT_SMALL_BOLD, pady=4, command=lambda: do_move_sub(-1)).pack(fill="x", pady=2)
+    make_button(f_btns, text="▼ 下移", width=12, bg=UITheme.BTN_GRAY, font=UITheme.FONT_SMALL_BOLD, pady=4, command=lambda: do_move_sub(1)).pack(fill="x", pady=2)
+    make_button(f_btns, text="▶ 試跑動作", width=12, bg=UITheme.ACCENT_INDIGO, font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_test_sub).pack(fill="x", pady=2)
+    make_button(f_btns, text="✎ 修改", width=12, bg=UITheme.ACCENT_BLUE, font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_edit_sub).pack(fill="x", pady=2)
+    make_button(f_btns, text="⎘ 複製", width=12, bg=UITheme.ACCENT_BLUE, font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_dup_sub).pack(fill="x", pady=2)
+    make_button(f_btns, text="✕ 刪除", width=12, bg=UITheme.ACCENT_RED, font=UITheme.FONT_SMALL_BOLD, pady=4, command=do_del_sub).pack(fill="x", pady=(2, 6))
 
     def on_save():
         combo_step["name"] = combo_name
@@ -856,7 +830,7 @@ def prompt_edit_periodic_task(app, task=None):
 
             r_c2 = tk.Frame(f_dynamic, bg=UITheme.BG_PANEL)
             r_c2.pack(fill="x", pady=4)
-            btn_rec = tk.Button(r_c2, text="◎ 重新瞄準取點 (Space)", bg=UITheme.ACCENT_GREEN, fg=UITheme.TEXT_WHITE, activebackground=UITheme.ACCENT_GREEN_HOVER, font=UITheme.FONT_NORMAL_BOLD, relief="flat", padx=8)
+            btn_rec = make_button(r_c2, text="◎ 重新瞄準取點 (Space)", bg=UITheme.ACCENT_GREEN, font=UITheme.FONT_NORMAL_BOLD, padx=8)
             btn_rec.pack(fill="x", padx=4)
 
             def do_rec():

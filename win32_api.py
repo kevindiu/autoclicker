@@ -140,7 +140,7 @@ if IS_WINDOWS:
         import atexit
         def cleanup_win32():
             try: ctypes.windll.winmm.timeEndPeriod(1)
-            except: pass
+            except (AttributeError, OSError): pass
         atexit.register(cleanup_win32)
     except (AttributeError, OSError):
         pass
